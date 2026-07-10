@@ -210,7 +210,7 @@ Rules under the table, non-negotiable:
 - **New facts found mid-debate get appended as E19, E20, ...** before anyone may cite them. No row, no citation, no claim.
 - **13F: quarters first.** Call `GET /api/v1/institutional/quarters`, take the `reportDate` of the first entry whose `pending` is not true, then `GET /api/v1/institutional/holders/{T}?reportDate={Q}`. Never hardcode a quarter; never take a `pending:true` one.
 - **Insider tallies exclude non-signals.** Count only `transactionType == "BUY"` / `"SELL"`; exclude `AWARD` (code A, `totalValue:0`), `GIFT`, `EXERCISE` from counts and dollar sums.
-- **Sample size matters on sentiment rows.** Sentiment and Score series points carry `properties.effectiveMentions`; a reading built on a handful of mentions is noise, not signal. Note thin samples in the Value cell ("+0.41 on 5 mentions, thin") and expect them to be attacked in R2.
+- **Sample size matters on sentiment rows.** Only the Score (`sentisense_score`) series points carry `properties.effectiveMentions` (sentiment points have empty `properties`); read the sample size from the Score point, or fetch `/metric/mentions` directly, and apply it to the sentiment rows too. A reading built on a handful of mentions is noise, not signal. Note thin samples in the Value cell ("+0.41 on 5 mentions, thin") and expect them to be attacked in R2.
 - **Congressional windows filter on disclosure date, not trade date.** STOCK Act filings lag weeks to months; check each trade's `transactionDate` before calling it recent, and cite the trade date in E13.
 
 ### Filling Tier P: EDGAR recipes (when the host can fetch)

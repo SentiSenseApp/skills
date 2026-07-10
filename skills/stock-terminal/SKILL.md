@@ -777,7 +777,7 @@ Find tickers where insiders + congress + analysts all positive in the same 7-day
 
 **Calls:**
 1. `GET /api/v1/insider/cluster-buys?lookbackDays=7`
-2. `GET /api/v1/politicians/activity?lookbackDays=7` (filter `transactionType=PURCHASE`)
+2. `GET /api/v1/politicians/activity?lookbackDays=7` (filter `transactionType=PURCHASE` client-side; no server-side param)
 3. `GET /api/v1/analyst/activity?lookbackDays=7` (filter `actionType=="UPGRADE"` client-side; no server-side `types=` filter)
 
 **Output template:**
@@ -878,7 +878,7 @@ TODAY'S STORIES · {date}
 2. ...
 ```
 
-The list cluster has no body/summary field. Real shape: `{ id, title, createdAt, clusteredAt, clusterSize, averageSentiment }`. For a narrative summary, fetch the story detail (`GET /api/v1/documents/stories/{id}`).
+The list cluster has no body/summary field. Real shape: `{ id, clusterId, cluster: { title, clusteredAt, clusterSize, averageSentiment }, tickers, displayTickers, impactScore, brokeAt }` (the output template above reads `cluster.title` / `cluster.clusterSize`). For a narrative summary, fetch the story detail (`GET /api/v1/documents/stories/{id}`).
 
 For per-ticker stories: `GET /api/v1/documents/stories/ticker/{T}?limit=5`.
 
