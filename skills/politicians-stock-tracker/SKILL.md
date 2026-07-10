@@ -1,12 +1,12 @@
 ---
-name: congress-trade-tracker
-description: "Congress stock trades tracker: real-time STOCK Act disclosures for Pelosi, senators, and House members, pulled from official House Clerk and Senate eFD filings, with per-politician and per-ticker congressional trading history. Use for congress stock trades, politician stock trades, capitol trades, senator stock trades, insider political trading. Read-only. No trading, no purchases, no write operations, no wallet access."
+name: politicians-stock-tracker
+description: "Track congress stock trades and politician stock trades: Pelosi tracker, senate stock trades, House trades, congress trades by ticker, STOCK Act disclosures, and congressional trading data from the SentiSense Politicians Trading API. Read-only. No trading, no purchases, no write operations, no wallet access."
 license: MIT
 metadata:
   homepage: https://sentisense.ai
   requires_env: SENTISENSE_API_KEY
 ---
-# Congress Trade Tracker (SentiSense)
+# Politicians Stock Tracker (SentiSense)
 
 Track what the U.S. Congress is buying and selling. This skill reads congressional STOCK Act disclosures, the trades that Senators and Representatives are legally required to report, through the read-only SentiSense API: recent trades across all members, the trading history for a single stock, the most active politicians, and a full per-member profile. Amounts, chambers, parties, and the gap between when a trade happened and when it was disclosed all come straight from the official filings.
 
