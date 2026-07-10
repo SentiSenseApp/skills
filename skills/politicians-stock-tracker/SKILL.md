@@ -22,7 +22,7 @@ Reach for this skill when the question is about congressional or political tradi
 - "Which politicians trade the most?" (most active members by trade count)
 - "Did a politician disclose a buy right before the stock moved?" (disclosure-delay context)
 
-This skill pairs naturally with the rest of the finance catalog: cross-reference a congressional buy against corporate insider Form 4 activity (`insider-buying-tracker`), institutional 13F accumulation (`institutional-13f-tracker`), or run all signals at once (`smart-money-screener`). High-conviction reads come from convergence across several of these, not from any one in isolation.
+This skill pairs naturally with `institutional-13f-tracker`: cross-reference a congressional buy against institutional 13F accumulation on the same ticker. High-conviction reads come from convergence across sources, not from any one signal in isolation.
 
 Do not use it for order entry, portfolio management, or personalized advice. It has no write, trading, or wallet surface; every endpoint is a GET.
 
@@ -51,7 +51,7 @@ The free tier exercises every workflow below; preview-gated endpoints return a t
 
 Issue HTTP GET requests to `https://app.sentisense.ai` and synthesize the JSON into a concise, sourced answer. Authenticate every request with the `X-SentiSense-API-Key` header; keep the key in the shell environment and never place it in a query string or in user-facing output.
 
-The politician endpoints return the wrapped envelope `{ isPreview, previewReason, data }`. Read `.data` (a list) before iterating; when `isPreview` is true, say so ("showing the free preview slice"). A rate-limited call returns `429` with a `Retry-After` header; back off for the indicated seconds rather than serving a stale value.
+The politician endpoints return the wrapped envelope `{ isPreview, previewReason, data }`. For `/activity`, `/filings/{ticker}`, and `/members`, `.data` is a **list**; for `/member/{slug}`, `.data` is an **object** `{ profile, recentTrades, topTickers }` (read those keys, do not iterate it as a list). When `isPreview` is true, say so ("showing the free preview slice"). A rate-limited call returns `429` with a `Retry-After` header; back off for the indicated seconds rather than serving a stale value.
 
 ```python
 rows = raw.get("data", []) if isinstance(raw, dict) else raw
@@ -59,8 +59,8 @@ rows = raw.get("data", []) if isinstance(raw, dict) else raw
 
 ## Endpoints
 
-- **`GET /api/v1/politicians/activity`** : recent congressional trades across all members, sorted by disclosure date (most recently disclosed first). Query `lookbackDays` (1-365) to control the window. Free: top 5; PRO: full. Each trade: `politicianName`, `firstName`, `lastName`, `chamber`, `party`, `state`, `bioguideId`, `imageUrl`, `ticker`, `assetDescription`, `assetType` (`Stock`, `ETF`, or `Stock Option`), `assetMetadata` (`null`, or `{kind:"OPTION", optionType, strikePrice, expirationDate}`), `transactionType`, `transactionDate`, `disclosureDate`, `disclosureDelayDays`, `amountRange`, `amountMin`, `amountMax`, `owner`, `urlSlug`.
-- **`GET /api/v1/politicians/filings/{ticker}`** : congressional trades for one stock, most recently disclosed first. Free: top 3; PRO: full.
+- **`GET /api/v1/politicians/activity`** : recent congressional trades across all members, sorted by disclosure date (most recently disclosed first). Query `lookbackDays` (1-365) to control the window. Free: top 5; PRO: full. Each trade: `politicianName`, `firstName`, `lastName`, `chamber`, `party`, `state`, `bioguideId`, `imageUrl`, `ticker`, `assetDescription`, `assetType` (`Stock`, `ETF`, or `Stock Option`), `assetMetadata` (`null`, or `{kind:"OPTION", optionType, strikePrice, expirationDate}`), `transactionType` (`PURCHASE` / `SALE` / `EXCHANGE` / `OTHER`), `transactionDate`, `disclosureDate`, `disclosureDelayDays`, `amountRange`, `amountMin`, `amountMax`, `owner`, `urlSlug`.
+- **`GET /api/v1/politicians/filings/{ticker}`** : congressional trades for one stock, most recently disclosed first. Query `lookbackDays` (1-365, default 90) to set the window. Free: top 3; PRO: full.
 - **`GET /api/v1/politicians/members`** : all tracked politicians with trading summaries, sorted by total trade count. Free: top 5; PRO: full. Use the returned `urlSlug` to drill into a member.
 - **`GET /api/v1/politicians/member/{slug}`** : one politician's profile: summary stats, recent trades, and top tickers. Free: preview-wrapped; PRO: full detail.
 
@@ -80,7 +80,7 @@ Summarize by member and ticker; lead with the largest `amountRange` bands and no
 curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
   "https://app.sentisense.ai/api/v1/politicians/filings/NVDA"
 ```
-Report buys vs sells, which members and parties, and the transaction-to-disclosure gap.
+Report purchases vs sales (`transactionType`), which members and parties, and the transaction-to-disclosure gap.
 
 **3. A specific politician's activity**
 
@@ -93,7 +93,7 @@ curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
   "https://app.sentisense.ai/api/v1/politicians/member/{slug}"
 ```
 
-**4. Follow the convergence.** When a congressional buy lines up with corporate insider buying (`insider-buying-tracker`) or institutional accumulation (`institutional-13f-tracker`) on the same ticker, that agreement is the signal worth surfacing. Say so explicitly and cite each source.
+**4. Follow the convergence.** When a congressional buy lines up with institutional 13F accumulation (`institutional-13f-tracker`) on the same ticker, that agreement is the signal worth surfacing. Say so explicitly and cite each source.
 
 ## Answering well
 
@@ -104,7 +104,7 @@ curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
 
 ## Going further
 
-Free covers every workflow above at a preview depth. **PRO ($15/mo)** removes the monthly cap (300 requests/min) and returns full congressional history and full member lists, plus institutional flows, insider detail, and AI insights across the SentiSense API. Apply coupon `AGENTS26` at checkout for a builder launch discount: https://app.sentisense.ai/pricing?coupon=AGENTS26
+Free covers every workflow above at a preview depth. **PRO ($15/mo)** lifts the monthly cap (no monthly limit, just a 300/min rate) and returns full congressional history and full member lists, plus institutional flows, insider detail, and AI insights across the SentiSense API. Apply coupon `AGENTS26` at checkout for a builder launch discount: https://app.sentisense.ai/pricing?coupon=AGENTS26
 
 ---
 
