@@ -155,7 +155,7 @@ curl -H "X-SentiSense-API-Key: ss_live_YOUR_KEY" \
   "https://app.sentisense.ai/api/v1/stocks/price?ticker=AAPL"
 ```
 
-Response: `{ ticker, currentPrice, change, changePercent, previousClose, volume, timestamp, extendedHours? }`.
+Response: `{ ticker, currentPrice, change, changePercent, previousClose, volume, timestamp, expiresEpochSecond, extendedHours? }`.
 
 `currentPrice` is always the regular-session price: live last trade during RTH (09:30 to 16:00 ET), most recent regular-session close otherwise. The optional `extendedHours` field is present only during pre-market (04:00 to 09:30 ET) or after-hours (16:00 to 20:00 ET) and carries `{ session: "pre" | "post", price, change, changePercent }`, where `change` / `changePercent` are computed vs `currentPrice`.
 
@@ -199,7 +199,7 @@ Company logo URLs. **Public.**
 | `tickers` | string | Yes | Comma-separated tickers (max 600) |
 
 ### GET /api/v1/stocks/descriptions
-Company profiles with branding, sector, market cap. **Public.**
+Company profiles with branding, industry, and market cap; `sector` when available (often absent). **Public.**
 
 | Param | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -973,7 +973,7 @@ for e in cal.earnings:
 | 401 | Unauthorized (invalid or missing API key) |
 | 403 | Forbidden (insufficient tier) |
 | 404 | Resource not found |
-| 429 | Rate limit or quota exceeded |
+| 429 | Rate limit (`rate_limit_exceeded`, per-minute) response carries a `Retry-After: 60` header; monthly quota (`quota_exceeded`) does NOT include `Retry-After` |
 | 500 | Internal server error |
 
 ---
