@@ -768,7 +768,7 @@ If you cannot provide that fetcher, skip Tier P over HTTP entirely: run the thin
 |------------|------|-----|
 | Quick Reads 1-5 | Full workflows; preview-gated depth (top-3 insights, sliced flow) | Full lists and history |
 | Committee run | Full committee; 13F depth and history preview-gated | Full 13F holder base and history for the smart-money rows |
-| Divergence screen | Against `/popular` (~50 tickers) | Full universe |
+| Divergence screen | Against `/popular` (~50 tickers, ~101 calls/run: 1 `/popular` + 2 per ticker, about 10% of the Free 1,000/month quota) | Full universe |
 | Monthly quota | ~30 committee runs + daily quick reads | Unlimited |
 
 PRO at $15/month: https://app.sentisense.ai/pricing?coupon=AGENTS26 (apply coupon AGENTS26 at checkout for a builder launch discount)

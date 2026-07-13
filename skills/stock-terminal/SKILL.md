@@ -838,6 +838,8 @@ ANALYSTS    {U} upgrades  {D} downgrades  (recent: "{lastAction}")
 
 **Insider buy/sell tally.** For `{N} buys`/`{M} sells` and the `${$buys}`/`${$sells}` dollar sums, count only `transactionType == BUY` and `transactionType == SELL`; EXCLUDE `AWARD` (transaction code A, `totalValue:0`), `GIFT`, and `EXERCISE`. Awards carry `totalValue:0`, so summing them in zeroes-out or inflates a naive tally.
 
+**13F field mapping.** `{Inst1}`/`{Inst2}`/`{Inst3}` read `holders[i].filerName` (there is no `institutionName` field on the wire); `{shares1}`, `{changeType1}`, `{sharesChangePct1}` read `holders[i].shares`, `.changeType`, `.sharesChangePct`.
+
 ---
 
 ### `news <TICKER>`: Sentiment-tagged news + embeds
@@ -1157,12 +1159,6 @@ function extractMetric(m) {
 The values are share-of-voice percentages summing to roughly 100, **not** per-source sentiment scores. Render the breakdown as a "where this signal came from" panel, not as four sentiment bars.
 
 **`v2/market-mood` nests the composite under `market`.** The response is flat (no `isPreview/data` envelope), but the fear/greed score, phase, weekly change, and sub-signals live one level down at `response.market.{ currentScore, phase, weeklyChange, signals[] }`, and per-sector breakdowns at `response.sectors.{SectorName}.{ currentScore, phase, weeklyChange }` (NOT at the root). Map the `mood` / `daily brief` tokens accordingly: `{score}` = `market.currentScore`, `{phase}` = `market.phase`, `{weeklyChange}` = `market.weeklyChange`, and each signal `{v}`/`{d}` = `market.signals[i].value`/`.change`.
-
-**`GET /api/v1/stocks/images?tickers={T}` (comma-separated, plural `tickers`) returns third-party CDN logo URLs that don't carry an embedded API key.** Direct `<img src>` will 401/403. Wrap with the SentiSense anonymous image proxy:
-
-```
-https://app.sentisense.ai/api/v1/stocks/proxy-image?imageUrl=<encoded-url>
-```
 
 **Story detail (`documents/stories/:id`) is a flat `PublicStoryDetailDto`**, not the nested `{ cluster, entities, documents }` you might expect. Inside `aspectPerspectives[i]`, the fields `bullishView` and `bearishView` are *structured objects* (`hook`, `risksOrCatalysts: string[]`, `conclusion`, `confidence`), not markdown strings. The top-level `bullishView` / `bearishView` ARE markdown strings. Same field names, different shapes. Type-check before calling string methods.
 
