@@ -30,13 +30,14 @@ This skill is an **educational data interface** to SentiSense's read-only Data A
 
 ```bash
 # Include API key in header
-curl -H "X-SentiSense-API-Key: ss_live_YOUR_KEY" \
+curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
   "https://app.sentisense.ai/api/v1/..."
 ```
 
 ```python
+import os
 from sentisense import SentiSenseClient
-client = SentiSenseClient(api_key="ss_live_YOUR_KEY")
+client = SentiSenseClient(api_key=os.environ["SENTISENSE_API_KEY"])
 ```
 
 All API endpoints require an API key. Get one free at https://app.sentisense.ai/get-api-key (manage it anytime in the [Developer Console](https://app.sentisense.ai/settings/developer)).
@@ -151,7 +152,7 @@ Real-time stock price. **Public.**
 | `ticker` | string | Yes | Stock ticker (e.g., `AAPL`) |
 
 ```bash
-curl -H "X-SentiSense-API-Key: ss_live_YOUR_KEY" \
+curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
   "https://app.sentisense.ai/api/v1/stocks/price?ticker=AAPL"
 ```
 
@@ -310,7 +311,7 @@ List every ticker with curated KPI coverage. Sorted alphabetically. Builder disc
 Response: `{ count, tickers: KpiCoverageEntry[] }` where each entry is `{ ticker, companyName, lastUpdated, kpiCount }`.
 
 ```python
-client = SentiSenseClient(api_key="ss_live_YOUR_KEY")
+client = SentiSenseClient(api_key=os.environ["SENTISENSE_API_KEY"])
 coverage = client.list_kpi_coverage()
 print(f"{coverage.count} tickers covered")
 for entry in coverage.tickers[:5]:
@@ -623,7 +624,7 @@ Insider transactions for a specific stock, newest first. **Public (preview)** --
 Response: `{ isPreview: bool, previewReason: string|null, data: [...] }`. Free: top 5 trades, PRO: full list. Each trade: `insiderName`, `insiderTitle`, `insiderRelation`, `officer`, `director`, `tenPctOwner`, `transactionDate`, `filedDate`, `transactionCode`, `transactionType`, `securityTitle`, `sharesTransacted`, `pricePerShare`, `totalValue`, `sharesOwnedAfter`, `directOwnership`, `rule10b51`.
 
 ```python
-client = SentiSenseClient(api_key="ss_live_YOUR_KEY")
+client = SentiSenseClient(api_key=os.environ["SENTISENSE_API_KEY"])
 trades = client.get_insider_trades("AAPL", lookback_days=90)
 for t in trades["data"]:
     print(f"{t['transactionDate']} {t['insiderName']} {t['transactionType']} {t['sharesTransacted']} shares")
@@ -660,7 +661,7 @@ Recent congressional trades across all politicians, sorted by disclosure date (m
 Response: `{ isPreview, previewReason, data: [...] }`. Each trade: `politicianName`, `firstName`, `lastName`, `chamber`, `party`, `state`, `bioguideId`, `imageUrl`, `ticker`, `assetDescription`, `assetType` (`Stock`, `ETF`, or `Stock Option`), `assetMetadata` (object: `null`, or `{kind:"OPTION", optionType, strikePrice, expirationDate}` for options), `transactionType`, `transactionDate`, `disclosureDate`, `disclosureDelayDays`, `amountRange`, `amountMin`, `amountMax`, `owner`, `urlSlug`.
 
 ```python
-client = SentiSenseClient(api_key="ss_live_YOUR_KEY")
+client = SentiSenseClient(api_key=os.environ["SENTISENSE_API_KEY"])
 activity = client.get_politician_activity(lookback_days=90)
 for trade in activity["data"]:
     print(f"{trade['politicianName']} ({trade['party']}-{trade['state']}): {trade['transactionType']} {trade['ticker']}")
@@ -712,7 +713,7 @@ AI insights for a specific stock, ranked by importance (relevance, confidence, a
 | `insightType` | string | No | - | Filter by type (e.g., `insider_buy_signal`) |
 
 ```python
-client = SentiSenseClient(api_key="ss_live_YOUR_KEY")
+client = SentiSenseClient(api_key=os.environ["SENTISENSE_API_KEY"])
 result = client.get_stock_insights("AAPL", urgency="high")
 for i in result["data"]:
     print(f"[{i['urgency'].upper()}] {i['insightType']}: {i['insightText'][:80]}")
@@ -972,7 +973,7 @@ Upcoming company earnings, sorted by date. **Public (preview)** -- Free: current
 Response: `{ isPreview, previewReason, totalCount?, data: { earnings: [...], metadata: {...} } }`. Each event: `{ ticker, companyName, earningsDate (ISO date), earningsTime, fiscalQuarter, confirmed, estimatedEps }`. Metadata: `{ generatedAt (epoch seconds), windowStart, windowEnd, count, source }`. On a FREE preview, `totalCount` is the full-window event count and `data.earnings` is limited to the current week.
 
 ```python
-client = SentiSenseClient(api_key="ss_live_YOUR_KEY")
+client = SentiSenseClient(api_key=os.environ["SENTISENSE_API_KEY"])
 cal = client.get_earnings_calendar(week="next")
 for e in cal.earnings:
     print(f"{e['earningsDate']} {e['ticker']} ({e['earningsTime']})")
@@ -1000,7 +1001,7 @@ for e in cal.earnings:
 2. **Start calling** -- all you need is the API key in a header. No SDK install required:
 
 ```bash
-curl -H "X-SentiSense-API-Key: ss_live_YOUR_KEY" \
+curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
   "https://app.sentisense.ai/api/v1/stocks/price?ticker=AAPL"
 ```
 
@@ -1013,8 +1014,9 @@ SDKs are thin wrappers around the REST API. As an AI agent, you are encouraged t
 **Python:** [github.com/SentiSenseApp/sentisense](https://github.com/SentiSenseApp/sentisense) (`pip install sentisense`)
 
 ```python
+import os
 from sentisense import SentiSenseClient
-client = SentiSenseClient(api_key="ss_live_YOUR_KEY")
+client = SentiSenseClient(api_key=os.environ["SENTISENSE_API_KEY"])
 price = client.get_stock_price("AAPL")
 ```
 
@@ -1022,7 +1024,7 @@ price = client.get_stock_price("AAPL")
 
 ```javascript
 import SentiSense from 'sentisense';
-const client = new SentiSense({ apiKey: 'ss_live_YOUR_KEY' });
+const client = new SentiSense({ apiKey: process.env.SENTISENSE_API_KEY });
 const price = await client.stocks.getPrice('AAPL');
 ```
 
