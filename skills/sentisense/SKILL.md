@@ -347,6 +347,21 @@ Time series metric data for a stock or entity. **Quota-gated** -- all metric typ
 | `endTime` | long | No | now | Epoch milliseconds |
 | `maxDataPoints` | int | No | - | Downsample to N data points |
 
+**Response:** an array of points ordered ascending by `timestamp`. Each point exposes a flat `value` scalar alongside the full `metricValue` object:
+
+```json
+[
+  {
+    "timestamp": 1780372800000,
+    "metricType": "SENTIMENT",
+    "value": 0.42,
+    "metricValue": { "type": "ValueMetricValue", "valueType": "MEAN", "value": { "value": 0.42 } }
+  }
+]
+```
+
+Read the scalar from the flat `value` (the polarity for `sentiment`, the count for `mentions`). It saves you walking the nested `metricValue.value` (count metrics) or `metricValue.value.value` (value metrics), whose depth varies by metric type. A point with no reading omits `value`. To derive the current reading and its change: points are time-ascending, so the current value is the last point's `value`, and the change is the last point's `value` minus the prior point's (or minus the first point's for the whole window). A window with 0 or 1 point has no derivable trend, so widen `startTime` rather than reporting a change.
+
 ### GET /api/v2/metrics/entity/{entityId}/distribution/{metricType}
 Distribution of a metric across a dimension (e.g., mentions by source). **Quota-gated**, available on the Free tier.
 
@@ -437,7 +452,7 @@ News and social posts for a stock with sentiment scores. **Public.**
 
 | Param | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `source` | string | No | all | `NEWS`, `REDDIT`, `X`, `SUBSTACK` |
+| `source` | string | No | all | `NEWS`, `REDDIT`, `X`, `SUBSTACK`, `YOUTUBE` |
 | `days` | int | No | 7 | Lookback in days (1-365) |
 | `hours` | int | No | - | Lookback in hours (overrides days) |
 | `limit` | int | No | 200 | Max results (capped at 200) |
@@ -472,9 +487,10 @@ Latest documents from a specific source. **Public.**
 
 | Param | Type | Required | Description |
 |-------|------|----------|-------------|
-| `source` | path | Yes | `NEWS`, `REDDIT`, `X`, `SUBSTACK` |
+| `source` | path | Yes | `NEWS`, `REDDIT`, `X`, `SUBSTACK`, `YOUTUBE` |
 | `days` | int | No | Lookback in days |
 | `limit` | int | No | Max results (capped at 500) |
+| `sort` | string | No | `latest` (default, newest first) or `top` (reliability-first: recent documents are grouped into freshness buckets and ranked by publisher reliability within each bucket, so high-authority publishers surface first). Any other value returns `400`. |
 
 ### GET /api/v1/documents/stories
 AI-curated news story clusters. **Public.**
@@ -585,7 +601,7 @@ SEC Form 4 insider trading data: track buys, sells, awards, and exercises by com
 
 **Insider relationships:** `OFFICER`, `DIRECTOR`, `TEN_PCT_OWNER`, `OTHER`. Each filer also has independent `officer`, `director`, `tenPctOwner` booleans (a person can be both officer and director).
 
-**Transaction types:** `BUY`, `SELL`, `EXERCISE`, `AWARD`, `GIFT`, `OTHER`.
+**Transaction types:** `BUY`, `SELL`, `EXERCISE`, `AWARD`, `GIFT`, `OTHER`. To count open-market activity, filter `transactionType` to `BUY` or `SELL`; `AWARD` (grants), `GIFT`, and `EXERCISE` are not open-market trades and should be excluded from a buys/sells tally. Note the insider endpoint uses `BUY`/`SELL`, NOT the politician endpoint's `PURCHASE`/`SALE` vocabulary (a filter written for one returns zero on the other).
 
 ### GET /api/v1/insider/activity
 Market-wide insider buying and selling aggregated by ticker. **Public (preview)** -- Free: top 5, PRO: full data.
