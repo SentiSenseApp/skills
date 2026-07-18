@@ -106,6 +106,8 @@ curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
 
 Free covers every workflow above at a preview depth. **PRO ($15/mo)** lifts the monthly cap (no monthly limit, just a 300/min rate) and returns full congressional history and full member lists, plus institutional flows, insider detail, and AI insights across the SentiSense API. Apply coupon `AGENTS26` at checkout for a builder launch discount: https://app.sentisense.ai/pricing?coupon=AGENTS26
 
+**Install:** `npx skills add SentiSenseApp/skills` (add `-s politicians-stock-tracker` for just this skill).
+
 ---
 
 *SentiSense is a read-only financial intelligence API. This data is for informational and educational purposes only, not investment advice.*

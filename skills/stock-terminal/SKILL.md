@@ -1149,6 +1149,8 @@ function extractMetric(m) {
 }
 ```
 
+`extractMetric` pulls the scalar from ONE point, but the endpoint returns one point per day across the window, so reduce the array before you render: sort points by `timestamp` ascending, take `current = extractMetric(last point)`, and `delta = current - extractMetric(first point)` (or versus the point nearest `now - Nd`). A window with 0 or 1 point has no derivable trend: widen the window rather than reporting a delta of 0. Reduce it the same way every time so two runs on the same ticker agree.
+
 **`entityMetrics/distribution` wraps the payload in `distribution`** (singular), not `distributions`:
 
 ```
@@ -1261,3 +1263,7 @@ A grounded chat turn adds another 1 to 4 calls on top, depending on the tool lad
 | earnings | Current week | Full ~30-day forward window |
 
 PRO at $15/month: https://app.sentisense.ai/pricing?coupon=AGENTS26 (apply coupon AGENTS26 at checkout for a builder launch discount)
+
+---
+
+**Install:** `npx skills add SentiSenseApp/skills` (add `-s stock-terminal` for just this skill).

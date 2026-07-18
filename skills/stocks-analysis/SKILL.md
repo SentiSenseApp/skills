@@ -97,13 +97,13 @@ Each is a natural-language intent, an ordered set of calls, and a synthesis shap
 2. `GET /api/v1/politicians/activity?lookbackDays=7` (filter to PURCHASE)
 3. `GET /api/v1/analyst/activity?lookbackDays=7` (filter client-side to `actionType=="UPGRADE"`; there is no server-side `types=` filter)
 
-Intersect the three ticker lists; report names in 2+ buckets with a one-liner each ("NVDA: 4 insiders bought ($2.1M), 1 senator purchased $50k-$100k, 2 upgrades"). Convergence is the signal. **Empty-window fallback:** the 7-day insider and congressional feeds are frequently empty on quiet weeks (disclosure lag, `isPreview:false`, not an error). Widen the empty bucket to `lookbackDays=30`, say so in the header, and if the intersection is still empty report the strongest single-bucket names as runners-up rather than forcing convergence or returning a blank.
+Intersect the three ticker lists; report names in 2+ buckets with a one-liner each ("NVDA: 4 insiders bought ($2.1M), 1 senator purchased $50k-$100k, 2 upgrades"). Convergence is the signal. **Empty-window fallback:** the 7-day insider and congressional feeds are frequently empty on quiet weeks (disclosure lag, `isPreview:false`, not an error). Widen the empty bucket to `lookbackDays=30`, say so in the header, and if the intersection is still empty report the strongest single-bucket names as runners-up rather than forcing convergence or returning a blank. Cite the trade date (`transactionDate`), not the 7-day disclosure window: STOCK Act filings lag weeks to months, so a name surfacing this week may reflect a much older trade (see the Committee disclosure rule).
 
 ### Quick Read 3: "Find divergence stocks"
 
 1. `GET /api/v1/stocks/popular` for candidates
 2. Per ticker: `GET /api/v1/stocks/chart?ticker={T}&timeframe=1M` (intraday bars, not daily closes; for a 7-day change filter to bars with `timestamp >= now-7d`, compare first vs last)
-3. Per ticker: `GET /api/v2/metrics/entity/{T}/metric/sentiment` (default 7-day window). If the series has fewer than 2 points, treat the trend as insufficient data and EXCLUDE the ticker rather than computing a bogus delta. With 2+ points, `sentimentChange` = last minus first (each read via `metricValue.value.value`, a polarity in [-1,1]).
+3. Per ticker: `GET /api/v2/metrics/entity/{T}/metric/sentiment` (default 7-day window). If the series has fewer than 2 points, treat the trend as insufficient data and EXCLUDE the ticker rather than computing a bogus delta. With 2+ points, `sentimentChange` = last minus first (each read via `metricValue.value.value`, a polarity in [-1,1]). **Thin-sample guard:** a window-edge point built on a handful of mentions can dominate the delta (a lone 1-mention day at +/-1.0 swamps everything). Only the Score (`sentisense_score`) series carries `properties.effectiveMentions` (sentiment points have empty `properties`), so read the sample size from the Score point for the same window (or fetch `/metric/mentions`); if the first or last point is thin (roughly under 5 mentions), use the nearest robust point or average the first and last two instead of trusting a single noisy edge.
 4. **Same scale before ranking.** `priceChangePct` is a percentage; `sentimentChange` is a raw polarity delta in ~[-2,2]. Scale: `sentimentChangeScaled = sentimentChange * 100`. Rank by `|priceChangePct - sentimentChangeScaled|`, report top 5 each direction. Apply this exact scaling so any two implementations agree.
 
 **Synthesize as:** "Bullish divergence (price down, sentiment up): TSLA -8% / sentiment +12%. Bearish divergence: COIN +14% / sentiment -9%."
@@ -772,3 +772,7 @@ If you cannot provide that fetcher, skip Tier P over HTTP entirely: run the thin
 | Monthly quota | ~30 committee runs + daily quick reads | Unlimited |
 
 PRO at $15/month: https://app.sentisense.ai/pricing?coupon=AGENTS26 (apply coupon AGENTS26 at checkout for a builder launch discount)
+
+---
+
+**Install:** `npx skills add SentiSenseApp/skills` (add `-s stocks-analysis` for just this skill).
