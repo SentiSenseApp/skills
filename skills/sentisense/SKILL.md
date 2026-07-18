@@ -133,7 +133,7 @@ Real-time market overview combining prices, sentiment, and top signals.
 
 ### Endpoints That Do NOT Exist
 Do not hallucinate these. They are not part of the SentiSense API:
-- `/api/v1/options/flow` or `/api/v1/dark-pool`: we do not have options flow or dark pool data
+- `/api/v1/options/flow` or `/api/v1/dark-pool`: these exact paths do not exist. For end-of-day options analytics (IV rank, put/call percentile, 25-delta skew, open-interest walls, max pain, unusual-by-volume contracts) use the Options Intelligence endpoints instead: `/api/v1/options/overview` and `/api/v1/stocks/{ticker}/options/summary`. We do not attribute tick-level order flow (no buy/sell aggressor tagging) and we have no dark-pool data
 - `/api/v1/earnings`: for the earnings calendar use `/api/v1/calendar/earnings`; for reported financials use `/api/v1/stocks/fundamentals`
 - `/api/v1/alerts` or `/api/v1/notifications`: alerts are user-facing only, not available via API
 - `/api/v1/chat` or `/api/v1/ask`: the AI chat is not accessible via API
@@ -871,6 +871,88 @@ Two SentiSense Score readings side-by-side: constituent-weighted (precomputed da
 | `ticker` | path | Yes | ETF ticker |
 
 Response: `{ isPreview, previewReason, data: { ticker, asOfDate (ISO date), computedAt (epoch seconds), coverage, constituentsWeighted: { sentiSenseScore, scoreLabel ("BULLISH"|"NEUTRAL"|"BEARISH"), asOfTimestamp (epoch seconds) }, direct: { ...same shape... } | null } }`. The `direct` block can be null for low-mention funds. Returns 404 when the constituent-weighted metric hasn't been produced for the ticker yet.
+
+---
+
+## Options Intelligence API (`/api/v1/options`, `/api/v1/stocks/{ticker}/options`)
+
+End-of-day options analytics for US stocks, ranked against each stock's OWN history. Derived nightly from the prior session's full option chain, then reduced to a lean daily aggregate: put/call volume and open interest, an ATM implied-volatility term structure, 25-delta skew, notional premium traded, open-interest walls with max pain, and the session's unusually-active contracts. The product thesis is percentile-first: every reading is served alongside its percentile within that ticker's trailing window (for example "put/call volume at the 92nd percentile of its 1y range"), never a bare cross-sectional number. Readings describe what the chain looks like today versus its own past; they are not forecasts.
+
+This is end-of-day data, latest session (not real-time): `asOf` is the prior trading day and the blobs refresh each morning after the session closes. Coverage is a bounded universe of the most actively optioned US names, roughly 950 in the latest build (the exact size is in `coverageCount`) and expanding; the authoritative covered list is the `rows` of `/options/overview`. A ticker outside this universe returns `200` with `data: null` from `/summary` (unknown tickers behave the same), so treat a null as "not covered", not as an error. Separately, a covered ticker that has not yet accumulated enough sessions (roughly 60) or cleared a liquidity floor returns its raw readings with omitted percentiles and no `interestScore` while its baseline builds.
+
+**Access and free-tier gating:** all three endpoints require an API key and each call counts against your monthly request quota. The options data itself is additionally tiered by key. PRO keys always get the full response. FREE keys get a working taster: `/options/overview` returns the top 25 ranked rows (plus all market-pulse aggregates and a `totalCount` of the full board); `/stocks/{ticker}/options/summary` returns the full dossier for the first 10 calls each calendar month (monthly reset; `data: null` responses never spend the meter), then a headline-only preview (`asOf`, `sentiment`, `ivRank1y`, `atmIv`, `pcVol`, `pcVolPctl1y`, `maxPain`); `/stocks/{ticker}/options/history` always serves `window=1y`. Previewed bodies carry `isPreview: true` and `previewReason: "PRO_REQUIRED"`; full bodies carry `isPreview: false` and `previewReason: null`. Null-valued fields are omitted from the JSON entirely, so check for field presence rather than comparing against `null`.
+
+### GET /api/v1/options/overview
+Market-wide Options Radar: the covered board, one row per covered ticker plus market-pulse aggregates. Rows arrive ranked by `interestScore` descending (unscored building-baseline rows last), so the top of the list is the most interesting names today. FREE keys receive the top 25 rows with `totalCount`; PRO keys receive every row. **API key required.** No parameters.
+
+Response: `{ isPreview, previewReason, data }`, where `data` is `{ asOf, medianIvRank, marketPcVol, extremeCount, coverageCount, rows: [...] }`. `data` is `null` before the first nightly build populates it. Each row in `rows`:
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `ticker` | string | Primary ticker |
+| `name` | string | Company name (null if unmapped) |
+| `sector` | string | Sector (null if unmapped) |
+| `asOf` | ISO date | Session date of this row's snapshot |
+| `sentiment` | number | Options-implied sentiment, -1 to +1 (null on cold start) |
+| `interestScore` | number | Composite 0-100 blend of how extreme the row's readings are (null while the baseline builds) |
+| `pcVol` | number | Put/call volume ratio today |
+| `pcVolPctl1y` | number | Percentile (0-100) of `pcVol` in the trailing 1y window |
+| `atmIv` | number | ATM implied volatility, as a fraction (0.42 = 42%) |
+| `ivRank1y` | number | IV rank (0-100) of `atmIv` in its trailing 1y range |
+| `skew25d` | number | 25-delta skew, `iv25p - iv25c`, a fraction on the same scale as IV (0.03 = 3 IV points) |
+| `skewPctl1y` | number | Percentile (0-100) of `skew25d` in the trailing 1y window |
+| `notionalVol` | number | Premium traded today (sum of volume × mark × 100) |
+| `ivMove20` | number | Signed change of `atmIv` vs its ~20-session mean; rank the "biggest IV moves" pill by its absolute value |
+| `observations1y` | integer | Trailing-1y observation count (drives the building-baseline state) |
+| `unusualCount` | integer | Unusually-active contracts this session |
+| `maxVolOiRatio` | number | Largest volume/open-interest multiple among them |
+| `maxUnusualPremium` | number | Largest premium ($) among them |
+| `wallSide` | string | Side of the single heaviest OI wall, `call` or `put` |
+| `wallStrike` | number | Strike of that wall |
+| `wallShare` | number | That wall's share of its side's open interest (0-1) |
+
+Rows arrive ranked by `interestScore`; re-sort client-side for other views (`notionalVol` for "most active", `maxUnusualPremium` for unusual activity).
+
+```bash
+curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
+  "https://app.sentisense.ai/api/v1/options/overview"
+```
+
+### GET /api/v1/stocks/{ticker}/options/summary
+The latest options dossier for one stock: today's aggregate, its percentile context, the open-interest wall structure with max pain, and the session's unusual contracts. **API key required.**
+
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `ticker` | path | Yes | Stock ticker (e.g., `NVDA`) |
+
+Response: `{ isPreview, previewReason, data }`, where `data` is `null` when the ticker is outside the covered universe (unknown tickers behave the same; null responses never spend the FREE dossier meter) or has no snapshot yet, otherwise `{ asOf, sentiment, latest, context, oiWalls, unusual }` (FREE keys: full for the first 10 calls/month, then the headline preview described in the access paragraph):
+
+- `latest` (today's daily aggregate): `{ date, callVol, putVol, callOi, putOi, pcVol, pcOi, vwIv, atmIv, skew25d, atmIv60, atmIv90, iv25c, iv25p, netDelta, notionalVol, contracts }`. `atmIv60`/`atmIv90` are the ~60d/~90d ATM IV proxies (the term structure); `iv25c`/`iv25p` are the raw 25-delta call/put IVs, and `skew25d == iv25p - iv25c`. Ratio/IV fields are omitted when undefined (e.g. `pcVol` when call volume is 0).
+- `context` (percentiles of `latest`): `{ pcVolPctl1y, pcVolPctl5y, pcOiPctl1y, ivRank1y, skewPctl1y, observations1y }`. Any percentile whose trailing window has too few observations is omitted (building baseline).
+- `oiWalls` (point-in-time, for the dossier expiry): `{ expiry, maxPain, callWalls: [{ strike, oi }], putWalls: [{ strike, oi }] }`, up to 3 walls per side, descending by open interest.
+- `unusual` (top 5 by premium): `[{ contract, type, strike, expiry, dte, volume, oi, volOiRatio, premium }]` -- contracts whose volume far exceeds open interest (fresh positioning). `contract` is the OCC-style option symbol (e.g. `NVDA260821C00200000`).
+
+```bash
+curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
+  "https://app.sentisense.ai/api/v1/stocks/NVDA/options/summary"
+```
+
+### GET /api/v1/stocks/{ticker}/options/history
+The daily-aggregate time series for one stock, ascending by date. **API key required.**
+
+| Param | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `ticker` | path | Yes | - | Stock ticker |
+| `window` | string | No | `1y` | `1y`, `2y`, or `5y` (`5y` returns all stored history, currently about two years); any other value clamps to `1y`. FREE keys always receive `1y` |
+
+Response: `{ isPreview, previewReason, data }`, where `data` is `{ ticker, window, series: [...] }` and each element of `series` has the same shape as the `latest` aggregate above (`{ date, callVol, putVol, ..., contracts }`). An empty `series` means the ticker has no stored aggregates yet.
+
+```bash
+curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
+  "https://app.sentisense.ai/api/v1/stocks/NVDA/options/history?window=1y"
+```
+
+**When to use these:** call `/options/overview` (no ticker) for the market-wide read of where options activity and implied volatility are unusual today, then drill into a name with `/stocks/{ticker}/options/summary` for its full dossier (walls, max pain, unusual contracts). Use `/stocks/{ticker}/options/history` to chart how a reading (IV, put/call, skew) has trended over time (history is backfilled from mid-2024, so `5y` currently returns about two years). Every value is a percentile of that stock's own past, so read it as "elevated or muted versus this stock's own history", not as a cross-stock ranking.
 
 ---
 
