@@ -30,7 +30,7 @@ Do not use it for order entry, portfolio management, or personalized advice. It 
 
 - **13F is quarterly and lagged.** Institutions file 13F-HR within 45 days after each quarter end, so the freshest complete data is always the prior quarter. Never present it as real-time positioning.
 - **Always resolve the quarter first.** Every endpoint except `/quarters` needs a `reportDate`. The most recent quarter is `pending: true` during the 45-day filing window and holds only early filers; use the first quarter with `pending: false` for complete data.
-- **Filer categories:** `INDEX_FUND`, `HEDGE_FUND`, `ACTIVIST`, `PENSION`, `BANK`, `INSURANCE`, `MUTUAL_FUND`, `SOVEREIGN_WEALTH`, `ENDOWMENT`, `OTHER`.
+- **Filer categories:** `INDEX_FUND`, `HEDGE_FUND`, `ACTIVIST`, `PENSION`, `BANK`, `INSURANCE`, `MUTUAL_FUND`, `SOVEREIGN_WEALTH`, `ENDOWMENT`, `CONGLOMERATE`, `OTHER`.
 - **Parent/subsidiary rollups.** Large managers file under many CIKs (e.g. Vanguard). A filer profile carries `multiCikRollup` / `childCikCount` / `childCiks` so sub-manager holdings roll up into one portfolio. Report the rollup, not double-counted child rows.
 - **Report values as given.** The API returns `valueUsd` (institution holdings) and `value` (per-holder) already denominated; quote them as the reported 13F value and do not re-scale or invent a unit.
 
@@ -113,6 +113,8 @@ curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
 ## Going further
 
 Free covers every workflow above at a preview depth (top holders, top-10 portfolio). **PRO ($15/mo)** lifts the monthly cap (no monthly limit, just a 300/min rate) and returns full holder lists and full manager portfolios, plus congressional, insider, options, and AI-insight data across the SentiSense API. Apply coupon `AGENTS26` at checkout for a builder launch discount: https://app.sentisense.ai/pricing?coupon=AGENTS26
+
+**Install:** `npx skills add SentiSenseApp/skills` (add `-s institutional-13f-tracker` for just this skill).
 
 ---
 

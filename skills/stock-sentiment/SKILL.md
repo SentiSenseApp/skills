@@ -242,3 +242,7 @@ Confirm the skill is wired correctly before trusting a synthesis:
 5. **Freshness is surfaced.** Any batch value presented to the user carries its `generatedAt`; if a synthesis omits the age on a sentiment or insight figure, or describes a batch surface as real time, it is not verified.
 
 A run passes when every quoted number traces to a `200` response read this turn, batch and real-time surfaces are labeled distinctly, and the output reads as educational context rather than a recommendation.
+
+---
+
+**Install:** `npx skills add SentiSenseApp/skills` (add `-s stock-sentiment` for just this skill).

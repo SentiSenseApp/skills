@@ -13,7 +13,7 @@ metadata:
 
 **Base URL:** `https://app.sentisense.ai`
 **Website:** https://sentisense.ai
-**ClawHub Skill:** [clawhub.ai/TheSentiTrader/sentisense](https://clawhub.ai/TheSentiTrader/sentisense)
+**Install:** `npx skills add SentiSenseApp/skills` (add `-s sentisense` for just this skill).
 **API Docs:** https://sentisense.ai/docs/api/
 **Authentication:** API key via `X-SentiSense-API-Key` header. Get a free key at https://app.sentisense.ai/get-api-key
 **SDKs (optional):** [Python](https://github.com/SentiSenseApp/sentisense) | [Node.js](https://github.com/SentiSenseApp/sentisense-node) -- source on GitHub. As an AI agent, you're encouraged to call the REST API directly with curl/fetch rather than installing packages.
@@ -220,7 +220,7 @@ Peer/similar stocks. **Public.**
 Related knowledge base entities (CEO, products, partners). **Public.**
 
 ### GET /api/v1/stocks/{ticker}/ai-summary
-AI-generated stock analysis report. **PRO** (Free: `depth=basic` unlimited, `depth=deep` limited to 10/month). `depth=basic` returns a preheader summary. `depth=deep` returns a full multi-section report.
+AI-generated stock analysis report. **PRO** (Free: `depth=basic` unlimited, `depth=deep` limited to 10/month). `depth=basic` returns a preheader summary. `depth=deep` returns a full multi-section report. Exhausting the `depth=deep` monthly view allowance returns `429` with `{error: "quota_exceeded", ...}`, the same contract as every other quota-gated endpoint.
 
 | Param | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
@@ -522,7 +522,7 @@ Consistent with the documents policy above, publisher headlines, article text, a
 
 ## Institutional Flows API (`/api/v1/institutional`)
 
-Data from SEC 13F-HR filings. Filer categories: `INDEX_FUND`, `HEDGE_FUND`, `ACTIVIST`, `PENSION`, `BANK`, `INSURANCE`, `MUTUAL_FUND`, `SOVEREIGN_WEALTH`, `ENDOWMENT`, `OTHER`.
+Data from SEC 13F-HR filings. Filer categories: `INDEX_FUND`, `HEDGE_FUND`, `ACTIVIST`, `PENSION`, `BANK`, `INSURANCE`, `MUTUAL_FUND`, `SOVEREIGN_WEALTH`, `ENDOWMENT`, `CONGLOMERATE`, `OTHER`.
 
 **Important:** All institutional endpoints (except `/quarters`) require a `reportDate` parameter. **Always call `GET /quarters` first** to get valid dates; do not hardcode them. Use the `reportDate` from the first quarter with `pending:false` in subsequent calls (skip the still-filing `pending:true` quarter; see `/quarters` below).
 
@@ -580,7 +580,7 @@ Discover the universe of institutions: paginated, AUM-ranked list of filers (slu
 
 | Param | Type | Required | Description |
 |-------|------|----------|-------------|
-| `category` | string | No | Filer category: `INDEX_FUND`, `HEDGE_FUND`, `ACTIVIST`, `PENSION`, `BANK`, `INSURANCE`, `MUTUAL_FUND`, `SOVEREIGN_WEALTH`, `ENDOWMENT`, `OTHER` |
+| `category` | string | No | Filer category: `INDEX_FUND`, `HEDGE_FUND`, `ACTIVIST`, `PENSION`, `BANK`, `INSURANCE`, `MUTUAL_FUND`, `SOVEREIGN_WEALTH`, `ENDOWMENT`, `CONGLOMERATE`, `OTHER` |
 | `minAumUsd` | long | No | Minimum total AUM in USD (e.g. `10000000000`) |
 | `limit` | int | No | Page size (default: 50, max: 200) |
 | `offset` | int | No | Pagination offset (default: 0) |
@@ -626,7 +626,7 @@ Response: `{ isPreview: bool, previewReason: string|null, data: [...] }`. Free: 
 ```python
 client = SentiSenseClient(api_key=os.environ["SENTISENSE_API_KEY"])
 trades = client.get_insider_trades("AAPL", lookback_days=90)
-for t in trades["data"]:
+for t in trades.data:
     print(f"{t['transactionDate']} {t['insiderName']} {t['transactionType']} {t['sharesTransacted']} shares")
 ```
 
@@ -663,7 +663,7 @@ Response: `{ isPreview, previewReason, data: [...] }`. Each trade: `politicianNa
 ```python
 client = SentiSenseClient(api_key=os.environ["SENTISENSE_API_KEY"])
 activity = client.get_politician_activity(lookback_days=90)
-for trade in activity["data"]:
+for trade in activity.data:
     print(f"{trade['politicianName']} ({trade['party']}-{trade['state']}): {trade['transactionType']} {trade['ticker']}")
 ```
 
@@ -715,7 +715,7 @@ AI insights for a specific stock, ranked by importance (relevance, confidence, a
 ```python
 client = SentiSenseClient(api_key=os.environ["SENTISENSE_API_KEY"])
 result = client.get_stock_insights("AAPL", urgency="high")
-for i in result["data"]:
+for i in result.data:
     print(f"[{i['urgency'].upper()}] {i['insightType']}: {i['insightText'][:80]}")
 ```
 
@@ -737,7 +737,7 @@ No parameters required.
 
 ```python
 result = client.get_market_insights()
-for i in result["data"]:
+for i in result.data:
     print(f"[{i['urgency'].upper()}] {i['insightText'][:100]}")
 ```
 
