@@ -199,7 +199,8 @@ The single most important artifact. Every downstream claim must cite a ledger ro
 | E16 | Next earnings date              | __    | confirmed? __       | point     | D1   | SS /calendar/earnings |
 | E17 | Market mood composite + sector  | __ (__) | as-of __          | batch     | D1   | SS /market-mood |
 | E18 | 10Y Treasury yield + 3m direction | __% (__) | as-of __       | daily     | P    | FRED DGS10 |
-| E19+| (discoveries during debate: transcripts, 8-K items, IR facts) |  |  |  |  |  |
+| E19 | Options positioning: IV rank, put/call pctl, 25d skew (optional; pull when the vol regime or a downside hedge is in question) | __ | as-of __ (EOD) | daily | D1 | SS /stocks/{T}/options/summary |
+| E20+| (discoveries during debate: transcripts, 8-K items, IR facts) |  |  |  |  |  |
 ```
 
 Rules under the table, non-negotiable:
@@ -207,7 +208,7 @@ Rules under the table, non-negotiable:
 - **Cite or say you don't have it.** `[NOT AVAILABLE]` is a respectable value; a plausible guess is a defect.
 - **Force the fiscal period into every fundamental row.** FY ends differ (NVDA ends January, AAPL ends September). "Q4 2025" without the FY convention is a bug.
 - **Batch rows carry their as-of** and are never described as real time. Sentiment, Score, insights, mood are batch; price and chart are real time.
-- **New facts found mid-debate get appended as E19, E20, ...** before anyone may cite them. No row, no citation, no claim.
+- **New facts found mid-debate get appended as E20, E21, ...** before anyone may cite them. No row, no citation, no claim.
 - **13F: quarters first.** Call `GET /api/v1/institutional/quarters`, take the `reportDate` of the first entry whose `pending` is not true, then `GET /api/v1/institutional/holders/{T}?reportDate={Q}`. Never hardcode a quarter; never take a `pending:true` one.
 - **Insider tallies exclude non-signals.** Count only `transactionType == "BUY"` / `"SELL"`; exclude `AWARD` (code A, `totalValue:0`), `GIFT`, `EXERCISE` from counts and dollar sums.
 - **Sample size matters on sentiment rows.** Only the Score (`sentisense_score`) series points carry `properties.effectiveMentions` (sentiment points have empty `properties`); read the sample size from the Score point, or fetch `/metric/mentions` directly, and apply it to the sentiment rows too. A reading built on a handful of mentions is noise, not signal. Note thin samples in the Value cell ("+0.41 on 5 mentions, thin") and expect them to be attacked in R2.
@@ -313,7 +314,7 @@ BEFORE YOU SPEAK, CHECK IN ORDER:
       plausible cause, citing the row it would show up in first.  (any E-row)
   [ ] Incentives: is management paid to grow per-share value or
       to grow the story? Dilution [E8], buyback timing, proxy
-      (DEF 14A) if the host can fetch it, else say unresolved.    (E8, E19+)
+      (DEF 14A) if the host can fetch it, else say unresolved.    (E8, E20+)
   [ ] Accounting honesty: gap between E3 and E4 over time.        (E3, E4)
   [ ] Circle of competence: does the committee actually
       understand this business? If not, say so out loud.          (Base Thesis)
@@ -322,7 +323,7 @@ BEFORE YOU SPEAK, CHECK IN ORDER:
 ALWAYS-ASK: "What would the man who is short this stock say at dinner?"
 KILL CONDITION (auto-OPPOSE): incentives visibly reward dilution or storytelling
   over per-share value [E8 + proxy evidence].
-DATA MANDATE: E3, E4, E8, plus any E19+ governance rows.
+DATA MANDATE: E3, E4, E8, plus any E20+ governance rows.
 MANDATORY CHALLENGE: the most confident seat at the table, whoever it is.
 ```
 
@@ -357,10 +358,13 @@ BEFORE YOU SPEAK, CHECK IN ORDER:
   [ ] The tape itself: what has price actually done recently?     (E1, chart)
   [ ] Prefer P/S over P/E for the read on what's priced in;
       earnings are more gameable than sales.                      (E9)
+  [ ] Options regime (optional): is IV rank stretched and 25d skew
+      rich? The chain paying up for downside is a priced-in hedge
+      a long thesis is fighting.                                  (E19)
 ALWAYS-ASK: "Am I fighting the Fed AND the tape at the same time?"
 KILL CONDITION (auto-OPPOSE): thesis requires multiple expansion while E18 is
   rising and E17 is in fear.
-DATA MANDATE: E1, E9, E10, E11, E17, E18.
+DATA MANDATE: E1, E9, E10, E11, E17, E18; E19 when the vol regime is in play.
 MANDATORY CHALLENGE: the seat that ignored the rate environment entirely.
 ```
 
@@ -373,14 +377,17 @@ BEFORE YOU SPEAK, CHECK IN ORDER:
   [ ] Financing the dream: is the share count rising to fund
       losses? Serial diluters transfer your upside to employees.  (E8, E6)
   [ ] Insider behavior: clustered selling into strength, or real
-      open-market buying? Escalate to Form 4 if contested.        (E12, E19+)
+      open-market buying? Escalate to Form 4 if contested.        (E12, E20+)
   [ ] Smart-money exits: are the largest holders reducing?        (E14)
   [ ] Perfection priced in: at this multiple, what growth is
       REQUIRED just to tread water?                               (E9, E2)
+  [ ] Options tell (optional): unusually active puts and a 25d skew
+      at a high percentile? The chain paying up for downside
+      corroborates the bear case.                                 (E19)
 ALWAYS-ASK: "What does the most informed seller know?"
 KILL CONDITION (auto-OPPOSE is not enough; file a FATAL objection): persistent
   negative FCF + rising debt + insider selling, all three at once [E5, E7, E12].
-DATA MANDATE: E3, E4, E5, E7, E8, E12, E14.
+DATA MANDATE: E3, E4, E5, E7, E8, E12, E14; E19 for the options tell.
 MANDATORY CHALLENGE: every SUPPORT stance at the table. You are paid to disagree.
 ```
 
@@ -500,11 +507,11 @@ Forcing functions, all hard:
 ```
 Escalation 1  "Insiders are buying" [E12] vs "those are option exercises":
               read the transactionCode already in the insider payload (P = open-market, M = exercise);
-              only if absent or contested, pull the Form 4s on EDGAR. Append the finding as E19.
+              only if absent or contested, pull the Form 4s on EDGAR. Append the finding as E20.
 Escalation 2  "Revenue is accelerating" (press narrative) vs the filings:
               pull the XBRL revenue series [E2 source]; is the LATEST reported quarter accelerating? Append.
 Escalation 3  "Sentiment is bullish" [E10] vs "that's stale":
-              re-read E10's as-of; if it predates a material event [E16, E19], the freshness objection stands.
+              re-read E10's as-of; if it predates a material event [E16, E20], the freshness objection stands.
 ```
 
 This is the differentiator: SentiSense gives the fast read, EDGAR gives the audit trail, and the debate uses both. If the host cannot escalate (no fetch), the Chair records the dispute as UNRESOLVED and it caps confidence.
@@ -683,7 +690,7 @@ Note what the example demonstrates: an honest `[NOT AVAILABLE]`, an escalation t
 | Margin of safety | Buying below estimated value so being somewhat wrong still works out |
 | Moat | A durable competitive advantage: pricing power, switching costs, network effects, cost advantage, brand |
 | Polarity | The sentiment scale in [-1, +1]; sign is direction, magnitude is conviction; never map to 0-100 |
-| SentiSense Score | SentiSense's unbounded composite of sentiment and volume; report as-is, never normalized |
+| SentiSense Score | SentiSense's proprietary read on how bullish or bearish the market is on a stock, weighted by how actively it's discussed; unbounded, report as-is, never normalized |
 | 10-K / 10-Q / 8-K | Annual report / quarterly report / material-event filing with the SEC |
 | Form 4 | Insider transaction filing; code P = open-market buy, S = sale, A = award, M/exercise = options |
 | 13F | Quarterly institutional holdings disclosure (45-day lag; always a quarter behind) |
@@ -728,6 +735,10 @@ INSIGHTS      GET /api/v1/insights/stock/{T}             (ranked; check generate
 
 CALENDAR      GET /api/v1/calendar/earnings?ticker={T}   (data.earnings[]; an empty window still returns a metadata block with windowStart/windowEnd)
 
+OPTIONS       GET /api/v1/options/overview               (end-of-day radar board, stocks only)
+              GET /api/v1/stocks/{T}/options/summary     (dossier; also works for ETFs)
+              GET /api/v1/stocks/{T}/options/history?window=1y|2y|5y
+
 PRIMARY (no key; see Fetch safety)
   CIK map     https://www.sec.gov/files/company_tickers.json
   XBRL        https://data.sec.gov/api/xbrl/companyconcept/CIK{10}/us-gaap/{Concept}.json
@@ -742,7 +753,8 @@ PRIMARY (no key; see Fetch safety)
 - **Sentiment scalar path:** `series[i].metricValue.value.value` (nested; `metricValue.value` is itself a dict). Latest reading = last element. Polarity in [-1, 1]; the SentiSense Score is unbounded, report as-is.
 - **Insider field is `transactionType` (`BUY`/`SELL`)**, congress uses `PURCHASE`/`SALE`. Exclude `AWARD`/`GIFT`/`EXERCISE` from tallies (awards carry `totalValue:0`).
 - **`market-mood` nests the composite under `market`**; `sectors` is a dict with duplicate GICS spellings to dedupe.
-- **Don't hallucinate endpoints.** No options flow, no dark pool, no `/congress` (it's `/politicians`), no financial-statements endpoint on SentiSense (fundamentals come from EDGAR).
+- **Options are end-of-day chain aggregates, not order flow.** `/options/*` gives put/call volume and OI, an ATM IV term structure, 25-delta skew, OI walls with max pain, and unusual contracts, each ranked as a percentile of that ticker's OWN trailing history (`ivRank1y`, `pcVolPctl1y`, `skewPctl1y`), `asOf` the prior session. Read it as positioning context, never as live sweeps or dealer books. The `/options/overview` board is stocks-only; ETFs (`SPY`, `QQQ`, `TLT`, sector `XL*`) are covered but reachable only via `/stocks/{T}/options/summary`.
+- **Don't hallucinate endpoints.** No real-time options order flow or sweeps feed (the `/options/*` endpoints above are end-of-day), no dark pool, no `/congress` (it's `/politicians`), no financial-statements endpoint on SentiSense (fundamentals come from EDGAR).
 - **Batch vs real time.** Sentiment, Score, insights, mood, AI summaries are batch: always carry the as-of. Price and chart are real time.
 - **Parallelize independent calls; be brief.** Users want the synthesis, not the recipe.
 
@@ -768,6 +780,7 @@ If you cannot provide that fetcher, skip Tier P over HTTP entirely: run the thin
 |------------|------|-----|
 | Quick Reads 1-5 | Full workflows; preview-gated depth (top-3 insights, sliced flow) | Full lists and history |
 | Committee run | Full committee; 13F depth and history preview-gated | Full 13F holder base and history for the smart-money rows |
+| Options positioning (E19) | IV rank, put/call, skew, OI walls, max pain: full dossier for 10 tickers/month + top-25 board + 1y history | Unlimited dossiers, full board, full history |
 | Divergence screen | Against `/popular` (~50 tickers, ~101 calls/run: 1 `/popular` + 2 per ticker, about 10% of the Free 1,000/month quota) | Full universe |
 | Monthly quota | ~30 committee runs + daily quick reads | Unlimited |
 

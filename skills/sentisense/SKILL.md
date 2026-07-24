@@ -69,7 +69,7 @@ Endpoints that take a `{ticker}` path parameter accept the canonical primary tic
 | `BRK.A`, `BRK-A`, `BRKA` | `BRK.B` | Berkshire Class A resolves to Class B |
 | `BRK-B`, `BRKB` | `BRK.B` | Punctuation variants normalized |
 
-Aliasing applies to research endpoints (analyst, KPIs, insights, insider, institutional holders, politicians filings). Quote and chart endpoints leave the ticker as-is, since market-data providers handle their own symbology. Tickers are case-insensitive. News Corp (`NWSA`/`NWS`) and Fox (`FOXA`/`FOX`) are NOT aliased to each other (each class is tracked separately).
+Aliasing applies to research endpoints (analyst, KPIs, insights, insider, institutional holders, politicians filings, options). Quote and chart endpoints leave the ticker as-is, since market-data providers handle their own symbology. Tickers are case-insensitive. News Corp (`NWSA`/`NWS`) and Fox (`FOXA`/`FOX`) are NOT aliased to each other (each class is tracked separately).
 
 ---
 
@@ -78,7 +78,7 @@ Aliasing applies to research endpoints (analyst, KPIs, insights, insider, instit
 ### Smart Money Tracker
 Cross-reference insider trading, institutional flows, and politician trades to follow where the smart money is moving. High-conviction signals come from convergence across all three.
 - `GET /api/v1/insider/activity` for market-wide insider buying/selling
-- `GET /api/v1/institutional/flows?reportDate={date}` for quarterly institutional positioning
+- `GET /api/v1/institutional/flows` for quarterly institutional positioning (optional `reportDate`; omit for the latest quarter)
 - `GET /api/v1/politicians/activity` for congressional STOCK Act trades
 - `GET /api/v1/insights/stock/{ticker}` for AI signals that combine these data sources
 
@@ -98,7 +98,8 @@ Track what Congress is buying before it moves. Filter by party, chamber, or indi
 Generate stock research reports by combining multiple data signals into a single analysis.
 - `GET /api/v1/stocks/{ticker}/ai-summary?depth=deep` for the full AI analysis report
 - `GET /api/v1/insights/stock/{ticker}` for AI-generated stock signals
-- `GET /api/v1/stocks/fundamentals?ticker={ticker}` for financial statement data
+- `GET /api/v1/stocks/fundamentals?ticker={ticker}` for a single period of financial statement data
+- `GET /api/v1/stocks/fundamentals/history?ticker={ticker}&timeframe=annual&limit=10` for multi-year revenue, margin, and free-cash-flow trend to support valuation work
 - `GET /api/v1/documents/ticker/{ticker}` for recent news context
 
 ### Earnings Calendar Monitor
@@ -121,12 +122,12 @@ Real-time market overview combining prices, sentiment, and top signals.
 
 ### Workflow Pattern
 1. Call `GET /api/v1/stocks/market-status` first to check if the market is open
-2. Call `GET /api/v1/institutional/quarters` before any institutional endpoint to get valid `reportDate` values
+2. Call `GET /api/v1/institutional/quarters` before the institutional endpoints that need a `reportDate` to get valid values (`/flows` does not need one; omit it for the latest quarter)
 3. All PRO-gated endpoints return `{isPreview, previewReason, data}`. Always access `response["data"]` (or `response.data`). On a preview (FREE) list response a `totalCount` field is also present: the number of items in the full PRO dataset, so you can show "showing N of totalCount"
 4. Use `lookbackDays` (1-365) on insider and politician endpoints to control the time window
 
 ### Common Mistakes
-- **Do NOT hardcode `reportDate`** for institutional endpoints. Always fetch from `/quarters` first; quarters change as new SEC filings come in
+- **Do NOT hardcode `reportDate`** for institutional endpoints. When you pass one, fetch it from `/quarters` first; quarters change as new SEC filings come in. (`/flows` does not require one: omit it for the latest quarter, or pass one for a specific quarter.)
 - **Do NOT iterate the response directly.** Unwrap `response["data"]` first. All PRO-gated endpoints use the `{isPreview, previewReason, data}` wrapper
 - **Do NOT use `/api/v1/entity-metrics/*`** for metrics. These are RETIRED (return 410 Gone). Use `/api/v2/metrics/` instead
 - **The `source` parameter is case-insensitive.** `news`, `NEWS`, `News` all work
@@ -134,7 +135,7 @@ Real-time market overview combining prices, sentiment, and top signals.
 ### Endpoints That Do NOT Exist
 Do not hallucinate these. They are not part of the SentiSense API:
 - `/api/v1/options/flow` or `/api/v1/dark-pool`: these exact paths do not exist. For end-of-day options analytics (IV rank, put/call percentile, 25-delta skew, open-interest walls, max pain, unusual-by-volume contracts) use the Options Intelligence endpoints instead: `/api/v1/options/overview` and `/api/v1/stocks/{ticker}/options/summary`. We do not attribute tick-level order flow (no buy/sell aggressor tagging) and we have no dark-pool data
-- `/api/v1/earnings`: for the earnings calendar use `/api/v1/calendar/earnings`; for reported financials use `/api/v1/stocks/fundamentals`
+- `/api/v1/earnings`: for the earnings calendar use `/api/v1/calendar/earnings`; for reported financials use `/api/v1/stocks/fundamentals` (single period) or `/api/v1/stocks/fundamentals/history` (multi-period trend, up to 40 quarters or 20 years)
 - `/api/v1/alerts` or `/api/v1/notifications`: alerts are user-facing only, not available via API
 - `/api/v1/chat` or `/api/v1/ask`: the AI chat is not accessible via API
 - `/api/v2/sentiment`: the correct path is `/api/v2/metrics/entity/{id}/metric/sentiment`
@@ -270,20 +271,66 @@ Financial statement data. **Public.**
 ### GET /api/v1/stocks/fundamentals/current
 Most recent fundamental data snapshot. **Public.**
 
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `ticker` | string | Yes | Stock ticker |
+
+### GET /api/v1/stocks/fundamentals/history
+Multi-period history of full financial statements (income statement, balance sheet, cash flow), one
+entry per fiscal quarter or year, newest first. Use for margin trends, multi-year comparisons, or as
+the input to a valuation model. Not the same endpoint as `/fundamentals` (single period) or
+`/fundamentals/historical/revenue` (income-statement lines only, no balance sheet or cash flow). **Public.**
+
+| Param | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `ticker` | string | Yes | - | Stock ticker |
+| `timeframe` | string | No | `quarterly` | `quarterly` or `annual` |
+| `limit` | int | No | 12 quarterly / 10 annual | Periods to return, capped at 40 quarterly / 20 annual |
+
+Response includes `count` (periods actually returned, can be less than `limit`), `reason`
+(non-null only when `periods` is empty, e.g. a recent listing), and `dataSource` (deprecated:
+always an empty string, kept for response-shape compatibility, slated for removal).
+
 ### GET /api/v1/stocks/fundamentals/periods
 Available fiscal periods. **Public.**
 
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `ticker` | string | Yes | Stock ticker |
+
 ### GET /api/v1/stocks/fundamentals/historical/revenue
-Historical revenue data. **Public.**
+Historical income-statement lines per period: revenue, gross profit, operating income, net income,
+and EPS. Response wraps them in `dataPoints` (not `periods` like `/fundamentals/history`), plus
+`count`, `dataSource`, and `reason`. For full statements including balance sheet and cash flow,
+use `/fundamentals/history` instead. **Public.**
+
+| Param | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `ticker` | string | Yes | - | Stock ticker |
+| `timeframe` | string | No | `quarterly` | `quarterly` or `annual` |
 
 ### GET /api/v1/stocks/short-interest
 Short interest data from FINRA. **Public.**
 
+| Param | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `ticker` | string | Yes | - | Stock ticker |
+| `limit` | int | No | 24 | Max data points |
+
 ### GET /api/v1/stocks/float
 Float information (shares outstanding, public float). **Public.**
 
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `ticker` | string | Yes | Stock ticker |
+
 ### GET /api/v1/stocks/short-volume
 Short volume trading data. **Public.**
+
+| Param | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `ticker` | string | Yes | - | Stock ticker |
+| `limit` | int | No | 90 | Max data points |
 
 ### GET /api/v1/stocks/{ticker}/quote
 Aggregate quote snapshot: live price, today OHLC, 52-week range, market cap, P/E, EPS TTM, dividend yield, 200-day moving average. Single call for detail pages. **API key required.**
@@ -505,7 +552,7 @@ AI-curated news story clusters. **Public.**
 Response: Story objects with a top-level `id` AND `clusterId` (both equal to the cluster id -- pass either to `/documents/stories/{clusterId}`), plus `cluster.title`, `cluster.averageSentiment`, `tickers`, `displayTickers`, `impactScore` (0-10), `brokeAt` (epoch seconds, nullable), `cluster.clusteredAt` (epoch seconds). Use `tickers` (bare symbols, e.g. `["AAPL"]`) programmatically; `displayTickers` are human-formatted labels (e.g. `["Apple Inc (AAPL)"]`) for display only, do not parse symbols out of them. The `cluster.createdAt` field (epoch millis) is deprecated and will be removed on or after 2026-08-16; use `cluster.clusteredAt`.
 
 ### GET /api/v1/documents/stories/ticker/{ticker}
-News stories for a specific stock. **Public.**
+News stories for a specific stock. **Public.** Takes `limit` only (default 5, capped at 20): there is no lookback window here, so `days` / `hours` / `filterHours` are ignored. Use `/documents/stories` with `filterHours` for a freshness window.
 
 ### GET /api/v1/documents/stories/{clusterId}
 Full detail for a single story cluster. **Public** -- Free: 10 story views/month, PRO: unlimited. Each list item from `/stories` and `/stories/ticker/{ticker}` carries a top-level `id` AND a `clusterId` (both equal to the cluster id); pass either one here as `{clusterId}`.
@@ -524,7 +571,7 @@ Consistent with the documents policy above, publisher headlines, article text, a
 
 Data from SEC 13F-HR filings. Filer categories: `INDEX_FUND`, `HEDGE_FUND`, `ACTIVIST`, `PENSION`, `BANK`, `INSURANCE`, `MUTUAL_FUND`, `SOVEREIGN_WEALTH`, `ENDOWMENT`, `CONGLOMERATE`, `OTHER`.
 
-**Important:** All institutional endpoints (except `/quarters`) require a `reportDate` parameter. **Always call `GET /quarters` first** to get valid dates; do not hardcode them. Use the `reportDate` from the first quarter with `pending:false` in subsequent calls (skip the still-filing `pending:true` quarter; see `/quarters` below).
+**Important:** `/flows` no longer requires `reportDate`: omit it to get the latest available quarter (the response is labeled with `isPending` + filer coverage), or pass one explicitly for a specific quarter. The other institutional endpoints (except `/quarters`) still require a `reportDate`. **When you need one, call `GET /quarters` first** to get valid dates; do not hardcode them. For a fully-filed quarter, use the `reportDate` from the first quarter with `pending:false` (the most-recent quarter is `pending:true` while inside the 45-day 13F filing window and holds only early filers; see `/quarters` below).
 
 ### GET /api/v1/institutional/quarters
 Available 13F reporting quarters. **Public.** Call this first.
@@ -536,10 +583,10 @@ Aggregate institutional buying/selling per ticker. **Public (preview)** -- Free:
 
 | Param | Type | Required | Description |
 |-------|------|----------|-------------|
-| `reportDate` | ISO date | Yes | The `reportDate` from `/quarters` (e.g., `2025-12-31`) |
+| `reportDate` | ISO date | No | Quarter to fetch (e.g., `2025-12-31`). Omit to get the latest available quarter, including a still-open one; the response labels it with `isPending` + filer coverage. Pass a `reportDate` from `/quarters` for a specific quarter. |
 | `limit` | int | No | Max results per direction (default: 50, max: 100) |
 
-Response: `{ isPreview, previewReason, data: { inflows: [...], outflows: [...] } }`. Each flow includes net share changes, new/closed positions, and per-category breakdowns (indexFundNetChange, hedgeFundNetChange, etc.). Flows are ranked by `dollarFlowUsd` (= `netSharesChange × avgClosePrice`): inflows DESC, outflows ASC. `avgClosePrice` is null and `dollarFlowUsd` is 0 for tickers without a cached quarterly price; clients should fall back to `netSharesChange` for those rows.
+Response: `{ isPreview, previewReason, data: { inflows: [...], outflows: [...], reportDate, isPending, filerCount, baselineFilerCount } }`. `reportDate` is the quarter served (useful when you omitted the param). `isPending` is true when that quarter is still inside the 45-day 13F filing window, so only early filers are represented; when pending, `filerCount` and `baselineFilerCount` give the coverage (e.g., 578 of 8789 filers) and are null otherwise. Each flow includes net share changes, new/closed positions, and per-category breakdowns (indexFundNetChange, hedgeFundNetChange, etc.). Flows are ranked by `dollarFlowUsd` (= `netSharesChange × avgClosePrice`): inflows DESC, outflows ASC. `avgClosePrice` is null and `dollarFlowUsd` is 0 for tickers without a cached quarterly price; clients should fall back to `netSharesChange` for those rows.
 
 ### GET /api/v1/institutional/holders/{ticker}
 Institutional holders for a stock. **Public (preview)** -- Free: top 5, PRO: full data.
@@ -876,16 +923,16 @@ Response: `{ isPreview, previewReason, data: { ticker, asOfDate (ISO date), comp
 
 ## Options Intelligence API (`/api/v1/options`, `/api/v1/stocks/{ticker}/options`)
 
-End-of-day options analytics for US stocks, ranked against each stock's OWN history. Derived nightly from the prior session's full option chain, then reduced to a lean daily aggregate: put/call volume and open interest, an ATM implied-volatility term structure, 25-delta skew, notional premium traded, open-interest walls with max pain, and the session's unusually-active contracts. The product thesis is percentile-first: every reading is served alongside its percentile within that ticker's trailing window (for example "put/call volume at the 92nd percentile of its 1y range"), never a bare cross-sectional number. Readings describe what the chain looks like today versus its own past; they are not forecasts.
+End-of-day options analytics for US stocks and ETFs, ranked against each ticker's OWN history. Derived nightly from the prior session's full option chain, then reduced to a lean daily aggregate: put/call volume and open interest, an ATM implied-volatility term structure, 25-delta skew, notional premium traded, open-interest walls with max pain, and the session's unusually-active contracts. The product thesis is percentile-first: every reading is served alongside its percentile within that ticker's trailing window (for example "put/call volume at the 92nd percentile of its 1y range"), never a bare cross-sectional number. Readings describe what the chain looks like today versus its own past; they are not forecasts.
 
-This is end-of-day data, latest session (not real-time): `asOf` is the prior trading day and the blobs refresh each morning after the session closes. Coverage is a bounded universe of the most actively optioned US names, roughly 950 in the latest build (the exact size is in `coverageCount`) and expanding; the authoritative covered list is the `rows` of `/options/overview`. A ticker outside this universe returns `200` with `data: null` from `/summary` (unknown tickers behave the same), so treat a null as "not covered", not as an error. Separately, a covered ticker that has not yet accumulated enough sessions (roughly 60) or cleared a liquidity floor returns its raw readings with omitted percentiles and no `interestScore` while its baseline builds.
+This is end-of-day data, latest session (not real-time): `asOf` is the prior trading day and the blobs refresh each morning after the session closes. Coverage is two universes, discovered differently. **Stocks:** a bounded universe of the most actively optioned US names, roughly 950 in the latest build (the exact size is in `coverageCount`) and expanding; the `rows` of `/options/overview` are the authoritative list. **ETFs:** the US ETFs SentiSense tracks (enumerate them with `GET /api/v1/etfs`) get the same coverage on the same `/stocks/{ticker}/options/...` paths, and on the overview they are a SEPARATE board: `etfRows`, never mixed into `rows`. `coverageCount` and the market-pulse aggregates describe the stock board only, so an ETF is never counted there. The two boards are ranked independently and must not be merged: every reading is a percentile of that ticker's own trailing history, so an ETF's `interestScore` is comparable to other ETFs, not to a single stock. A ticker in neither universe returns `200` with `data: null` from `/summary` (unknown tickers behave the same), so treat a null as "not covered", not as an error. Separately, a covered ticker that has not yet accumulated enough sessions (roughly 60) or cleared a liquidity floor returns its raw readings with omitted percentiles and no `interestScore` while its baseline builds.
 
 **Access and free-tier gating:** all three endpoints require an API key and each call counts against your monthly request quota. The options data itself is additionally tiered by key. PRO keys always get the full response. FREE keys get a working taster: `/options/overview` returns the top 25 ranked rows (plus all market-pulse aggregates and a `totalCount` of the full board); `/stocks/{ticker}/options/summary` returns the full dossier for the first 10 calls each calendar month (monthly reset; `data: null` responses never spend the meter), then a headline-only preview (`asOf`, `sentiment`, `ivRank1y`, `atmIv`, `pcVol`, `pcVolPctl1y`, `maxPain`); `/stocks/{ticker}/options/history` always serves `window=1y`. Previewed bodies carry `isPreview: true` and `previewReason: "PRO_REQUIRED"`; full bodies carry `isPreview: false` and `previewReason: null`. Null-valued fields are omitted from the JSON entirely, so check for field presence rather than comparing against `null`.
 
 ### GET /api/v1/options/overview
-Market-wide Options Radar: the covered board, one row per covered ticker plus market-pulse aggregates. Rows arrive ranked by `interestScore` descending (unscored building-baseline rows last), so the top of the list is the most interesting names today. FREE keys receive the top 25 rows with `totalCount`; PRO keys receive every row. **API key required.** No parameters.
+Market-wide Options Radar: two boards plus market-pulse aggregates. `rows` is one row per covered stock; `etfRows` is the same row shape for covered ETFs (omitted entirely when a build has none). Both boards arrive ranked by `interestScore` descending (unscored building-baseline rows last), so the top of the list is the most interesting names today. FREE keys receive the top 25 rows with `totalCount`; PRO keys receive every row. **API key required.** No parameters.
 
-Response: `{ isPreview, previewReason, data }`, where `data` is `{ asOf, medianIvRank, marketPcVol, extremeCount, coverageCount, rows: [...] }`. `data` is `null` before the first nightly build populates it. Each row in `rows`:
+Response: `{ isPreview, previewReason, data }`, where `data` is `{ asOf, medianIvRank, marketPcVol, extremeCount, coverageCount, rows: [...], etfRows: [...], etfMedianIvRank, etfMarketPcVol, etfExtremeCount, etfCoverageCount }`. `data` is `null` before the first nightly build populates it. Each board carries its OWN aggregates and they are never blended: `medianIvRank` / `marketPcVol` / `extremeCount` / `coverageCount` describe the stock board, and the four `etf*` aggregates describe the ETF board (all four omitted when a build has no ETF rows). `etfCoverageCount` is the denominator for `etfExtremeCount` and stays the full board size even on a truncated FREE response. On a FREE key the envelope's `totalCount` reports the full stock board and `data.etfTotalCount` reports the full ETF board. For ETF rows, `sector` carries the fund's asset class (`Equity`, `Bond`, `Commodity`, ...) rather than a GICS sector. Each row, in either board:
 
 | Field | Type | Notes |
 |-------|------|-------|
@@ -911,7 +958,7 @@ Response: `{ isPreview, previewReason, data }`, where `data` is `{ asOf, medianI
 | `wallStrike` | number | Strike of that wall |
 | `wallShare` | number | That wall's share of its side's open interest (0-1) |
 
-Rows arrive ranked by `interestScore`; re-sort client-side for other views (`notionalVol` for "most active", `maxUnusualPremium` for unusual activity).
+Rows arrive ranked by `interestScore`; re-sort client-side for other views (`notionalVol` for "most active", `maxUnusualPremium` for unusual activity). Sort each board on its own; never concatenate `rows` and `etfRows` into one ranking.
 
 ```bash
 curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
@@ -919,11 +966,11 @@ curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
 ```
 
 ### GET /api/v1/stocks/{ticker}/options/summary
-The latest options dossier for one stock: today's aggregate, its percentile context, the open-interest wall structure with max pain, and the session's unusual contracts. **API key required.**
+The latest options dossier for one stock or ETF: today's aggregate, its percentile context, the open-interest wall structure with max pain, and the session's unusual contracts. **API key required.**
 
 | Param | Type | Required | Description |
 |-------|------|----------|-------------|
-| `ticker` | path | Yes | Stock ticker (e.g., `NVDA`) |
+| `ticker` | path | Yes | Stock or ETF ticker (e.g., `NVDA`, `SPY`) |
 
 Response: `{ isPreview, previewReason, data }`, where `data` is `null` when the ticker is outside the covered universe (unknown tickers behave the same; null responses never spend the FREE dossier meter) or has no snapshot yet, otherwise `{ asOf, sentiment, latest, context, oiWalls, unusual }` (FREE keys: full for the first 10 calls/month, then the headline preview described in the access paragraph):
 
@@ -937,12 +984,19 @@ curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
   "https://app.sentisense.ai/api/v1/stocks/NVDA/options/summary"
 ```
 
+ETFs use the same path, and it is the only way to reach them since the Radar board is stocks-only:
+
+```bash
+curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
+  "https://app.sentisense.ai/api/v1/stocks/SPY/options/summary"
+```
+
 ### GET /api/v1/stocks/{ticker}/options/history
-The daily-aggregate time series for one stock, ascending by date. **API key required.**
+The daily-aggregate time series for one stock or ETF, ascending by date. **API key required.**
 
 | Param | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `ticker` | path | Yes | - | Stock ticker |
+| `ticker` | path | Yes | - | Stock or ETF ticker |
 | `window` | string | No | `1y` | `1y`, `2y`, or `5y` (`5y` returns all stored history, currently about two years); any other value clamps to `1y`. FREE keys always receive `1y` |
 
 Response: `{ isPreview, previewReason, data }`, where `data` is `{ ticker, window, series: [...] }` and each element of `series` has the same shape as the `latest` aggregate above (`{ date, callVol, putVol, ..., contracts }`). An empty `series` means the ticker has no stored aggregates yet.
@@ -952,23 +1006,21 @@ curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
   "https://app.sentisense.ai/api/v1/stocks/NVDA/options/history?window=1y"
 ```
 
-**When to use these:** call `/options/overview` (no ticker) for the market-wide read of where options activity and implied volatility are unusual today, then drill into a name with `/stocks/{ticker}/options/summary` for its full dossier (walls, max pain, unusual contracts). Use `/stocks/{ticker}/options/history` to chart how a reading (IV, put/call, skew) has trended over time (history is backfilled from mid-2024, so `5y` currently returns about two years). Every value is a percentile of that stock's own past, so read it as "elevated or muted versus this stock's own history", not as a cross-stock ranking.
+**When to use these:** call `/options/overview` (no ticker) for the market-wide read of where options activity and implied volatility are unusual today, then drill into a name with `/stocks/{ticker}/options/summary` for its full dossier (walls, max pain, unusual contracts). For a macro or sector read, use `data.etfRows` from the overview, or go straight to an ETF dossier (`SPY`, `QQQ`, `IWM`, `TLT`, `GLD`, the sector `XL*` funds). Use `/stocks/{ticker}/options/history` to chart how a reading (IV, put/call, skew) has trended over time (history is backfilled from mid-2024, so `5y` currently returns about two years). Every value is a percentile of that stock's own past, so read it as "elevated or muted versus this stock's own history", not as a cross-stock ranking.
 
 ---
 
 ## Market Summary API (`/api/v1/market-summary`)
 
-AI-generated market overview with headline analysis and top active stocks.
+AI-generated market overview with headline and expanded markdown analysis.
 
 ### GET /api/v1/market-summary
-AI market summary with headline, markdown analysis, and mention data. **Public.** No parameters required.
+AI market summary with headline and markdown analysis. **Public.** No parameters required.
 
 Response:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `totalMentions` | long | Total mentions across all tracked stocks |
-| `topActiveStocks` | string[] | Most active tickers by mention volume |
 | `lastUpdated` | long | Epoch milliseconds when data was last updated |
 | `headline` | string? | 1-2 sentence market punchline |
 | `expandedContent` | string? | Full markdown analysis |
@@ -1046,7 +1098,7 @@ Upcoming company earnings, sorted by date. **Public (preview)** -- Free: current
 | Param | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `ticker` | string | No | - | Filter to a single ticker |
-| `week` | string | No | - | Shorthand window: `this` or `next` |
+| `week` | string | No | - | Shorthand window. `this` is the Monday-to-Sunday week containing the current US Eastern date; `next` is the seven days right after it. Rolls over at midnight ET, not local midnight; `metadata.windowStart`/`windowEnd` echo the resolved dates |
 | `from` | string | No | - | Inclusive lower bound, ISO `YYYY-MM-DD` (overrides `week`) |
 | `to` | string | No | - | Inclusive upper bound, ISO `YYYY-MM-DD` |
 | `confirmed` | bool | No | - | When `true`, only company-confirmed dates |
@@ -1054,12 +1106,46 @@ Upcoming company earnings, sorted by date. **Public (preview)** -- Free: current
 
 Response: `{ isPreview, previewReason, totalCount?, data: { earnings: [...], metadata: {...} } }`. Each event: `{ ticker, companyName, earningsDate (ISO date), earningsTime, fiscalQuarter, confirmed, estimatedEps }`. Metadata: `{ generatedAt (epoch seconds), windowStart, windowEnd, count, source }`. On a FREE preview, `totalCount` is the full-window event count and `data.earnings` is limited to the current week.
 
+`earningsTime` is always one of `before_open`, `after_close`, `during_market`, or `unknown`, never null or absent. Treat `unknown` as "no session claim applies" and render it as blank rather than as missing data. It covers two cases: timing the issuer has not published yet, and timing that cannot exist. A few issuers release results on a Saturday or Sunday ahead of a Monday call, and there is no weekend open or close for the report to sit against. **A weekend `earningsDate` is legitimate data, not a bug.** Do not drop it, and do not shift it to the next weekday; the date is what the issuer announced.
+
 ```python
 client = SentiSenseClient(api_key=os.environ["SENTISENSE_API_KEY"])
 cal = client.get_earnings_calendar(week="next")
 for e in cal.earnings:
     print(f"{e['earningsDate']} {e['ticker']} ({e['earningsTime']})")
 ```
+
+---
+
+## MCP Connector (chat surface, not the REST API)
+
+SentiSense also runs a hosted Model Context Protocol server at `https://app.sentisense.ai/mcp`,
+for connecting inside Claude or ChatGPT chat rather than calling the REST API directly. It is a
+read-only, curated slice of the same data, authenticated with zero-config OAuth (no API key to
+paste; sign in with a SentiSense account and approve access). To add it: in Claude or ChatGPT,
+open Settings, then Connectors, add the URL above as a custom connector, and sign in. Supported
+hosts are Claude, ChatGPT, and local MCP clients such as Claude Code; other hosted MCP clients
+are not supported. If you are an AI agent building a
+product or automation, use the REST API above instead: it is the complete surface with typed SDKs.
+
+Nine data tools, plus one utility tool:
+
+| Tool | What it answers |
+|------|-----------------|
+| `get_market_mood` | The 0 to 100 fear-to-greed composite for the US market, its phase, and signal components |
+| `get_stock_snapshot` | Price plus SentiSense sentiment, the SentiSense Score, and key stats for one ticker |
+| `get_news` | Recent sentiment-tagged market-moving news for a ticker |
+| `get_analyst_ratings` | Buy/hold/sell consensus and price targets |
+| `get_smart_money` | Institutional 13F holdings and flows |
+| `get_options` | Options intelligence for a ticker or the market-wide radar |
+| `get_earnings_calendar` | Upcoming earnings dates, per ticker or the week's schedule |
+| `get_financials` | Reported income statement, balance sheet, and cash flow per fiscal quarter or year, up to 40 quarters or 20 years, plus curated company KPIs on PRO |
+| `screen_stocks` | Screen and rank the tracked stock/ETF universe by SentiSense signals and market data |
+| `sentisense_health` | Connection check; not a data tool, does not consume quota |
+
+Free: 1,000 tool calls/month at 30/min, sharing the same quota as REST API requests; most tools
+return preview-depth data, financial statements are full data on every tier. PRO: full data on
+every tool, no monthly cap, 300/min. Full setup and tier detail: <https://sentisense.ai/docs/api/connectors>.
 
 ---
 
