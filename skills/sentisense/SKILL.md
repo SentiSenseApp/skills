@@ -218,7 +218,7 @@ Peer/similar stocks. **Public.**
 | `limit` | int | No | 5 | Max results |
 
 ### GET /api/v1/stocks/{ticker}/entities
-Related knowledge base entities (CEO, products, partners). **Public.**
+Related knowledge base entities (CEO, products, partners). **Public.** Each entry carries a `urlSlug` (e.g. `Tim-Cook`) that plugs into the Metrics API `{entityId}` parameter.
 
 ### GET /api/v1/stocks/{ticker}/ai-summary
 AI-generated stock analysis report. **PRO** (Free: `depth=basic` unlimited, `depth=deep` limited to 10/month). `depth=basic` returns a preheader summary. `depth=deep` returns a full multi-section report. Exhausting the `depth=deep` monthly view allowance returns `429` with `{error: "quota_exceeded", ...}`, the same contract as every other quota-gated endpoint.
@@ -378,9 +378,32 @@ for t in types:
 
 ---
 
+## Entities API (`/api/v1/kb`)
+
+### GET /api/v1/kb/entities/search
+Search the knowledge base for the people, companies, products, and organizations SentiSense tracks, and get the handle to query their metrics. **Public** (API key required).
+
+| Param | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `q` | string | Yes | - | Name, alias, ticker, or slug fragment (case-insensitive, minimum 2 characters) |
+| `type` | string | No | all | `company`, `country`, `etf`, `organization`, `person`, `product`, `topic` |
+| `limit` | int | No | 10 | Max results (capped at 25) |
+
+**Response:** array of `{name, urlSlug, type, ticker}` matches, best first. `ticker` is null for entities without one. Feed the `urlSlug` (or `ticker`) into the Metrics API `{entityId}` parameter:
+
+```
+GET /api/v1/kb/entities/search?q=pelosi -> [{"name": "Nancy Pelosi", "urlSlug": "Nancy-Pelosi", "type": "person", "ticker": null}]
+GET /api/v2/metrics/entity/Nancy-Pelosi/metric/sentiment
+```
+
+People, products, and organizations have the same metrics surface as stocks, so this unlocks queries like a politician's mention volume, a CEO's SentiSense Score (`.../entity/Jensen-Huang/metric/sentisense`), or crowd sentiment on a product versus its parent ticker.
+
+### GET /api/v1/kb/entities/popular
+Curated list of high-profile tracked entities (major CEOs, political figures, the Federal Reserve). **Public** (API key required). Returns `{displayName, type, urlSlug, relatedStock}` entries; use as an autocomplete seed list without issuing a search.
+
 ## Metrics API (`/api/v2/metrics`)
 
-Time series metrics for stocks and entities: mentions, sentiment, social dominance, and more. Computed from serving data with proper entity resolution (tickers are resolved to KB entities automatically).
+Time series metrics for stocks and entities: mentions, sentiment, social dominance, and more. The `{entityId}` path segment accepts a stock ticker (e.g. `AAPL`) or an entity `urlSlug` (e.g. `Nancy-Pelosi`); both are case-insensitive, and a ticker-shaped identifier always means the listed company. Discover handles with `GET /api/v1/kb/entities/search?q=` or `GET /api/v1/stocks/{ticker}/entities`. An unknown identifier returns `404 entity_not_found` with up to three `suggestions`.
 
 Every metric type (`mentions`, `sentiment`, `sentisense`, `social_dominance`) is available on the Free tier: no PRO subscription needed. All metrics endpoints are **Quota-gated**: an API key is required and each request counts against your monthly quota (Free: 1,000 requests/month; PRO: no monthly cap). Per-minute rate limits apply on every tier.
 
@@ -389,7 +412,7 @@ Time series metric data for a stock or entity. **Quota-gated** -- all metric typ
 
 | Param | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `entityId` | path | Yes | - | Stock ticker (e.g., `AAPL`) or KB entity ID |
+| `entityId` | path | Yes | - | Stock ticker (e.g., `AAPL`) or entity `urlSlug` (e.g., `Nancy-Pelosi`) |
 | `metricType` | path | Yes | - | `mentions`, `sentiment`, `sentisense`, `social_dominance` |
 | `startTime` | long | No | 7 days ago | Epoch milliseconds |
 | `endTime` | long | No | now | Epoch milliseconds |
@@ -415,7 +438,7 @@ Distribution of a metric across a dimension (e.g., mentions by source). **Quota-
 
 | Param | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `entityId` | path | Yes | - | Stock ticker or KB entity ID |
+| `entityId` | path | Yes | - | Stock ticker or entity `urlSlug` |
 | `metricType` | path | Yes | - | Metric type key |
 | `dimension` | string | Yes | - | Dimension to slice by (e.g., `source`) |
 | `startTime` | long | No | 7 days ago | Epoch milliseconds |
@@ -426,7 +449,7 @@ Mean of a metric per dimension value over a time window (e.g., per-source mean s
 
 | Param | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `entityId` | path | Yes | - | Stock ticker or KB entity ID |
+| `entityId` | path | Yes | - | Stock ticker or entity `urlSlug` |
 | `metricType` | path | Yes | - | Metric type key (e.g., `sentiment`) |
 | `dimension` | path | Yes | - | Dimension to group by (e.g., `source`) |
 | `startTime` | long | No | 7 days ago | Epoch milliseconds |
@@ -481,7 +504,7 @@ Response shape:
 }
 ```
 
-**Score interpretation:** 0-25 Extreme Fear, 26-40 Fear, 41-59 Neutral, 60-74 Optimism, 75-100 Greed.
+**Phase interpretation** (`market.phase` and each sector's `phase`, by score): 0-15 Extreme Fear, 16-30 Fear, 31-45 Anxiety, 46-55 Neutral, 56-70 Optimism, 71-85 Greed, 86-100 Extreme Greed. `phase` is `"---"` when the score is null.
 
 **Node SDK:**
 ```javascript
@@ -502,7 +525,7 @@ News and social posts for a stock with sentiment scores. **Public.**
 |-------|------|----------|---------|-------------|
 | `source` | string | No | all | `NEWS`, `REDDIT`, `X`, `SUBSTACK`, `YOUTUBE` |
 | `days` | int | No | 7 | Lookback in days (1-365) |
-| `hours` | int | No | - | Lookback in hours (overrides days) |
+| `hours` | int | No | - | Lookback in hours, 1-8760 (overrides days). Out-of-range values return `400` |
 | `limit` | int | No | 200 | Max results (capped at 200) |
 
 Response: `{ documents: [...], totalCount, searchTicker, source, startDate, endDate }`. Each document includes: `id`, `url`, `source`, `sourceName`, `published`, `averageSentiment`, `reliability`, `sentiment[]`. Per-entity sentiment classifies each mentioned entity as POSITIVE/NEGATIVE/NEUTRAL.
