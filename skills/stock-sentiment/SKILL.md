@@ -228,7 +228,7 @@ Frame the result as an observed divergence, not a signal to act: "Bullish diverg
 - **Congress and insider use different verbs.** Insider rows carry `transactionType` BUY or SELL; congressional rows carry PURCHASE or SALE. Filter each with its own vocabulary.
 - **Always fetch quarters first.** Call `institutional/quarters` and pass the `reportDate` of the first quarter whose `pending` is not true to `institutional/holders`; skip any `pending:true` entry (within ~45 days of a quarter close the most-recent quarter is still filing and holds almost no holders), and fall back to `[0]` only if every entry is `pending:true`. Never hardcode a quarter.
 - **Documents carry no article title.** The document feed returns URLs, `source`, `published` (epoch seconds), and `averageSentiment`, not the publisher's headline. Pre-clustered story titles (`cluster.title`) are SentiSense-authored and safe to display verbatim; prefer stories when a readable title is needed.
-- **No invented endpoints.** There is no options flow, no dark pool, and no `/congress` (congressional data lives under `/politicians`). The earnings calendar is `/api/v1/calendar/earnings`.
+- **No invented endpoints.** There is no real-time options order flow and no dark pool (options exist, but only as end-of-day analytics at `/api/v1/options/overview` and `/api/v1/stocks/{ticker}/options/summary`), and no `/congress` (congressional data lives under `/politicians`). The earnings calendar is `/api/v1/calendar/earnings`.
 - **No advice.** When asked "should I buy," return data-grounded synthesis (sentiment, smart-money flow, analyst consensus, AI insight) framed as educational context, not a personal recommendation.
 
 ## Verification

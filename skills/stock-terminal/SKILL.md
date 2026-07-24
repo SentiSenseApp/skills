@@ -184,6 +184,7 @@ The registry is the single source of truth for what the model can do. It maps on
 | `get_metrics(ticker)` | 2 (live) | `GET /api/v2/metrics/entity/{T}/metric/sentiment` |
 | `get_ai_summary(ticker, depth)` | 3 (pre-computed) | `GET /api/v1/stocks/{T}/ai-summary?depth=basic\|deep` |
 | `get_insights(ticker)` | 3 (pre-computed) | `GET /api/v1/insights/stock/{T}` |
+| `get_options(ticker)` | 3 (pre-computed) | `GET /api/v1/stocks/{T}/options/summary` |
 | `search_documents(query)` | 4 (topical) | `GET /api/v1/documents/search` |
 
 Handler rules, non-negotiable:
@@ -402,7 +403,7 @@ Per-metric row:
 ```
 ┌─────────────────────────────────────────────────────┐
 │ SentiSense Score                                    │
-│ Sentiment × mentions          +0.65  ▮▯▮▮▯▮▯  ⌄    │
+│ Bullish vs bearish conviction  +24.6  ▮▯▮▮▯▮▯  ⌄   │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -436,7 +437,7 @@ Equip the agent with a tool ladder, ordered by cost:
 
 1. **Read what's already rendered (free).** Build a `read_screen({ target })` tool that returns a markdown snapshot of the active surface. `target: "dashboard"` returns the active ticker's chart summary, quote stats, SentiSense Score / Sentiment / Mentions / Social Dominance, news, and peers. `target: "canvas"` returns the currently-open artifact. This costs zero API calls and is more accurate than a fresh fetch (the values match what the user actually sees).
 2. **Fetch live data for off-screen tickers.** `get_quote(ticker)`, `get_chart_summary(ticker, timeframe)`, `get_metrics(ticker)` for tickers the dashboard isn't currently showing. One API call per tool.
-3. **Pre-computed reports for thesis-flavored questions.** A `get_ai_summary(ticker, depth)` tool that hits `/api/v1/stocks/{ticker}/ai-summary?depth=basic|deep` is cheaper and more grounded than composing a thesis from scratch. Same for `get_insights(ticker)` (`/api/v1/insights/stock/{ticker}`).
+3. **Pre-computed reports for thesis-flavored questions.** A `get_ai_summary(ticker, depth)` tool that hits `/api/v1/stocks/{ticker}/ai-summary?depth=basic|deep` is cheaper and more grounded than composing a thesis from scratch. Same for `get_insights(ticker)` (`/api/v1/insights/stock/{ticker}`) and `get_options(ticker)` (`/api/v1/stocks/{ticker}/options/summary`), the prior session's options dossier: put/call and IV readings each carried as a percentile of that ticker's own trailing year, plus open-interest walls, max pain, and unusual contracts. It is end-of-day, so render it with its `asOf` and never as live flow. ETFs work on the same path; the market-wide board is `GET /api/v1/options/overview`, stocks only.
 4. **Topical search for non-ticker questions.** `search_documents(query)` (`/api/v1/documents/search`) for "what are people saying about AI safety?" style asks.
 
 **`read_screen` snapshot shape.** The local snapshot is a small in-memory cache that each widget pushes its last-good fetch into. The tool reads from the cache and formats markdown without re-fetching. Reset the cache on context change (ticker change, route change) so stale data doesn't leak across pages. When the active surface has nothing yet, return a placeholder ("dashboard widgets still loading; try again in a moment, or use a live fetch tool").
@@ -842,6 +843,30 @@ ANALYSTS    {U} upgrades  {D} downgrades  (recent: "{lastAction}")
 
 ---
 
+### `options <TICKER>`: End-of-day options positioning
+
+End-of-day options analytics, each reading ranked against the ticker's own trailing year. It is not a live tape and not order flow: render it with its `asOf` and never as live sweeps. Works for ETFs on the same path (`SPY`, `QQQ`, sector `XL*`).
+
+**Calls:**
+1. `GET /api/v1/stocks/{T}/options/summary` (`data.{ asOf, sentiment, latest, context, oiWalls, unusual }`; `data:null` = not covered, say so, don't treat as an error)
+
+**Output template:**
+```
+OPTIONS · $TICKER · {asOf} (end-of-day)
+──────────────────────────────────────────────
+POSITIONING IV rank {ivRank1y} ·  Put/Call {pcVol} ({pcVolPctl1y} pctl)
+SKEW        25d {skew25d} ({skewPctl1y} pctl, {put-lean|call-lean})
+WALLS       Call {callWalls[0].strike} · Put {putWalls[0].strike} · Max pain {maxPain}
+UNUSUAL     {unusual[0].strike}{C|P} {expiry} · vol {volume} vs OI {oi} ({volOiRatio}x)
+READ        {one line: "IV rich, put-skewed" | "muted vs its year"; positioning, not flow}
+```
+
+**Field mapping.** `ivRank1y`, `pcVolPctl1y`, `skewPctl1y` come from `context`; `pcVol`, `skew25d` from `latest`. An omitted percentile means "building baseline" (too little history), so render `n/a`, never `0`. `oiWalls` carries `{ expiry, maxPain, callWalls[], putWalls[] }` (each wall `{ strike, oi }`, top-3 by OI); `unusual[]` is the session's top-5-by-premium contracts, each `{ contract, type, strike, expiry, dte, volume, oi, volOiRatio, premium }`. For the market-wide board of where options activity is unusual today, call `GET /api/v1/options/overview` (stocks only; ETFs are reachable only per-ticker via this command).
+
+**Free vs PRO.** The dossier is full for the first 10 tickers each month, then a headline-only preview (`asOf`, `sentiment`, `ivRank1y`, `atmIv`, `pcVol`, `pcVolPctl1y`, `maxPain`); the board returns its top 25 rows on Free. Render what you get and tag `(preview)` in the corner. Only mention that PRO lifts the 10-dossier cap and opens the full board when the preview is actually limiting the answer.
+
+---
+
 ### `news <TICKER>`: Sentiment-tagged news + embeds
 
 This is the command where the terminal feel really differentiates from a quote-and-dump tool. SentiSense returns documents (URLs + sentiment + source). The public document API provides derived analytics, not source content; it does NOT include the publisher's article headline. You produce the headline yourself using the **Headline Resolution** pattern below. Any retrieval from source URLs is your agent application's independent action, subject to the source platform's terms.
@@ -1118,7 +1143,7 @@ These are the failure modes the skill is designed to steer around.
 - **Don't ask follow-up clarifying questions for unambiguous asks.** "Did you want price or sentiment for $NVDA?" is anti-pattern. Run the full `open` screen: it shows both.
 - **Don't pretty-print one number.** A user asking "$NVDA price" gets a one-line answer (`$NVDA $890.12 (+1.4%)`). They don't get a 30-line `open` screen for a price quote.
 - **Don't hand-craft headlines.** If the document API didn't return one, use the Headline Resolution pattern. Don't invent.
-- **Don't hallucinate endpoints.** No `/api/v1/options/flow`, `/api/v1/dark-pool`, `/api/v1/alerts`, `/api/v1/chat`, `/api/v1/congress` (use `/politicians`). The earnings calendar IS `/api/v1/calendar/earnings` (not `/api/v1/earnings`).
+- **Don't hallucinate endpoints.** No `/api/v1/options/flow` (options are end-of-day: `/api/v1/options/overview` and `/api/v1/stocks/{T}/options/summary|history`), no `/api/v1/dark-pool`, `/api/v1/alerts`, `/api/v1/chat`, `/api/v1/congress` (use `/politicians`). The earnings calendar IS `/api/v1/calendar/earnings` (not `/api/v1/earnings`).
 - **Don't show the API key in user-facing output.** Ever.
 - **Don't push PRO unless the user is hitting the wall.** Free tier delivers great terminal experience. Mention PRO when a `(preview)` truncation is meaningfully limiting the answer.
 - **Don't quote a price, percent move, headline, analyst rating, or earnings result from training data.** That data is stale by definition. Fetch it every turn, even if the user just asked the same question minutes ago. The cost of one wrong number outweighs the cost of an extra `get_quote`.
@@ -1257,6 +1282,7 @@ A grounded chat turn adds another 1 to 4 calls on top, depending on the tool lad
 | daily brief | Once per day comfortably (5 calls) | Unlimited refreshes |
 | screen smart-money | Top items per bucket | Full ranked lists |
 | flow | Preview slice | Full holder list, full history |
+| options | Full dossier for 10 tickers/month, then headline preview; board top 25 | Unlimited dossiers, full board, full history |
 | mood | Full data, no quota cost | Same |
 | news | 8 most recent | Full feed |
 | stories | 10 most recent | Full feed |

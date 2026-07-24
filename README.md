@@ -27,7 +27,7 @@ Every skill runs on a free SentiSense API key. Create one at https://app.sentise
 | `stock-sentiment` | Sentiment and smart-money positioning for US stocks. |
 | `sentisense` | The full read-only market-data API reference: prices, sentiment, insider trading, institutional flows, politician trades, and AI insights. |
 
-More skills are on the way: congressional-trade tracking, options flow, 13F institutional ownership, insider buying, and market mood, each built on primary-source data.
+More skills are on the way: congressional-trade tracking, 13F institutional ownership, insider buying, and market mood, each built on primary-source data.
 
 ## Why SentiSense
 
