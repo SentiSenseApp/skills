@@ -95,7 +95,7 @@ Each is a natural-language intent, an ordered set of calls, and a synthesis shap
 
 1. `GET /api/v1/insider/cluster-buys?lookbackDays=7`
 2. `GET /api/v1/politicians/activity?lookbackDays=7` (filter to PURCHASE)
-3. `GET /api/v1/analyst/activity?lookbackDays=7` (filter client-side to `actionType=="UPGRADE"`; there is no server-side `types=` filter)
+3. `GET /api/v1/analyst/activity?lookbackDays=7&actionTypes=UPGRADE` (server-side filter; CSV of UPGRADE/DOWNGRADE/INITIATE/REITERATE/OTHER)
 
 Intersect the three ticker lists; report names in 2+ buckets with a one-liner each ("NVDA: 4 insiders bought ($2.1M), 1 senator purchased $50k-$100k, 2 upgrades"). Convergence is the signal. **Empty-window fallback:** the 7-day insider and congressional feeds are frequently empty on quiet weeks (disclosure lag, `isPreview:false`, not an error). Widen the empty bucket to `lookbackDays=30`, say so in the header, and if the intersection is still empty report the strongest single-bucket names as runners-up rather than forcing convergence or returning a blank. Cite the trade date (`transactionDate`), not the 7-day disclosure window: STOCK Act filings lag weeks to months, so a name surfacing this week may reflect a much older trade (see the Committee disclosure rule).
 
@@ -103,7 +103,7 @@ Intersect the three ticker lists; report names in 2+ buckets with a one-liner ea
 
 1. `GET /api/v1/stocks/popular` for candidates
 2. Per ticker: `GET /api/v1/stocks/chart?ticker={T}&timeframe=1M` (intraday bars, not daily closes; for a 7-day change filter to bars with `timestamp >= now-7d`, compare first vs last)
-3. Per ticker: `GET /api/v2/metrics/entity/{T}/metric/sentiment` (default 7-day window). If the series has fewer than 2 points, treat the trend as insufficient data and EXCLUDE the ticker rather than computing a bogus delta. With 2+ points, `sentimentChange` = last minus first (each read via `metricValue.value.value`, a polarity in [-1,1]). **Thin-sample guard:** a window-edge point built on a handful of mentions can dominate the delta (a lone 1-mention day at +/-1.0 swamps everything). Only the Score (`sentisense_score`) series carries `properties.effectiveMentions` (sentiment points have empty `properties`), so read the sample size from the Score point for the same window (or fetch `/metric/mentions`); if the first or last point is thin (roughly under 5 mentions), use the nearest robust point or average the first and last two instead of trusting a single noisy edge.
+3. Per ticker: `GET /api/v2/metrics/entity/{T}/metric/sentiment` (default 7-day window). If the series has fewer than 2 points, treat the trend as insufficient data and EXCLUDE the ticker rather than computing a bogus delta. With 2+ points, `sentimentChange` = last minus first (each read via `metricValue.value.value`, a polarity in [-1,1]). **Thin-sample guard:** a window-edge point built on a handful of mentions can dominate the delta (a lone 1-mention day at +/-1.0 swamps everything). Only the Score (`sentisense_score`) series carries `metricValue.properties` (`{bull, bear, directional}`; sentiment points have empty `properties`), so read the sample size from the Score point for the same window via `properties.directional`, the day's directional (bull + bear) mention count (or fetch `/metric/mentions`); if the first or last point is thin (roughly under 5 directional mentions), use the nearest robust point or average the first and last two instead of trusting a single noisy edge. Note `directional` counts non-neutral mentions only, so it is always at or below the `/metric/mentions` total. Do not reach for `metricValue.stats.count`: it is the daily-bucket count and is always 1.
 4. **Same scale before ranking.** `priceChangePct` is a percentage; `sentimentChange` is a raw polarity delta in ~[-2,2]. Scale: `sentimentChangeScaled = sentimentChange * 100`. Rank by `|priceChangePct - sentimentChangeScaled|`, report top 5 each direction. Apply this exact scaling so any two implementations agree.
 
 **Synthesize as:** "Bullish divergence (price down, sentiment up): TSLA -8% / sentiment +12%. Bearish divergence: COIN +14% / sentiment -9%."
@@ -211,7 +211,7 @@ Rules under the table, non-negotiable:
 - **New facts found mid-debate get appended as E20, E21, ...** before anyone may cite them. No row, no citation, no claim.
 - **13F: quarters first.** Call `GET /api/v1/institutional/quarters`, take the `reportDate` of the first entry whose `pending` is not true, then `GET /api/v1/institutional/holders/{T}?reportDate={Q}`. Never hardcode a quarter; never take a `pending:true` one.
 - **Insider tallies exclude non-signals.** Count only `transactionType == "BUY"` / `"SELL"`; exclude `AWARD` (code A, `totalValue:0`), `GIFT`, `EXERCISE` from counts and dollar sums.
-- **Sample size matters on sentiment rows.** Only the Score (`sentisense_score`) series points carry `properties.effectiveMentions` (sentiment points have empty `properties`); read the sample size from the Score point, or fetch `/metric/mentions` directly, and apply it to the sentiment rows too. A reading built on a handful of mentions is noise, not signal. Note thin samples in the Value cell ("+0.41 on 5 mentions, thin") and expect them to be attacked in R2.
+- **Sample size matters on sentiment rows.** Only the Score (`sentisense_score`) series points carry `metricValue.properties` (`{bull, bear, directional}`; sentiment points have empty `properties`); read the sample size from the Score point's `properties.directional`, the day's directional (bull + bear) mention count, or fetch `/metric/mentions` directly, and apply it to the sentiment rows too. `directional` counts non-neutral mentions only, so it is always at or below the `/metric/mentions` total. A reading built on a handful of mentions is noise, not signal. Note thin samples in the Value cell ("+0.41 on 5 mentions, thin") and expect them to be attacked in R2.
 - **Congressional windows filter on disclosure date, not trade date.** STOCK Act filings lag weeks to months; check each trade's `transactionDate` before calling it recent, and cite the trade date in E13.
 
 ### Filling Tier P: EDGAR recipes (when the host can fetch)
@@ -728,7 +728,7 @@ INSTITUTIONAL GET /api/v1/institutional/quarters        (always FIRST; skip pend
 ANALYST       GET /api/v1/analyst/{T}/consensus
               GET /api/v1/analyst/{T}/actions?lookbackDays=N
               GET /api/v1/analyst/{T}/estimates          (data.estimates[0] + data.surprises[])
-              GET /api/v1/analyst/activity?lookbackDays=N  (filter actionType client-side)
+              GET /api/v1/analyst/activity?lookbackDays=N&actionTypes=UPGRADE,DOWNGRADE,INITIATE  (rating changes only)
 
 INSIGHTS      GET /api/v1/insights/stock/{T}             (ranked; check generatedAt)
               GET /api/v1/insights/market

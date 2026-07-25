@@ -779,7 +779,7 @@ Find tickers where insiders + congress + analysts all positive in the same 7-day
 **Calls:**
 1. `GET /api/v1/insider/cluster-buys?lookbackDays=7`
 2. `GET /api/v1/politicians/activity?lookbackDays=7` (filter `transactionType=PURCHASE` client-side; no server-side param)
-3. `GET /api/v1/analyst/activity?lookbackDays=7` (filter `actionType=="UPGRADE"` client-side; no server-side `types=` filter)
+3. `GET /api/v1/analyst/activity?lookbackDays=7&actionTypes=UPGRADE` (server-side filter; CSV of UPGRADE/DOWNGRADE/INITIATE/REITERATE/OTHER)
 
 **Output template:**
 ```
@@ -822,7 +822,7 @@ Disc     {s} ({d})    Staples  {s} ({d})
 **Calls:**
 1. `GET /api/v1/insider/trades/{T}?lookbackDays=90`
 2. `GET /api/v1/politicians/filings/{T}?lookbackDays=90` (per-ticker filings; no client-side filter needed)
-3. `GET /api/v1/institutional/quarters` then `/api/v1/institutional/holders/{T}?reportDate={Q}` (`data.holders[]`; `Q` = `reportDate` of the first quarter whose `pending` is not true, skip any `pending:true` entry)
+3. `GET /api/v1/institutional/quarters` then `/api/v1/institutional/holders/{T}?reportDate={Q}&limit=10&sortBy=shares&sortDir=desc` (`data.holders[]`; `Q` = `reportDate` of the first quarter whose `pending` is not true, skip any `pending:true` entry). **Always pass `limit`.** The TOP 13F block renders 3 rows, and omitting `limit` returns every holder: a mega-cap is 6,000+ rows and over a megabyte for the three you use. `limit` also gives you `data.returnedCount` and `data.notableChanges`, while `data.holderCount` stays the full-quarter count either way.
 4. `GET /api/v1/analyst/{T}/actions?lookbackDays=90`
 
 **Output template:**
@@ -1223,12 +1223,13 @@ CONGRESS      GET /api/v1/politicians/activity?lookbackDays=N
               GET /api/v1/politicians/member/{slug}      (recent trades nested at data.recentTrades)
 
 INSTITUTIONAL GET /api/v1/institutional/quarters    (always FIRST)
-              GET /api/v1/institutional/holders/{T}?reportDate={Q}      (data.holders[] sorted by largest position)
+              GET /api/v1/institutional/holders/{T}?reportDate={Q}&limit=10&sortBy=shares
+                                                                        (data.holders[]; ALWAYS pass limit, the full list is 6,000+ rows)
 
 ANALYST       GET /api/v1/analyst/{T}/consensus
               GET /api/v1/analyst/{T}/actions?lookbackDays=N
               GET /api/v1/analyst/{T}/estimates
-              GET /api/v1/analyst/activity?lookbackDays=N               (market-wide; filter actionType client-side)
+              GET /api/v1/analyst/activity?lookbackDays=N&actionTypes=UPGRADE,DOWNGRADE,INITIATE  (market-wide rating changes)
 
 INSIGHTS      GET /api/v1/insights/stock/{T}        (ranked by importance: relevance, confidence, recency; Public preview, free top 3; take data[0])
               GET /api/v1/insights/stock/{T}/types

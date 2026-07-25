@@ -148,6 +148,7 @@ def main():
     ticker_cmd("holders"); ticker_cmd("consensus")
     ticker_cmd("actions", ("--days", "90")); ticker_cmd("estimates")
     aa = simple("analyst-activity"); aa.add_argument("--days", default="7")
+    aa.add_argument("--action-types", default=None)  # CSV, e.g. UPGRADE,DOWNGRADE,INITIATE
     # calendar / news / stories / quotes
     ticker_cmd("earnings")
     ticker_cmd("news", ("--limit", "8"))
@@ -195,7 +196,8 @@ def main():
     elif a.cmd == "estimates":
         out(shaped(get(f"/api/v1/analyst/{TE}/estimates")))
     elif a.cmd == "analyst-activity":
-        out(shaped(get("/api/v1/analyst/activity", lookbackDays=days)))
+        out(shaped(get("/api/v1/analyst/activity", lookbackDays=days,
+                       actionTypes=getattr(a, "action_types", None))))
     elif a.cmd == "earnings":
         out(shaped(get("/api/v1/calendar/earnings", ticker=T)))
     elif a.cmd == "news":

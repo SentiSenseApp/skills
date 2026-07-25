@@ -842,7 +842,7 @@ Response: string array, e.g. `["insider_buy_signal", "institutional_position_cha
 
 ## Analyst Ratings API (`/api/v1/analyst`)
 
-Wall Street analyst coverage: aggregate price target band, buy/hold/sell distribution, recent upgrade/downgrade actions, and forward EPS estimates with earnings surprise history. Free users still get the price target band (`targetLow`, `targetMean`, `targetHigh`, `numberOfAnalysts`, `consensusLabel`) in full -- it powers the public projection cone. The buy/hold/sell distribution counts and full action/estimate history are PRO-only.
+Wall Street analyst coverage: aggregate price target band, buy/hold/sell distribution, recent upgrade/downgrade actions, and forward EPS estimates with earnings surprise history. This is one of the most free-tier-generous surfaces in the API: free users get the price target band (`targetLow`, `targetMean`, `targetHigh`, `numberOfAnalysts`, `consensusLabel`) in full -- it powers the public projection cone -- and the entire first page (50 rows) of market-wide `/activity`. The buy/hold/sell distribution counts, full per-ticker action/estimate history, and deep `/activity` paging are PRO.
 
 ### GET /api/v1/analyst/{ticker}/consensus
 Aggregate Wall Street consensus: price target band, number of covering analysts, upside-to-current, recommendation distribution. **PRO (preview)** -- Free: full price band, no buy/hold/sell counts. PRO: full distribution.
@@ -873,11 +873,18 @@ Forward EPS estimates and recent earnings surprise history. **PRO (preview)** --
 Response: `{ isPreview, previewReason, data: { estimates: [...], surprises: [...] } }`.
 
 ### GET /api/v1/analyst/activity
-Market-wide recent analyst actions across all covered tickers, newest first. **PRO (preview)** -- Free: 5 most recent, PRO: full list.
+Market-wide recent analyst actions across all covered tickers, paged. Ordered by action date descending, ties broken by ticker ascending. **Free: the full first page** -- the first 50 rows of the window are complete data on every tier (`isPreview: false`). Depth is what PRO buys: `limit` above 50 or any `offset` past row 50 serves FREE keys their in-allowance slice as a preview (`previewReason: "PRO_REQUIRED"`) while PRO pages the whole window.
 
 | Param | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `lookbackDays` | int | No | 30 | Days of history to return |
+| `lookbackDays` | int | No | 30 | Days of history to search |
+| `limit` | int | No | 50 | Page size, capped at 500. Returns `400 invalid_limit` below 1 |
+| `offset` | int | No | 0 | Rows to skip. Returns `400 invalid_offset` when negative |
+| `actionTypes` | string | No | - | CSV filter on action type: any of `UPGRADE`, `DOWNGRADE`, `INITIATE`, `REITERATE`, `OTHER` (case-insensitive). Unknown values return `400 invalid_actionTypes` |
+
+Response: `{ isPreview, previewReason, totalCount, data: [...] }`. `totalCount` is the number of actions in the whole `lookbackDays` window **after the `actionTypes` filter**, not the page size, so `offset + data.length < totalCount` means another page is available.
+
+Around 200 rating actions land on a single active market day, and roughly 83% of all actions are `REITERATE` (an analyst confirming an unchanged rating). For actual rating changes, pass `actionTypes=UPGRADE,DOWNGRADE,INITIATE` -- otherwise the newest-first page is mostly reiterations. Since rows come back newest first, the default 50-row page is typically filled by the newest day alone, and raising `lookbackDays` by itself returns nothing new. Raise `limit` for a wider slice, or walk the window with `offset`.
 
 Same per-action shape as `/api/v1/analyst/{ticker}/actions`.
 
@@ -1158,7 +1165,7 @@ Nine data tools, plus one utility tool:
 | `get_market_mood` | The 0 to 100 fear-to-greed composite for the US market, its phase, and signal components |
 | `get_stock_snapshot` | Price plus SentiSense sentiment, the SentiSense Score, and key stats for one ticker |
 | `get_news` | Recent sentiment-tagged market-moving news for a ticker |
-| `get_analyst_ratings` | Buy/hold/sell consensus and price targets |
+| `get_analyst_ratings` | Buy/hold/sell consensus and price targets for a ticker, plus market-wide rating changes (`view=activity`: upgrades/downgrades/initiations, reiteration noise filtered out, tunable `days`/`limit`/`action`) |
 | `get_smart_money` | Institutional 13F holdings and flows |
 | `get_options` | Options intelligence for a ticker or the market-wide radar |
 | `get_earnings_calendar` | Upcoming earnings dates, per ticker or the week's schedule |
@@ -1167,7 +1174,8 @@ Nine data tools, plus one utility tool:
 | `sentisense_health` | Connection check; not a data tool, does not consume quota |
 
 Free: 1,000 tool calls/month at 30/min, sharing the same quota as REST API requests; most tools
-return preview-depth data, financial statements are full data on every tier. PRO: full data on
+return preview-depth data, while financial statements and market-wide analyst rating changes
+(`get_analyst_ratings view=activity`) are full data on every tier. PRO: full data on
 every tool, no monthly cap, 300/min. Full setup and tier detail: <https://sentisense.ai/docs/api/connectors>.
 
 ---

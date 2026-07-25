@@ -135,7 +135,8 @@ SMART MONEY  (wrapped in {isPreview, previewReason, data}; free key returns a pr
   GET /api/v1/analyst/{T}/actions?lookbackDays=N          Recent rating changes for one ticker.
   GET /api/v1/analyst/{T}/estimates                       EPS band at data.estimates[0].{estimateLow/Mean/High,
                                                           numberOfAnalysts} + data.surprises[]; no revenue.
-  GET /api/v1/analyst/activity?lookbackDays=N             Market-wide actions (filter actionType client-side).
+  GET /api/v1/analyst/activity?lookbackDays=N             Market-wide actions; add &actionTypes=UPGRADE,DOWNGRADE,INITIATE
+                                                          for real rating changes (~83% of raw rows are REITERATE).
 
 AI INSIGHTS  (wrapped; batch, carry generatedAt)
   GET /api/v1/insights/stock/{T}         Per-stock signals ranked by importance; data[0].insightText is the headline. Free preview top 3.
@@ -191,7 +192,7 @@ Find tickers where insider buying, congressional purchases, and analyst upgrades
 
 1. `GET /api/v1/insider/cluster-buys?lookbackDays=7`.
 2. `GET /api/v1/politicians/activity?lookbackDays=7`, keeping rows with `transactionType == "PURCHASE"`.
-3. `GET /api/v1/analyst/activity?lookbackDays=7`, filtering client-side to `actionType == "UPGRADE"` (there is no server-side type filter).
+3. `GET /api/v1/analyst/activity?lookbackDays=7&actionTypes=UPGRADE` (server-side filter; also accepts a CSV like `UPGRADE,DOWNGRADE,INITIATE`).
 
 All three are wrapped: read `.data`. Intersect the three ticker lists and report names appearing in two or more buckets, ranked by total signal count, with a one-liner each: "$NVDA: 4 insiders bought, 1 congressional purchase, 2 analyst upgrades (7d)." If a 7-day bucket returns an empty array (common on quiet weeks; `isPreview:false`, disclosure lag, not an error), widen that specific call to `lookbackDays=30` and note the wider window rather than showing a blank result. For one ticker's full flow, run `insider/trades/{T}`, `politicians/filings/{T}`, `institutional/quarters` then `institutional/holders/{T}?reportDate={Q}`, and `analyst/{T}/actions`. Present as observed positioning, never as advice.
 
