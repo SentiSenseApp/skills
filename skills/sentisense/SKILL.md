@@ -1,6 +1,6 @@
 ---
 name: sentisense
-description: "Read-only financial market data API. Stock prices, sentiment, insider trading, institutional flows, politician trades, AI insights. No trading, no purchases, no write operations, no wallet access."
+description: "US stock market data API for AI agents: real-time prices, news and social sentiment, the SentiSense Score, insider Form 4 trades, congressional STOCK Act disclosures, institutional 13F holdings and flows, options positioning, analyst ratings, the earnings calendar, and AI-generated market insights. One free API key covers every endpoint. Use for stock market API, stock sentiment API, insider trading data, congress stock trades, 13F holdings, options flow, earnings calendar, real-time stock prices, market data for AI agents. Read-only. No trading, no purchases, no write operations, no wallet access."
 license: MIT
 metadata:
   homepage: https://sentisense.ai

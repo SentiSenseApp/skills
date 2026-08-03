@@ -1,6 +1,6 @@
 ---
 name: politicians-stock-tracker
-description: "Track congress stock trades and politician stock trades: Pelosi tracker, senate stock trades, House trades, congress trades by ticker, STOCK Act disclosures, and congressional trading data from the SentiSense Politicians Trading API. Read-only. No trading, no purchases, no write operations, no wallet access."
+description: "Track congress stock trades and politician stock trades: Pelosi tracker, senate stock trades, House trades, congress trades by ticker, and STOCK Act disclosures sourced from House Clerk and Senate eFD filings. Use for congress stock trades, politician stock tracker, Pelosi stock trades, senate trading disclosures, what stocks is congress buying, STOCK Act filings by ticker. Read-only. No trading, no purchases, no write operations, no wallet access."
 license: MIT
 metadata:
   homepage: https://sentisense.ai
