@@ -181,7 +181,7 @@ The single most important artifact. Every downstream claim must cite a ledger ro
 ### EVIDENCE LEDGER: {TICKER}   (filled {date})
 | ID  | Fact                            | Value | As-of / Period      | Class     | Tier | Source |
 |-----|---------------------------------|-------|---------------------|-----------|------|--------|
-| E1  | Price + day change              | $__ / __% | live            | realtime  | D1   | SS /stocks/price |
+| E1  | Price + day change              | $__ / __% | 15-min delayed  | realtime  | D1   | SS /stocks/price |
 | E2  | Revenue (TTM or latest FY)      | $__   | __ (state FY end)   | quarterly | P    | EDGAR XBRL |
 | E3  | Net income (TTM or latest FY)   | $__   | __                  | quarterly | P    | EDGAR XBRL |
 | E4  | Operating cash flow             | $__   | __                  | quarterly | P    | EDGAR XBRL |

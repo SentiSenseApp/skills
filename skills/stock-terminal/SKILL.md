@@ -168,7 +168,7 @@ A tool is four parts. The model sees the first three; the host keeps the fourth 
 ```
 {
   name:        "get_quote",                 # stable identifier, shown in chips
-  description: "Live price + day change for one ticker.",
+  description: "Latest price (15-minute delayed) + day change for one ticker.",
   input:       { ticker: "string, e.g. NVDA" },   # JSON Schema the model fills in
   handler:     async ({ticker}) => callApi(...)     # host-only; injects the key
 }

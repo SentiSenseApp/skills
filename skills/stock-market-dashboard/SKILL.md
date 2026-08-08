@@ -60,7 +60,7 @@ will end up hand-patching a half-written document.
 | Overnight stories | `GET /api/v1/documents/stories` |
 | Street rating changes | `GET /api/v1/analyst/activity?actionTypes=UPGRADE,DOWNGRADE,INITIATE` |
 | Earnings this week | `GET /api/v1/calendar/earnings` |
-| Live price, per ticker | `GET /api/v1/stocks/{ticker}/quote` |
+| Latest price (15-minute delayed), per ticker | `GET /api/v1/stocks/{ticker}/quote` |
 | **SentiSense Score**, per ticker | `GET /api/v2/metrics/entity/{ticker}/metric/sentisense?startTime={epochMs30dAgo}` |
 | Sentiment polarity, per ticker | `GET /api/v2/metrics/entity/{ticker}/metric/sentiment` |
 | Analyst consensus, per ticker | `GET /api/v1/analyst/{ticker}/consensus` |

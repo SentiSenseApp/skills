@@ -151,7 +151,7 @@ NEWS & STORIES
   GET /api/v1/documents/stories/{id}                Story detail (PublicStoryDetailDto; aspectPerspectives[], bullishView/bearishView).
   GET /api/v1/documents/search?query=...            Topical document search.
 
-SUPPORTING  (price, prices, chart are real-time; profile, popular, calendar, market-summary are reference or batch)
+SUPPORTING  (price, prices, chart are 15-minute delayed; profile, popular, calendar, market-summary are reference or batch)
   GET /api/v1/stocks/price?ticker={T}                       Flat (no wrapper): currentPrice, changePercent at root.
   GET /api/v1/stocks/prices?tickers=A,B,C                   Batch quotes.
   GET /api/v1/stocks/{T}/profile                            name, sector, industry (flat at root; no profile key).

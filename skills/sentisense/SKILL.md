@@ -1,6 +1,6 @@
 ---
 name: sentisense
-description: "US stock market data API for AI agents: real-time prices, news and social sentiment, the SentiSense Score, insider Form 4 trades, congressional STOCK Act disclosures, institutional 13F holdings and flows, options positioning, analyst ratings, the earnings calendar, and AI-generated market insights. One free API key covers every endpoint. Use for stock market API, stock sentiment API, insider trading data, congress stock trades, 13F holdings, options flow, earnings calendar, real-time stock prices, market data for AI agents. Read-only. No trading, no purchases, no write operations, no wallet access."
+description: "US stock market data API for AI agents: news and social sentiment, the SentiSense Score, insider Form 4 trades, congressional STOCK Act disclosures, institutional 13F holdings and flows, options positioning, analyst ratings, the earnings calendar, AI-generated market insights, and stock prices. One free API key covers every endpoint. Use for stock sentiment API, stock market API, insider trading data, congress stock trades, 13F holdings, options flow, earnings calendar, stock price API, market data for AI agents. Read-only. No trading, no purchases, no write operations, no wallet access."
 license: MIT
 metadata:
   homepage: https://sentisense.ai
@@ -110,7 +110,7 @@ Position ahead of earnings instead of reacting to them. Pull the forward calenda
 - `GET /api/v1/insider/trades/{ticker}` to see if insiders moved ahead of the date
 
 ### Market Dashboard
-Real-time market overview combining prices, sentiment, and top signals.
+Market overview combining prices, sentiment, and top signals.
 - `GET /api/v1/stocks/market-status` to check if the market is open
 - `GET /api/v1/market-summary` for AI-generated market headline and analysis
 - `GET /api/v1/insights/market` for the top market-moving signals right now
@@ -153,7 +153,7 @@ Do not hallucinate these. They are not part of the SentiSense API:
 ## Stocks API (`/api/v1/stocks`)
 
 ### GET /api/v1/stocks/price
-Real-time stock price. **Public.**
+Latest stock price, 15-minute delayed. **Public.**
 
 | Param | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -166,10 +166,12 @@ curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
 
 Response: `{ ticker, currentPrice, change, changePercent, previousClose, volume, timestamp, expiresEpochSecond, extendedHours? }`.
 
-`currentPrice` is always the regular-session price: live last trade during RTH (09:30 to 16:00 ET), most recent regular-session close otherwise. The optional `extendedHours` field is present only during pre-market (04:00 to 09:30 ET) or after-hours (16:00 to 20:00 ET) and carries `{ session: "pre" | "post", price, change, changePercent }`, where `change` / `changePercent` are computed vs `currentPrice`.
+**Prices are delayed 15 minutes.** This applies to every price on this API, in every session, including the `extendedHours` values below. Do not present these quotes as live, and do not use them for execution or for any decision that turns on the current tick. `timestamp` tells you what the value is actually worth: read it rather than assuming freshness.
+
+`currentPrice` is always the regular-session price: the most recent regular-session value during RTH (09:30 to 16:00 ET), and the most recent regular-session close otherwise. The optional `extendedHours` field is present only during pre-market (04:00 to 09:30 ET) or after-hours (16:00 to 20:00 ET) and carries `{ session: "pre" | "post", price, change, changePercent }`, where `change` / `changePercent` are computed vs `currentPrice`.
 
 ### GET /api/v1/stocks/prices
-Batch real-time prices. **Public.** Returns a JSON array; each element has the same shape as `/price` (including a `ticker` field and an optional `extendedHours` object).
+Batch latest prices, 15-minute delayed (see `/price` above). **Public.** Returns a JSON array; each element has the same shape as `/price` (including a `ticker` field and an optional `extendedHours` object).
 
 | Param | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -259,6 +261,8 @@ Returns `ticker`, `companyName`, `asOf`, then:
 
 Use this when you want the headline read in one call. Use `GET /api/v2/metrics/entity/{ticker}/metric/sentiment` instead when you need a time series over a specific window. Returns `404` when the ticker has no sentiment coverage.
 
+Aggregate metrics such as sentiment and mention counts incorporate signals from sources that are not individually retrievable as documents, so document counts from the Documents API are not a complete audit trail of a score.
+
 > Via the MCP connector this same picture comes back from the `get_stock_snapshot` tool rather than a separate sentiment tool.
 
 ### GET /api/v1/stocks/{ticker}/entities
@@ -283,10 +287,12 @@ Response: flat object (no `{isPreview, data}` wrapper).
 | `reportType` | string | `SUMMARY` for `depth=basic`, `FULL` for `depth=deep` |
 | `version` | integer | Report date encoded as yymmdd (e.g. 260520) |
 | `lastUpdated` | long | Epoch milliseconds |
-| `sections` | object | Section name to `{content, directives}`. Present on `depth=deep` only. |
-| `sectionOrder` | string[] | Ordered section keys for rendering. Present on `depth=deep` only. |
-| `moatRating` | integer or null | Proprietary moat quality score 0-10 (network effects, switching costs, intangibles, cost advantages, efficient scale). Null if not yet assessed for this ticker. |
-| `aiDisruptionRisk` | string or null | `Low`, `Medium`, `High`, or `Critical`. Measures AI revenue-displacement exposure. Null if not yet assessed. |
+| `sections` | object | Section name to `{content, directives}`. Present on both depths: `depth=basic` returns a single `Executive Summary` section, `depth=deep` returns the full set. |
+| `sectionOrder` | string[] | Ordered section keys for rendering. Present on both depths; `["Executive Summary"]` on `depth=basic`. |
+| `moatRating` | integer or null | Proprietary moat quality score 0-10 (network effects, switching costs, intangibles, cost advantages, efficient scale). Present on `depth=deep` only. Null if not yet assessed for this ticker. |
+| `aiDisruptionRisk` | string or null | `Low`, `Medium`, `High`, or `Critical`. Measures AI revenue-displacement exposure. Present on `depth=deep` only. Null if not yet assessed. |
+
+**Do not test for the presence of `sections` to detect a deep report:** both depths return it. Branch on `reportType` (`SUMMARY` vs `FULL`) instead.
 
 ### GET /api/v1/stocks/{ticker}/metrics/{metricType}/breakdown
 Sentiment or mention metrics breakdown by sub-entities. **Public.**
@@ -386,7 +392,7 @@ Short volume trading data. **Public.**
 | `limit` | int | No | 90 | Max data points |
 
 ### GET /api/v1/stocks/{ticker}/quote
-Aggregate quote snapshot: live price, today OHLC, 52-week range, market cap, P/E, EPS TTM, dividend yield, 200-day moving average. Single call for detail pages. **API key required.**
+Aggregate quote snapshot: latest price (15-minute delayed), today OHLC, 52-week range, market cap, P/E, EPS TTM, dividend yield, 200-day moving average. Single call for detail pages. **API key required.**
 
 Response: `{ ticker, currentPrice, change, changePercent, volume, open, dayHigh, dayLow, previousClose, week52High, week52Low, marketCap, peRatio, epsTTM, dividendYield, movingAverage200Day, reportedCurrency, timestamp, extendedHours? }` -- all fields except `ticker` are nullable. `currentPrice` is always the regular-session price; the optional `extendedHours` object (`{ session, price, change, changePercent }`) is present only during pre-market or after-hours. `movingAverage200Day` is `null` when fewer than 200 trading days of history exist. `reportedCurrency` ("USD", "EUR", "KRW", ...) names the currency `epsTTM` is reported in, matching the fundamentals endpoints. Cached 15 s server-side.
 
@@ -968,7 +974,7 @@ Full composition of an ETF: per-holding weights, freshness timestamps, partial-c
 Response: `{ ticker, issuer, issuerEndpoint, asOfDate (ISO date), fetchedAt (epoch seconds), nextRefreshDue (ISO date), totalHoldings, holdings: [{ ticker, name, weightPct, firstSeen (ISO date) }], partial?, totalKnownHoldings? }`. Returns 404 for unknown ETFs or commodity-only funds (e.g. GLD) without equity holdings.
 
 ### GET /api/v1/etfs/{ticker}/quote
-Aggregate ETF detail-page quote: live price, today OHLC, 52-week range, trailing-12-month dividend yield, AUM, expense ratio, NAV, inception date. Peer of `/api/v1/stocks/{ticker}/quote` for fund tickers. **API key required.**
+Aggregate ETF detail-page quote: latest price (15-minute delayed), today OHLC, 52-week range, trailing-12-month dividend yield, AUM, expense ratio, NAV, inception date. Peer of `/api/v1/stocks/{ticker}/quote` for fund tickers. **API key required.**
 
 | Param | Type | Required | Description |
 |-------|------|----------|-------------|
