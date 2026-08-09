@@ -274,7 +274,6 @@ AI-generated stock analysis report. **PRO** (Free: `depth=basic` unlimited, `dep
 | Param | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `depth` | string | No | `basic` | `basic` or `deep` |
-| `forceRefresh` | boolean | No | false | Generate fresh report |
 
 Response: flat object (no `{isPreview, data}` wrapper).
 
