@@ -785,13 +785,15 @@ Congressional STOCK Act trading disclosures: purchases, sales, and exercises by 
 **Amount ranges:** STOCK Act disclosures report dollar amounts as ranges (e.g., "$1,001 - $15,000"), not exact values. The API returns the raw range string plus parsed `amountMin`/`amountMax`.
 
 ### GET /api/v1/politicians/activity
-Recent congressional trades across all politicians, sorted by disclosure date (most recently disclosed first). "Recent" means recently disclosed, not recently traded: a filing can reveal a transaction made up to 45 days earlier. **Public (preview)** -- Free: top 5, PRO: full data.
+Recent congressional trades across all politicians, paged, sorted by disclosure date (most recently disclosed first) and tie-broken to a total order so `limit`/`offset` page without dropping or repeating rows. "Recent" means recently disclosed, not recently traded: a filing can reveal a transaction made up to 45 days earlier. **Public (preview)** -- Free: top 5, PRO: pages the whole window.
 
 | Param | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `lookbackDays` | int | No | 90 | Trailing window applied to the disclosure date (1-365) |
+| `limit` | int | No | 200 | Rows per page. Above 500 is clamped, not rejected. Returns `400 invalid_limit` below 1 |
+| `offset` | int | No | 0 | Rows to skip, for paging |
 
-Response: `{ isPreview, previewReason, data: [...] }`. Each trade: `politicianName`, `firstName`, `lastName`, `chamber`, `party`, `state`, `bioguideId`, `imageUrl`, `ticker`, `assetDescription`, `assetType` (`Stock`, `ETF`, or `Stock Option`), `assetMetadata` (object: `null`, or `{kind:"OPTION", optionType, strikePrice, expirationDate}` for options), `transactionType`, `transactionDate`, `disclosureDate`, `disclosureDelayDays`, `amountRange`, `amountMin`, `amountMax`, `owner`, `urlSlug`.
+Response: `{ isPreview, previewReason, totalCount, data: [...] }`. `totalCount` is the size of the whole window, not the page, so `offset + data.length < totalCount` means there is another page. Each trade: `politicianName`, `firstName`, `lastName`, `chamber`, `party`, `state`, `bioguideId`, `imageUrl`, `ticker`, `assetDescription`, `assetType` (`Stock`, `ETF`, or `Stock Option`), `assetMetadata` (object: `null`, or `{kind:"OPTION", optionType, strikePrice, expirationDate}` for options), `transactionType`, `transactionDate`, `disclosureDate`, `disclosureDelayDays`, `amountRange`, `amountMin`, `amountMax`, `owner`, `urlSlug`.
 
 ```python
 client = SentiSenseClient(api_key=os.environ["SENTISENSE_API_KEY"])
@@ -916,6 +918,8 @@ Aggregate Wall Street consensus: price target band, number of covering analysts,
 
 Response: `{ isPreview, previewReason, data: { ticker, currentPrice, targetLow, targetMean, targetHigh, targetMedian, numberOfAnalysts, upsidePercent, consensusLabel, recommendationMean, strongBuy, buy, hold, sell, strongSell, updatedAt } }`. The five `*Buy/*Sell/hold` count fields are zero in the free preview. Returns 404 when no analyst coverage exists for the ticker.
 
+**`currentPrice` on this endpoint is not the live quote.** It is the reference price captured when the analyst snapshot was written, dated by `updatedAt`, and `upsidePercent` is computed against that same reference so the band and the upside stay internally consistent. Expect it to drift from the live price between snapshots (a few percent is normal). When you need the live price, read `currentPrice` from `/api/v1/stocks/price` or `/api/v1/stocks/{ticker}/quote` instead, where the field does mean the current regular-session price.
+
 ### GET /api/v1/analyst/{ticker}/actions
 Recent analyst upgrade/downgrade actions for a ticker, newest first. **PRO (preview)** -- Free: 3 most recent, PRO: full list.
 
@@ -936,7 +940,7 @@ Forward EPS estimates and recent earnings surprise history. **PRO (preview)** --
 Response: `{ isPreview, previewReason, data: { estimates: [...], surprises: [...] } }`.
 
 ### GET /api/v1/analyst/activity
-Market-wide recent analyst actions across all covered tickers, paged. Ordered by action date descending, ties broken by ticker ascending. **Free: the full first page** -- the first 50 rows of the window are complete data on every tier (`isPreview: false`). Depth is what PRO buys: `limit` above 50 or any `offset` past row 50 serves FREE keys their in-allowance slice as a preview (`previewReason: "PRO_REQUIRED"`) while PRO pages the whole window.
+Market-wide recent analyst actions across all covered tickers, paged. Ordered by action date descending, ties broken by ticker then id ascending, a total order so paging is stable. **Free: the full first page** -- the first 50 rows of the window are complete data on every tier (`isPreview: false`). Depth is what PRO buys: `limit` above 50 or any `offset` past row 50 serves FREE keys their in-allowance slice as a preview (`previewReason: "PRO_REQUIRED"`) while PRO pages the whole window.
 
 | Param | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
@@ -1209,6 +1213,23 @@ for e in cal.earnings:
 ```
 
 ---
+
+## Earnings Analysis API (`/api/v1/stocks`)
+
+The earnings lifecycle as one family: who reports (calendar), what management changed in its SEC filings (risk-factor diffs), the reported numbers (fundamentals and KPIs), and the AI takeaway (insights). What Changed is the endpoint documented here; the rest live in their own sections above.
+
+### GET /api/v1/stocks/{ticker}/what-changed
+What changed in a company's latest SEC filing versus the previous one. Deterministic diffs of the Item 1A Risk Factors section of consecutive 10-K and 10-Q filings: excerpts of added, removed, and modified passages, new key terms, and a 0-to-1 materiality score. **PRO (preview)** -- Free: per-filing summary (form, dates, section, materialityScore, noMaterialChanges, edgarUrl) + `totalCount`, PRO: the full `diff` object. Params: `form` (`10-K` or `10-Q`), `limit` (1 to 12, default 4).
+
+Coverage: roughly 500 large-cap US companies, including 99% of the S&P 500 plus widely followed software and semiconductor names outside the index. 10-K and 10-Q Risk Factors, up to about three sequential comparisons per form (annuals back to 2023, roughly the last year of quarterlies), expanding over time. Full `diff` detail is currently available for recently filed reports; earlier comparisons return the per-filing summary fields without the `diff` object, so treat `diff` as optional on every entry. New filings are typically reflected within 48 hours. Tickers outside the covered set return `200` with an empty `data` array, not an error. Use canonical symbols (`GOOGL` not `GOOG`, `BRK.B` not `BRK-B`).
+
+Response: `{ isPreview, previewReason, totalCount?, data: [...] }`. Each entry: `{ ticker, formType, accessionNo, filedAt, reportDate, section, materialityScore, noMaterialChanges, edgarUrl, diff? }`. The PRO `diff` object: `{ blocks: [{op, similarity, oldExcerpt, newExcerpt, oldParagraphs, newParagraphs}], paragraphsAdded, paragraphsRemoved, paragraphsModified, charsAdded, charsRemoved, changedRatio, noveltyRatio, materialityScore, topNewTerms, identical, noMaterialChanges }`. Block `oldExcerpt` and `newExcerpt` values are capped at 400 characters and end with `...` when truncated; they are bounded excerpts, not the full passage text.
+
+Reported by the earnings family alongside What Changed:
+- **Calendar** -- `GET /api/v1/calendar/earnings?week=next` (who reports next week) or `?ticker={ticker}` (a single name's next date + consensus EPS). See the Calendar API section.
+- **Fundamentals + KPIs** -- `GET /api/v1/stocks/fundamentals` for statements; `GET /api/v1/stocks/{ticker}/kpis` for curated GAAP and non-GAAP metrics (PRO preview). See the Stocks API section.
+- **Analyst estimates** -- `GET /api/v1/analyst/{ticker}/estimates` for forward EPS and beat/miss history. See the Analyst Ratings API section.
+- **Insights** -- earnings-driven signal types such as `earnings_pulse` surface through `GET /api/v1/insights/stock/{ticker}` (discover types via `.../types`). See the Insights API section.
 
 ## MCP Connector (chat surface, not the REST API)
 

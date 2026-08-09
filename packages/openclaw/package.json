@@ -1,0 +1,45 @@
+{
+  "name": "stock-analysis",
+  "version": "1.0.5",
+  "description": "All US stock market data for AI agents in one install: real-time stock prices, news and social sentiment, insider Form 4 trades, congressional stock trades, institutional 13F holdings, options flow, analyst ratings, the earnings calendar, and SEC filing diffs. One free API key covers every endpoint, and new data feeds are added regularly. Use for what happened in the markets today, market news from the last 30 days, this week in stocks, stock market API, stock sentiment API, insider trading data, congress stock trades, 13F holdings, options flow, earnings calendar, real-time stock prices, market data for AI agents. Read-only. No trading, no purchases, no write operations, no wallet access.",
+  "license": "MIT",
+  "homepage": "https://sentisense.ai",
+  "author": {
+    "name": "SentiSense",
+    "url": "https://sentisense.ai"
+  },
+  "keywords": [
+    "openclaw",
+    "openclaw-plugin",
+    "clawhub",
+    "stock-market-data",
+    "stock-analysis",
+    "stock-sentiment",
+    "insider-trading",
+    "congress-stock-trades",
+    "13f-holdings",
+    "options-flow",
+    "earnings-calendar",
+    "sec-filings",
+    "ai-agent-skills"
+  ],
+  "type": "module",
+  "main": "./plugin.ts",
+  "exports": {
+    ".": "./plugin.ts"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.4.5"
+  },
+  "openclaw": {
+    "extensions": [
+      "./plugin.ts"
+    ],
+    "compat": {
+      "pluginApi": ">=2026.4.5"
+    },
+    "build": {
+      "openclawVersion": "2026.7.1-2"
+    }
+  }
+}
