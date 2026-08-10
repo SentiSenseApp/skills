@@ -1,6 +1,6 @@
 ---
 name: stock-earnings-analysis
-description: "Earnings analysis for US stocks, organized the way a quarter actually reads: the per-quarter dossier of what a company reported, with the editorial headline, marquee KPI highlights and their year-over-year deltas, the guidance language as management phrased it, and a summary of the earnings call, plus SEC risk-factor diffs attached to the quarter they belong to, the AI takeaway signal, who reported in the last week, and the forward calendar of who reports next. Every claim carries its fiscal period and report date, and absence is stated rather than skipped. Use for \"analyze AAPL earnings\", \"earnings report analysis\", \"earnings call summary\", \"who reported earnings this week\", \"post earnings review\", \"upcoming earnings preview\". Read-only. No trading, no purchases, no write operations, no wallet access."
+description: "Earnings analysis for US stocks, organized the way a quarter actually reads: the per-quarter analysis report of what a company reported, with the editorial headline, marquee KPI highlights and their year-over-year deltas, the guidance language as management phrased it, and a summary of the earnings call, plus SEC risk-factor diffs attached to the quarter they belong to, the AI takeaway signal, who reported in the last week, and the forward calendar of who reports next. Every claim carries its fiscal period and report date, and absence is stated rather than skipped. Use for \"analyze AAPL earnings\", \"earnings report analysis\", \"earnings call summary\", \"who reported earnings this week\", \"post earnings review\", \"upcoming earnings preview\". Read-only. No trading, no purchases, no write operations, no wallet access."
 license: MIT
 metadata:
   homepage: https://sentisense.ai
@@ -53,15 +53,15 @@ Two consequences that follow, and are not optional:
 |---|---|---|
 | **The quarter** | `GET /api/v1/stocks/{ticker}/earnings-summaries` | What the company reported: headline, KPI highlights, guidance, call summary |
 | **What management changed** | `GET /api/v1/stocks/{ticker}/what-changed` | Risk-factor (Item 1A) diffs of consecutive 10-K and 10-Q filings |
-| **The takeaway signal** | `GET /api/v1/insights/stock/{ticker}?insightType=earnings_pulse` | One short AI signal per reported quarter |
+| **The takeaway signal** | `GET /api/v1/insights/stock/{ticker}?insightType=earnings_pulse` | A short AI signal around an earnings event, when one is live |
 | **The anchor** | `GET /api/v1/calendar/earnings?ticker={ticker}` | Next report date, session timing, consensus EPS |
 | **The series** | `GET /api/v1/stocks/{ticker}/kpis` | Curated GAAP and non-GAAP KPI time series, when depth is asked for |
 | **Who reported** | `GET /api/v1/earnings/recent?days=7` | Cross-ticker: which covered companies reported in a window |
 
-A single-ticker readout is four to six calls. A sweep is one call plus one dossier call per ticker
-you follow up on, so bound the follow-up list before you start (see Rate limits below).
+A single-ticker readout is four to six calls. A sweep is one call plus one earnings-summaries call
+per ticker you follow up on, so bound the follow-up list before you start (see Rate limits below).
 
-### The dossier
+### The earnings analysis report
 
 `GET /api/v1/stocks/{ticker}/earnings-summaries` returns `{isPreview, previewReason, totalCount?,
 data: [...]}` with quarters newest first. `limit` accepts 1 to 40 and defaults to 12; values above
@@ -143,22 +143,28 @@ or more types covering insider, institutional, sentiment and volume patterns; no
 belongs in an earnings readout, however tempting the ticker match.
 
 Filter at the API: `GET /api/v1/insights/stock/{ticker}?insightType=earnings_pulse`. Discover what
-a ticker actually has with `GET /api/v1/insights/stock/{ticker}/types` before assuming.
+a ticker actually has with `GET /api/v1/insights/stock/{ticker}/types` before assuming. Every type
+on that list has at least one currently servable insight, so `earnings_pulse` missing from it means
+there is nothing live for that ticker right now.
 
-`earnings_pulse` is a signal, not a report. Expect roughly one per reported quarter, in the standard
-insight shape (`insightText`, `category`, `confidence`, `urgency`, `generatedAt`). Attach it to its
-quarter by date. It never substitutes for the dossier, and the dossier never substitutes for it.
+`earnings_pulse` is a signal, not a report, and it is opportunistic rather than guaranteed. These
+insights are editorial and time-boxed: they surface around an earnings event while the read is
+fresh, then expire, so an empty `data` array is a normal outcome, not a failure. When one is there,
+it arrives in the standard insight shape (`insightText`, `category`, `confidence`, `urgency`,
+`generatedAt`); attach it to its quarter by date. It never substitutes for the quarter's analysis,
+and that analysis never substitutes for it.
 
 ### Free tier shaping
 
 Read `isPreview` on every response and shape the output to what you actually received.
 
-On the dossier, a FREE key receives **the latest quarter only, shaped rather than truncated**, plus
-`totalCount` of the quarters that exist. The shaped quarter carries `fiscalPeriod`, `reportDate` and
-`headline` in full, up to two `kpiHighlights` as `{label, value}` cards, `kpiHighlightCount` for how
-many the full quarter holds, `summaryTopics` and `transcriptTopics` (section titles only, never body
-text), `hasTranscript`, `hasGuidance`, `guidanceDirection` (`RAISED`, `CUT`, `HELD`, `MIXED` or
-`null`), `generatedAt` and `source`. There is no body, no KPI history and no guidance figure.
+On the earnings analysis report, a FREE key receives **the latest quarter only, shaped rather than
+truncated**, plus `totalCount` of the quarters that exist. The shaped quarter carries
+`fiscalPeriod`, `reportDate` and `headline` in full, up to two `kpiHighlights` as `{label, value}`
+cards, `kpiHighlightCount` for how many the full quarter holds, `summaryTopics` and
+`transcriptTopics` (section titles only, never body text), `hasTranscript`, `hasGuidance`,
+`guidanceDirection` (`RAISED`, `CUT`, `HELD`, `MIXED` or `null`), `generatedAt` and `source`.
+There is no body, no KPI history and no guidance figure.
 
 Three rules follow, and they are the difference between an honest brief and a misleading one:
 
@@ -181,11 +187,11 @@ FREE the top 3; `calendar/earnings` gives FREE one week and PRO about a 30-day f
 **30 requests per minute on Free, 300 on PRO.** A `429` carries `Retry-After: 60`; honor it rather
 than retrying immediately.
 
-That ceiling is what decides the shape of a sweep. `earnings/recent` can return up to 100 rows, and
-one dossier call per row would exhaust a Free minute three times over. So: **rank first, then fan
-out to a bounded list.** Ten to fifteen follow-ups is a full brief; run them in small concurrent
-batches, not all at once. Never let the number of tickers in the response decide how many calls you
-make.
+That ceiling is what decides the shape of a sweep. `earnings/recent` can return up to 100 rows,
+and one earnings-summaries call per row would exhaust a Free minute three times over. So: **rank
+first, then fan out to a bounded list.** Ten to fifteen follow-ups is a full brief; run them in
+small concurrent batches, not all at once. Never let the number of tickers in the response decide
+how many calls you make.
 
 ---
 
@@ -204,7 +210,7 @@ The default. "Analyze the latest AAPL earnings", "how did NVDA's quarter go".
 
 Then assemble by quarter, latest first, per the Structure section below.
 
-### 2. Who reported recently, then per-ticker dossiers
+### 2. Who reported recently, then per-ticker analysis
 
 "What reported this week", "anything interesting in the last few days".
 
@@ -268,7 +274,7 @@ summary yet, this one often lands after the press-release content" tells them to
 and appear inside it. No parallel "recent filings" list, no floating signal feed. Anything that
 cannot be attached goes in one clearly labelled residual section at the end.
 
-**LAW 5: Never assert a beat or a miss you were not given.** The dossier's `headline` is editorial
+**LAW 5: Never assert a beat or a miss you were not given.** The quarter's `headline` is editorial
 and may characterize the quarter. Consensus EPS comes from the Calendar. If you have both and they
 are for the same fiscal quarter, you may state the comparison and name both sources. If you have
 only one of them, report what you have and say the other side is not in hand. Do not derive a
@@ -358,8 +364,8 @@ Say these where they apply rather than burying them in a footnote.
   moment you called.
 - **Earnings calendar dates are curated**, and unconfirmed ones move.
 - **Curated KPI series and standardized financial statements refresh after a report, not at the
-  moment of it.** Right after a company reports, the dossier can be ahead of them. When they
-  disagree, prefer the dossier for the quarter just reported and say which you used.
+  moment of it.** Right after a company reports, the quarter's analysis can be ahead of them. When
+  they disagree, prefer that analysis for the quarter just reported and say which you used.
 - **Any price you pull is delayed 15 minutes**, in every session. Never present one as live.
 
 ---
@@ -375,8 +381,8 @@ from the data.
 > as of transcriptGeneratedAt / not yet available for this quarter]. Next scheduled report:
 > [date, confirmed or unconfirmed / none scheduled].
 >
-> Built with SentiSense (https://sentisense.ai). Earnings dossiers, SEC filing risk-factor diffs,
-> curated company KPIs, AI signals and the earnings calendar via the SentiSense API.
+> Built with SentiSense (https://sentisense.ai). Earnings analysis reports, SEC filing risk-factor
+> diffs, curated company KPIs, AI signals and the earnings calendar via the SentiSense API.
 >
 > Not investment advice. Generated from public company disclosures and licensed market data for
 > research and educational purposes only. Not a recommendation to buy or sell any security, and it
@@ -388,8 +394,8 @@ from the data.
 
 Same fan-out, different scope. None of them relaxes an Output Law.
 
-- **Two-ticker comparison.** Pull both dossiers at `limit=4` and compare the same fiscal period side
-  by side, guidance against guidance. Fiscal calendars differ between companies, so align on
+- **Two-ticker comparison.** Pull both companies at `limit=4` and compare the same fiscal period
+  side by side, guidance against guidance. Fiscal calendars differ between companies, so align on
   `reportDate` and label the fiscal periods rather than assuming Q2 means the same months.
 - **One metric's trend.** Start from the quarter, then `GET /api/v1/stocks/{ticker}/kpis` for the
   series behind one `kpiHighlights` label. Enumerate what exists first with

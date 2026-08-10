@@ -142,7 +142,7 @@ Which way the market's tone leans, and how widely it's shared. Daily snapshots.
 ### Endpoints That Do NOT Exist
 Do not hallucinate these. They are not part of the SentiSense API:
 - `/api/v1/options/flow` or `/api/v1/dark-pool`: these exact paths do not exist. For end-of-day options analytics (IV rank, put/call percentile, 25-delta skew, open-interest walls, max pain, unusual-by-volume contracts) use the Options Intelligence endpoints instead: `/api/v1/options/overview` and `/api/v1/stocks/{ticker}/options/summary`. We do not attribute tick-level order flow (no buy/sell aggressor tagging) and we have no dark-pool data
-- `/api/v1/earnings` as a root: the only path under it is `/api/v1/earnings/recent` (which covered companies already reported in a recent window). For the forward calendar use `/api/v1/calendar/earnings`; for a company's per-quarter dossier use `/api/v1/stocks/{ticker}/earnings-summaries`; for reported financials use `/api/v1/stocks/fundamentals` (single period) or `/api/v1/stocks/fundamentals/history` (multi-period trend, up to 40 quarters or 20 years)
+- `/api/v1/earnings` as a root: the only path under it is `/api/v1/earnings/recent` (which covered companies already reported in a recent window). For the forward calendar use `/api/v1/calendar/earnings`; for a company's per-quarter earnings analysis report use `/api/v1/stocks/{ticker}/earnings-summaries`; for reported financials use `/api/v1/stocks/fundamentals` (single period) or `/api/v1/stocks/fundamentals/history` (multi-period trend, up to 40 quarters or 20 years)
 - `/api/v1/alerts` or `/api/v1/notifications`: alerts are user-facing only, not available via API
 - `/api/v1/chat` or `/api/v1/ask`: the AI chat is not accessible via API
 - `/api/v2/sentiment`: the correct path is `/api/v2/metrics/entity/{id}/metric/sentiment`
@@ -895,7 +895,7 @@ Personalized insights for the authenticated user, biased toward their watchlist 
 Response wrapper is `{isPreview: false, previewReason: null, data: [...] }` since the endpoint is auth-required.
 
 ### GET /api/v1/insights/stock/{ticker}/types
-Available insight types for a ticker. **Public** -- no authentication required.
+Available insight types for a ticker. API key required. Every type listed has at least one currently servable insight, so filtering the main endpoint by a returned type always yields rows; types whose insights have all expired drop off the list.
 
 | Param | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -1220,7 +1220,7 @@ Column headers are the metric labels on `rows[0]`. Common metric `unit` values a
 
 Errors: `404 unknown_tracker`, `404 no_snapshot`, `503 tracker_unavailable`.
 
-**Methodology:** <https://sentisense.ai/methodology#institution-rankings>.
+**Methodology:** <https://sentisense.ai/methodology/> (each tracker's `methodologyAnchor` from the discovery listing points at its own section; an empty anchor means the tracker has no dedicated section yet).
 
 ---
 
@@ -1234,7 +1234,7 @@ Discover which calendars are available. **Discovery (no quota cost)** -- API key
 Response: `{ calendars: [ { type, path, description } ] }`. Today: `earnings`.
 
 ### GET /api/v1/calendar/earnings
-Upcoming company earnings, sorted by date. **Public (preview)** -- Free: one week, PRO: full forward window (about 30 days). Field richness is identical across tiers; the gate is how much of the window you get back, not which columns you get. On Free the week returned is the first week of the window you asked for, so `week=next` returns next week and `week=this` (or no date params) returns the current week. Defaults to the current week onward; pass an earlier `from` to include already-reported earnings.
+Upcoming company earnings, sorted by date. **Public (preview)** -- Free: one week, PRO: full forward window (about 30 days). Field richness is identical across tiers; the gate is how much of the window you get back, not which columns you get. On Free the week returned is the first week of the window you asked for, so `week=next` returns next week and `week=this` (or no date params) returns the current week. Defaults to the current week onward, measured from Monday of the current US Eastern week rather than from today, so it can include dates earlier in the week that have already passed; pass an earlier `from` to reach further back. Entries are schedule data in every case and never carry what a company actually reported.
 
 | Param | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
@@ -1260,9 +1260,9 @@ for e in cal.earnings:
 
 ## Earnings Analysis API (`/api/v1/stocks`, `/api/v1/earnings`)
 
-The earnings lifecycle as one family: who reports (calendar), what management changed in its SEC filings (risk-factor diffs), the per-quarter dossier of what was actually reported, the reported numbers (fundamentals and KPIs), and the AI takeaway (insights). What Changed, the dossier, and the recently-reported feed are documented here; the rest live in their own sections above.
+The earnings lifecycle as one family: who reports (calendar), what management changed in its SEC filings (risk-factor diffs), the per-quarter analysis of what was actually reported, the reported numbers (fundamentals and KPIs), and the AI takeaway (insights). What Changed, the earnings analysis report, and the recently-reported feed are documented here; the rest live in their own sections above.
 
-**The quarter is the unit.** The dossier is organized by fiscal quarter, and everything else attaches to one: a filing diff belongs to the quarter it covers, and consensus EPS from the Calendar is the anchor a headline beats or misses. Pair `earnings-summaries` with the filings that fall near its `reportDate` rather than treating results and filings as two unrelated lists.
+**The quarter is the unit.** The analysis is organized by fiscal quarter, and everything else attaches to one: a filing diff belongs to the quarter it covers, and consensus EPS from the Calendar is the anchor a headline beats or misses. Pair `earnings-summaries` with the filings that fall near its `reportDate` rather than treating results and filings as two unrelated lists.
 
 ### GET /api/v1/stocks/{ticker}/what-changed
 What changed in a company's latest SEC filing versus the previous one. Deterministic diffs of the Item 1A Risk Factors section of consecutive 10-K and 10-Q filings: excerpts of added, removed, and modified passages, new key terms, and a 0-to-1 materiality score. **PRO (preview)** -- Free: per-filing summary (form, dates, section, materialityScore, noMaterialChanges, edgarUrl) + `totalCount`, PRO: the full `diff` object. Params: `form` (`10-K` or `10-Q`), `limit` (1 to 12, default 4; above 12 is capped at 12, below 1 returns `400 invalid_limit`).
@@ -1272,7 +1272,7 @@ Coverage: roughly 500 large-cap US companies, including 99% of the S&P 500 plus 
 Response: `{ isPreview, previewReason, totalCount?, data: [...] }`. Each entry: `{ ticker, formType, accessionNo, filedAt, reportDate, section, materialityScore, noMaterialChanges, edgarUrl, diff? }`. The PRO `diff` object: `{ blocks: [{op, similarity, oldExcerpt, newExcerpt, oldParagraphs, newParagraphs}], paragraphsAdded, paragraphsRemoved, paragraphsModified, charsAdded, charsRemoved, changedRatio, noveltyRatio, materialityScore, topNewTerms, identical, noMaterialChanges }`. Block `oldExcerpt` and `newExcerpt` values are capped at 400 characters and end with `...` when truncated; they are bounded excerpts, not the full passage text.
 
 ### GET /api/v1/stocks/{ticker}/earnings-summaries
-The per-quarter earnings dossier: one object per fiscal quarter carrying the editorial headline, the KPI highlights that matter for that company with year-over-year deltas, the guidance language as management phrased it, and a summary of the earnings call. This is the readout the SentiSense app itself renders, in one call rather than four. **PRO (preview)** -- Free: the latest quarter only, shaped rather than truncated, plus `totalCount`; PRO: every hydrated quarter in full. Params: `limit` (1 to 40, default 12; above 40 is capped at 40, below 1 returns `400 invalid_limit`; FREE keys receive one quarter regardless).
+The per-quarter earnings analysis report: one object per fiscal quarter carrying the editorial headline, the KPI highlights that matter for that company with year-over-year deltas, the guidance language as management phrased it, and a summary of the earnings call. This is the readout the SentiSense app itself renders, in one call rather than four. **PRO (preview)** -- Free: the latest quarter only, shaped rather than truncated, plus `totalCount`; PRO: every hydrated quarter in full. Params: `limit` (1 to 40, default 12; above 40 is capped at 40, below 1 returns `400 invalid_limit`; FREE keys receive one quarter regardless).
 
 Coverage: the actively curated US equity universe, expanding each earnings season. A ticker with no stored quarter returns `200` with an empty `data` array, not an error. Use canonical symbols (`GOOGL` not `GOOG`, `BRK.B` not `BRK-B`). Freshness: a quarter typically appears within 48 hours of the company reporting, and the call summary can arrive after the press-release content for the same quarter, so read `generatedAt` and `transcriptGeneratedAt` rather than assuming a fixed lag and expect a quarter to gain its call summary on a later read.
 
@@ -1283,7 +1283,7 @@ The FREE preview quarter is shaped, not cut: `fiscalPeriod`, `reportDate` and `h
 `guidance` is prose, not a number: PRO callers get the language and classify it themselves, and the classification must let no-guidance language win before any direction word ("no formal guidance was issued ... increasingly difficult" is not a raise). Absence is explicit rather than omitted: a quarter with no call summary sets `hasTranscript: false`, so a client can say "no call summary yet" instead of rendering nothing.
 
 ### GET /api/v1/earnings/recent
-The cross-ticker backward-looking feed: which covered companies reported on or after `today - days`, newest first. Drives a post-earnings sweep ("who reported this week"), then follow up per ticker with the dossier above. **API key required**, no tier gate: every key receives the full window it asks for. Params: `days` (1 to 31, default 7; above 31 is capped, below 1 returns `400 invalid_days`), `limit` (1 to 100, default 50; above 100 is capped, below 1 returns `400 invalid_limit`).
+The cross-ticker backward-looking feed: which covered companies reported on or after `today - days`, newest first. Drives a post-earnings sweep ("who reported this week"), then follow up per ticker with the per-quarter analysis above. **API key required**, no tier gate: every key receives the full window it asks for. Params: `days` (1 to 31, default 7; above 31 is capped, below 1 returns `400 invalid_days`), `limit` (1 to 100, default 50; above 100 is capped, below 1 returns `400 invalid_limit`).
 
 Response: `{ isPreview: false, previewReason: null, data: [...] }`. Each row: `{ ticker, fiscalPeriod, reportDate, headline, hasTranscriptSummary, generatedAt }`. The window is bounded by `reportDate`, so a quarter reported inside it appears even when its call summary lands later. An empty `data` array means nobody in the covered set reported in that window, not an error. This is the only backward-looking earnings feed; the Calendar API is forward-looking and covers scheduled dates, not results.
 
@@ -1291,7 +1291,7 @@ Reported by the earnings family alongside the three endpoints above:
 - **Calendar** -- `GET /api/v1/calendar/earnings?week=next` (who reports next week) or `?ticker={ticker}` (a single name's next date + consensus EPS). See the Calendar API section.
 - **Fundamentals + KPIs** -- `GET /api/v1/stocks/fundamentals` for statements; `GET /api/v1/stocks/{ticker}/kpis` for curated GAAP and non-GAAP metrics (PRO preview). See the Stocks API section.
 - **Analyst estimates** -- `GET /api/v1/analyst/{ticker}/estimates` for forward EPS and beat/miss history. See the Analyst Ratings API section.
-- **Insights** -- earnings-driven signal types such as `earnings_pulse` surface through `GET /api/v1/insights/stock/{ticker}` (discover types via `.../types`). See the Insights API section.
+- **Insights** -- earnings-driven signal types such as `earnings_pulse` surface through `GET /api/v1/insights/stock/{ticker}` (discover types via `.../types`). These are editorial and time-boxed: they appear around an earnings event while the read is fresh, then expire, so an empty array outside those windows is normal. Treat them as opportunistic signal, not guaranteed per-quarter data. See the Insights API section.
 
 ## MCP Connector (chat surface, not the REST API)
 
