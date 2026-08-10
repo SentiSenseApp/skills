@@ -142,7 +142,7 @@ Which way the market's tone leans, and how widely it's shared. Daily snapshots.
 ### Endpoints That Do NOT Exist
 Do not hallucinate these. They are not part of the SentiSense API:
 - `/api/v1/options/flow` or `/api/v1/dark-pool`: these exact paths do not exist. For end-of-day options analytics (IV rank, put/call percentile, 25-delta skew, open-interest walls, max pain, unusual-by-volume contracts) use the Options Intelligence endpoints instead: `/api/v1/options/overview` and `/api/v1/stocks/{ticker}/options/summary`. We do not attribute tick-level order flow (no buy/sell aggressor tagging) and we have no dark-pool data
-- `/api/v1/earnings`: for the earnings calendar use `/api/v1/calendar/earnings`; for reported financials use `/api/v1/stocks/fundamentals` (single period) or `/api/v1/stocks/fundamentals/history` (multi-period trend, up to 40 quarters or 20 years)
+- `/api/v1/earnings` as a root: the only path under it is `/api/v1/earnings/recent` (which covered companies already reported in a recent window). For the forward calendar use `/api/v1/calendar/earnings`; for a company's per-quarter dossier use `/api/v1/stocks/{ticker}/earnings-summaries`; for reported financials use `/api/v1/stocks/fundamentals` (single period) or `/api/v1/stocks/fundamentals/history` (multi-period trend, up to 40 quarters or 20 years)
 - `/api/v1/alerts` or `/api/v1/notifications`: alerts are user-facing only, not available via API
 - `/api/v1/chat` or `/api/v1/ask`: the AI chat is not accessible via API
 - `/api/v2/sentiment`: the correct path is `/api/v2/metrics/entity/{id}/metric/sentiment`
@@ -631,7 +631,8 @@ AI-curated news story clusters. **Public.**
 | Param | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `limit` | int | No | 20 | Max stories (capped at 50) |
-| `days` | int | No | 7 | Lookback in days (max 15) |
+| `filterHours` | int | No | none | Lookback window in hours, e.g. `720` for 30 days. This is the real lookback control for this endpoint. |
+| `days` | int | No | 7 | Accepted but has no effect on the response; ignored server-side. Use `filterHours` instead. |
 | `offset` | int | No | 0 | Pagination offset |
 
 Response: Story objects with a top-level `id` AND `clusterId` (both equal to the cluster id -- pass either to `/documents/stories/{clusterId}`), plus `cluster.title`, `cluster.averageSentiment`, `tickers`, `displayTickers`, `impactScore` (0-10), `brokeAt` (epoch seconds, nullable), `cluster.clusteredAt` (epoch seconds). Use `tickers` (bare symbols, e.g. `["AAPL"]`) programmatically; `displayTickers` are human-formatted labels (e.g. `["Apple Inc (AAPL)"]`) for display only, do not parse symbols out of them. The `cluster.createdAt` field (epoch millis) is deprecated and will be removed on or after 2026-08-16; use `cluster.clusteredAt`.
@@ -1124,6 +1125,50 @@ Response:
 
 ---
 
+## Indexes API (`/api/v1/indexes`)
+
+Every SentiSense composite index on one standardized envelope: a single scalar, its history, and where applicable the constituent breakdown behind it. **Free (API key required)** on every index today. Full docs: <https://sentisense.ai/docs/api/indexes>.
+
+Market Mood is a member of this family. Read it here when you want every index to answer the same shape, or at `/api/v2/market-mood` above when you want its phase band, weekly change, per-signal breakdown, and sector map.
+
+### GET /api/v1/indexes
+Discovery endpoint. Returns every published index.
+
+Response: `{"indexes": IndexListing[]}` where each `IndexListing` has:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `indexId` | string | URL slug; use as `{indexId}` below |
+| `displayName` | string | Human-readable name |
+| `description` | string | One-sentence summary |
+| `scale` | string | `SENTIMENT` (signed, -1 to +1) or `PERCENT_0_100` |
+| `accessTier` | string | `free` or `pro`. Every index is `free` today. Read this rather than assuming |
+| `canonicalUrl` | string | Richest view of the index. For Market Mood this is `/api/v2/market-mood`; every id still resolves at `/api/v1/indexes/{indexId}` |
+
+Live indexes: `market-mood` (0-100 fear and greed composite), `fed-sentiment` (weekly, Federal Reserve leadership), `ai-sentiment` (daily, AI-exposed names). Treat the discovery endpoint as the source of truth, not this list.
+
+### GET /api/v1/indexes/{indexId}
+Latest reading for one index.
+
+Response: `indexId`, `displayName`, `asOf` (YYYY-MM-DD), `value`, `scale`, `coverage`, `basketSize`, `totalMentions`, `methodologyNote`, `constituents[]`.
+
+Two archetypes share this envelope. A **basket** index (`fed-sentiment`, `ai-sentiment`) weight-averages tracked entities, so `constituents[]` carries `kbEntityId`, `displayName`, `role`, `weight`, `value`, `mentionsCount`, `staleness`, `contribution`, `link`, and `coverage`/`basketSize`/`totalMentions` describe how the headline was built. **`contribution` is reserved and currently returns `null` on every constituent, so do not build on it**; derive a constituent's share of the headline as `weight * value` over the sum of `weight` across the constituents whose `staleness` is not `EXCLUDED`. A **composite** index (`market-mood`) is built from signals rather than entities, so those four fields are `null`. That `null` means "no constituents by construction", not "data missing": branch on it instead of treating it as an error.
+
+`staleness` is `FRESH` (mentioned inside the lookback), `CARRIED_FORWARD` (last known value standing in), `EXCLUDED` (no usable reading, renormalized out), or `OUT_OF_SEGMENT` (not in the basket on this date; `weight` is 0). Compare `coverage` against `basketSize` to spot a thin day before quoting the number.
+
+### GET /api/v1/indexes/{indexId}/history
+Historical scalar series for charting.
+
+| Param | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `days` | int | No | 180 | Days of history to return |
+
+Response: `{"indexId", "displayName", "scale", "days", "history": [{"date": "2026-05-25", "value": 0.12}]}`, oldest first.
+
+Point spacing follows the index, not the calendar: weekly indexes emit one point per Monday-Sunday bucket, daily indexes one per day, and Market Mood trading days only. Thin or low-coverage buckets are withheld rather than published, so `history` can be shorter than `days` and can contain gaps. Plot against `date`; do not assume a fixed interval, and do not read a missing date as zero.
+
+---
+
 ## Trackers API (`/api/v1/trackers`)
 
 Observational data products. Every tracker returns the same standardized envelope, so one renderer per `viewType` covers every current and future SentiSense tracker. Full docs: <https://sentisense.ai/docs/api/trackers>.
@@ -1213,18 +1258,36 @@ for e in cal.earnings:
 
 ---
 
-## Earnings Analysis API (`/api/v1/stocks`)
+## Earnings Analysis API (`/api/v1/stocks`, `/api/v1/earnings`)
 
-The earnings lifecycle as one family: who reports (calendar), what management changed in its SEC filings (risk-factor diffs), the reported numbers (fundamentals and KPIs), and the AI takeaway (insights). What Changed is the endpoint documented here; the rest live in their own sections above.
+The earnings lifecycle as one family: who reports (calendar), what management changed in its SEC filings (risk-factor diffs), the per-quarter dossier of what was actually reported, the reported numbers (fundamentals and KPIs), and the AI takeaway (insights). What Changed, the dossier, and the recently-reported feed are documented here; the rest live in their own sections above.
+
+**The quarter is the unit.** The dossier is organized by fiscal quarter, and everything else attaches to one: a filing diff belongs to the quarter it covers, and consensus EPS from the Calendar is the anchor a headline beats or misses. Pair `earnings-summaries` with the filings that fall near its `reportDate` rather than treating results and filings as two unrelated lists.
 
 ### GET /api/v1/stocks/{ticker}/what-changed
-What changed in a company's latest SEC filing versus the previous one. Deterministic diffs of the Item 1A Risk Factors section of consecutive 10-K and 10-Q filings: excerpts of added, removed, and modified passages, new key terms, and a 0-to-1 materiality score. **PRO (preview)** -- Free: per-filing summary (form, dates, section, materialityScore, noMaterialChanges, edgarUrl) + `totalCount`, PRO: the full `diff` object. Params: `form` (`10-K` or `10-Q`), `limit` (1 to 12, default 4).
+What changed in a company's latest SEC filing versus the previous one. Deterministic diffs of the Item 1A Risk Factors section of consecutive 10-K and 10-Q filings: excerpts of added, removed, and modified passages, new key terms, and a 0-to-1 materiality score. **PRO (preview)** -- Free: per-filing summary (form, dates, section, materialityScore, noMaterialChanges, edgarUrl) + `totalCount`, PRO: the full `diff` object. Params: `form` (`10-K` or `10-Q`), `limit` (1 to 12, default 4; above 12 is capped at 12, below 1 returns `400 invalid_limit`).
 
-Coverage: roughly 500 large-cap US companies, including 99% of the S&P 500 plus widely followed software and semiconductor names outside the index. 10-K and 10-Q Risk Factors, up to about three sequential comparisons per form (annuals back to 2023, roughly the last year of quarterlies), expanding over time. Full `diff` detail is currently available for recently filed reports; earlier comparisons return the per-filing summary fields without the `diff` object, so treat `diff` as optional on every entry. New filings are typically reflected within 48 hours. Tickers outside the covered set return `200` with an empty `data` array, not an error. Use canonical symbols (`GOOGL` not `GOOG`, `BRK.B` not `BRK-B`).
+Coverage: roughly 500 large-cap US companies, including 99% of the S&P 500 plus widely followed software and semiconductor names outside the index. 10-K and 10-Q Risk Factors, up to about three sequential comparisons per form (annuals back to 2023, roughly the last year of quarterlies), expanding over time. Nearly every comparison returns full `diff` detail; the earliest filing held for a given form has no prior filing to compare against and returns the summary fields without the `diff` object, so treat `diff` as optional on every entry. New filings are typically reflected within 48 hours. Tickers outside the covered set return `200` with an empty `data` array, not an error. Use canonical symbols (`GOOGL` not `GOOG`, `BRK.B` not `BRK-B`).
 
 Response: `{ isPreview, previewReason, totalCount?, data: [...] }`. Each entry: `{ ticker, formType, accessionNo, filedAt, reportDate, section, materialityScore, noMaterialChanges, edgarUrl, diff? }`. The PRO `diff` object: `{ blocks: [{op, similarity, oldExcerpt, newExcerpt, oldParagraphs, newParagraphs}], paragraphsAdded, paragraphsRemoved, paragraphsModified, charsAdded, charsRemoved, changedRatio, noveltyRatio, materialityScore, topNewTerms, identical, noMaterialChanges }`. Block `oldExcerpt` and `newExcerpt` values are capped at 400 characters and end with `...` when truncated; they are bounded excerpts, not the full passage text.
 
-Reported by the earnings family alongside What Changed:
+### GET /api/v1/stocks/{ticker}/earnings-summaries
+The per-quarter earnings dossier: one object per fiscal quarter carrying the editorial headline, the KPI highlights that matter for that company with year-over-year deltas, the guidance language as management phrased it, and a summary of the earnings call. This is the readout the SentiSense app itself renders, in one call rather than four. **PRO (preview)** -- Free: the latest quarter only, shaped rather than truncated, plus `totalCount`; PRO: every hydrated quarter in full. Params: `limit` (1 to 40, default 12; above 40 is capped at 40, below 1 returns `400 invalid_limit`; FREE keys receive one quarter regardless).
+
+Coverage: the actively curated US equity universe, expanding each earnings season. A ticker with no stored quarter returns `200` with an empty `data` array, not an error. Use canonical symbols (`GOOGL` not `GOOG`, `BRK.B` not `BRK-B`). Freshness: a quarter typically appears within 48 hours of the company reporting, and the call summary can arrive after the press-release content for the same quarter, so read `generatedAt` and `transcriptGeneratedAt` rather than assuming a fixed lag and expect a quarter to gain its call summary on a later read.
+
+Response: `{ isPreview, previewReason, totalCount?, data: [...] }`, quarters newest first. Each PRO quarter: `{ fiscalPeriod, reportDate, headline, summaryMd, kpiHighlights: [{label, value, yoy?}], guidance?, hasTranscript, transcriptSummaryMd?, transcriptHighlights?, transcriptGeneratedAt?, sources: [{title, url}], generatedAt, source }`. `fiscalPeriod` is a display label (e.g. `Q2 FY2026`), `reportDate` is `YYYY-MM-DD`, `generatedAt` and `transcriptGeneratedAt` are epoch seconds, and `source` is `press_release` or `transcript`.
+
+The FREE preview quarter is shaped, not cut: `fiscalPeriod`, `reportDate` and `headline` in full, plus `kpiHighlights` as up to two `{label, value}` cards, `kpiHighlightCount`, `summaryTopics` and `transcriptTopics` (section titles only, never body text), `hasTranscript`, `hasGuidance`, `guidanceDirection` (`RAISED`, `CUT`, `HELD`, `MIXED`, or `null`), `generatedAt` and `source`. It never carries a body, a KPI history, or a guidance figure.
+
+`guidance` is prose, not a number: PRO callers get the language and classify it themselves, and the classification must let no-guidance language win before any direction word ("no formal guidance was issued ... increasingly difficult" is not a raise). Absence is explicit rather than omitted: a quarter with no call summary sets `hasTranscript: false`, so a client can say "no call summary yet" instead of rendering nothing.
+
+### GET /api/v1/earnings/recent
+The cross-ticker backward-looking feed: which covered companies reported on or after `today - days`, newest first. Drives a post-earnings sweep ("who reported this week"), then follow up per ticker with the dossier above. **API key required**, no tier gate: every key receives the full window it asks for. Params: `days` (1 to 31, default 7; above 31 is capped, below 1 returns `400 invalid_days`), `limit` (1 to 100, default 50; above 100 is capped, below 1 returns `400 invalid_limit`).
+
+Response: `{ isPreview: false, previewReason: null, data: [...] }`. Each row: `{ ticker, fiscalPeriod, reportDate, headline, hasTranscriptSummary, generatedAt }`. The window is bounded by `reportDate`, so a quarter reported inside it appears even when its call summary lands later. An empty `data` array means nobody in the covered set reported in that window, not an error. This is the only backward-looking earnings feed; the Calendar API is forward-looking and covers scheduled dates, not results.
+
+Reported by the earnings family alongside the three endpoints above:
 - **Calendar** -- `GET /api/v1/calendar/earnings?week=next` (who reports next week) or `?ticker={ticker}` (a single name's next date + consensus EPS). See the Calendar API section.
 - **Fundamentals + KPIs** -- `GET /api/v1/stocks/fundamentals` for statements; `GET /api/v1/stocks/{ticker}/kpis` for curated GAAP and non-GAAP metrics (PRO preview). See the Stocks API section.
 - **Analyst estimates** -- `GET /api/v1/analyst/{ticker}/estimates` for forward EPS and beat/miss history. See the Analyst Ratings API section.
