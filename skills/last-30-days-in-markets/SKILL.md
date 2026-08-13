@@ -1,6 +1,6 @@
 ---
 name: last-30-days-in-markets
-description: "What happened in the stock market over the last 30 days, as one synthesized brief: the day-by-day arc of a fear-to-greed market mood index, the month's biggest AI-clustered story themes ranked by impact, which tickers and sectors dominated the news, the sentiment and smart-money signals that accumulated, where the market stands today, and the earnings ahead. Every claim carries its date and its real coverage window. Use for \"last 30 days in markets\", \"what happened in the market this month\", \"monthly market recap\", \"market summary last 30 days\", \"catch me up on stocks\". Read-only. No trading, no purchases, no write operations, no wallet access."
+description: "What happened in the stock market over the last 30 days, as one synthesized brief: the day-by-day arc of a fear-to-greed market mood index, the month's biggest AI-clustered story themes ranked by impact, which tickers and sectors dominated the news, the sentiment and smart-money signals that accumulated, where the market stands today, and the earnings ahead. Every claim carries its date and its real coverage window. Use for \"last 30 days in markets\", \"what happened in the market this month\", \"what did I miss in the market\", \"monthly market recap\", \"market summary last 30 days\", \"catch me up on stocks\". Read-only. No trading, no purchases, no write operations, no wallet access."
 license: MIT
 metadata:
   homepage: https://sentisense.ai
@@ -55,14 +55,19 @@ the same 30 days.
 | **The arc** | `GET /api/v2/market-mood?days=30` | How the market felt, day by day, and which signal drove each turn |
 | **Theme indexes** | `GET /api/v1/indexes` then `GET /api/v1/indexes/{indexId}/history?days=30` | Whether a named theme (AI complex, Fed) ran hot or cold across the month |
 | **The events** | `GET /api/v1/documents/stories?filterHours=720&limit=50&offset=N` | What was actually being discussed, clustered and impact-ranked |
-| **Signals** | `GET /api/v1/insights/latest?limit=200` | Insider, institutional, filing and volume signals that fired |
-| **Where it stands** | `GET /api/v1/market-summary` and `GET /api/v1/insights/market` | The standing read. Both are batch surfaces, recomputed on a schedule rather than per tick, so carry their age rather than presenting them as this moment |
+| **Signals** | `GET /api/v1/insights/latest?limit=200` | Insider, institutional, sentiment and volume signals that fired |
+| **Where it stands** | `GET /api/v1/market-summary` and `GET /api/v1/insights/market` | The standing read. Both are batch surfaces, recomputed on a schedule rather than per tick, so report their `generatedAt` age rather than presenting them as this moment |
 | **What is next** | `GET /api/v1/calendar/earnings` | The forward close |
 
 About **14 to 18 calls** for a full brief. On the Free tier that is comfortably inside the monthly
 allowance but close to the **30 requests per minute** ceiling once you add story pages, so run the
-story paging serially and the rest concurrently rather than firing all of it at once. A `429`
-carries `Retry-After: 60`; honor it instead of retrying immediately.
+story paging serially and the rest concurrently rather than firing all of it at once.
+
+Two different `429`s, two different responses. A per-minute `rate_limit_exceeded` carries
+`Retry-After: 60`: honor it, wait, and resume the fan-out where it stopped. A monthly
+`quota_exceeded` carries **no** `Retry-After` header and retrying does not help: stop fetching,
+write the brief from the layers you already have, and state the missing layers in the coverage
+line rather than pretending they came back.
 
 ### Getting a real 30-day story window
 
@@ -78,37 +83,58 @@ Page until a page returns **fewer rows than `limit`**, or until you have enough.
 (300 to 400 clusters) is plenty for a month; do not page to exhaustion out of completeness instinct,
 because the tail is low-impact noise and you are paying a request for each page.
 
+Every field the brief is allowed to use comes off the story object:
+
+| Field | What it is |
+|---|---|
+| `id` / `clusterId` | Both equal the cluster id; pass either to `/documents/stories/{clusterId}` for full detail |
+| `cluster.title` | The SentiSense-written cluster title. The only headline-shaped string LAW 1 permits |
+| `cluster.averageSentiment` | Aggregate tone of the coverage in the cluster, -1 to +1 |
+| `impactScore` | 0 to 10; the sort key for any "biggest of the month" ranking |
+| `tickers` | Bare symbols (e.g. `["AAPL"]`), for programmatic use |
+| `displayTickers` | Human-formatted labels for display only; never parse symbols out of them |
+| `brokeAt` | Epoch **seconds**, nullable: when the story broke |
+| `cluster.clusteredAt` | Epoch **seconds**, always present: when it was clustered |
+
 Two details that decide whether the timeline is right:
 
-- **Read dates off `cluster.clusteredAt`** (epoch **seconds**), with `brokeAt` as the fallback. Do
-  not use the deprecated `cluster.createdAt`. Convert once, at fetch time, and carry a real date on
-  every cluster from then on.
-- **The feed is ordered newest-first, not impact-first.** Sort by `impactScore` (0 to 10) yourself
-  for any "biggest of the month" section, and sort by date for the timeline. Two different orderings
-  of the same list, both needed.
-
-Use `tickers` (bare symbols) programmatically. `displayTickers` are human-formatted labels for
-display only; never parse symbols out of them.
+- **Date each cluster off `brokeAt` when present, falling back to `cluster.clusteredAt`.** The two
+  can differ by hours; `brokeAt` is the event time and `clusteredAt` is the processing time, so
+  prefer the event time and use the always-present `clusteredAt` when `brokeAt` is null. Do not use
+  the deprecated `cluster.createdAt`. Convert once, at fetch time, and carry a real date on every
+  cluster from then on.
+- **The feed is ordered newest-first, not impact-first.** Sort by `impactScore` yourself for any
+  "biggest of the month" section, and sort by date for the timeline. Two different orderings of the
+  same list, both needed.
 
 ### Reading the arc
 
-`GET /api/v2/market-mood?days=30` returns the current score and phase **and** a daily `history`
-array carrying the composite plus each of the five component signals. That one response is the
-entire quantitative spine, so fetch it first and let it set the shape of the brief.
+`GET /api/v2/market-mood?days=30` returns the current score and phase, a `signals[]` breakdown of
+the component signals behind the latest reading, **and** a daily `history` array carrying the
+composite plus a column per component signal. That one response is the entire quantitative spine,
+so fetch it first and let it set the shape of the brief.
 
 - Scale is 0 to 100, fear to greed. Phases: 0-15 Extreme Fear, 16-30 Fear, 31-45 Anxiety, 46-55
   Neutral, 56-70 Optimism, 71-85 Greed, 86-100 Extreme Greed.
-- **Risk Appetite reads backwards from expectation.** It is an inverse volatility gauge, so a *high*
-  value means a calm, risk-on market. Label it when you use it or you will invert the month's story.
+- **Iterate the signals the response actually contains.** `signals[]` lists only the signals present
+  in the latest reading, so key off each entry's `key` (using its `label` for display) rather than
+  hardcoding a signal list or a count: the composite's membership has changed before and can change
+  again. In `history` rows, a `null` component value means that signal was not part of the index on
+  that date; treat it as absent, never as zero, and never average it in.
+- **Risk Appetite (`key: fear_gauge`) reads backwards from expectation.** It is an inverse
+  volatility gauge, so a *high* value means a calm, risk-on market. Label it when you use it or you
+  will invert the month's story.
 - **History is trading days only.** A 30-day request returns roughly 20 points, and weekends are
   absent by construction rather than missing. Do not interpolate across them and do not report "20
   of 30 days" as a data gap.
 
 For theme indexes, call `GET /api/v1/indexes` for the live list rather than hardcoding ids, then
-pull history for the ones relevant to the month. Their scale differs from Market Mood (signed, -1
-to +1, versus 0 to 100), so never plot or compare them on one axis. Thin buckets are withheld rather
-than published, so a gap in an index history is real: plot against `date`, never assume a fixed
-interval, and never read a missing date as zero.
+pull history for the ones relevant to the month. **Read each index's `scale` field instead of
+assuming its range**: `SENTIMENT` is signed, -1 to +1, while `PERCENT_0_100` is 0 to 100, and the
+listing and history responses both carry the field. Never plot or compare two series on one axis
+unless their scales match. Thin buckets are withheld rather than published, so a gap in an index
+history is real: plot against `date`, never assume a fixed interval, and never read a missing date
+as zero.
 
 ### Free tier shaping
 
@@ -128,13 +154,16 @@ top 5 as though it were the whole month.
 
 These are hard. A brief that violates any of them is wrong even if every number in it is right.
 
-**LAW 1: Never invent a headline.** Every headline-shaped string in the brief is either a
-`cluster.title` copied **verbatim** from a fetched story object, or a section heading you wrote to
-describe your own grouping. You may not write a sentence that reads as a news headline about an
-event that is not in the fetched data. This API returns no publisher titles and no article bodies,
-so if you find yourself writing what a headline "probably said" or reconstructing an event from
-background knowledge, you have left the data and are fabricating. Model-memory recall of a month's
-news is exactly the failure this law exists to stop.
+**LAW 1: No headline and no number that did not come back from the API.** Every headline-shaped
+string in the brief is either a `cluster.title` copied **verbatim** from a fetched story object, or
+a section heading you wrote to describe your own grouping, and every figure is a field value from a
+fetched response. You may not write a sentence that reads as a news headline about an event that is
+not in the fetched data, and you may not supply a figure the fan-out never returned. This fan-out
+carries **no prices and no index returns**: `spy_trend` is a 0-100 signal score, not a return, so a
+claim like "the S&P fell 3% mid-month" cannot come from this data and must not appear, however
+confidently remembered. If you find yourself writing what a headline "probably said", or filling in
+a price move from background knowledge, you have left the data and are fabricating. Model-memory
+recall of a month's news is exactly the failure this law exists to stop.
 
 **LAW 2: Never attribute to a publisher, and never quote article text.** The permitted vocabulary
 for an event is the cluster's own title, its date, its `impactScore`, its `cluster.averageSentiment`
@@ -181,7 +210,7 @@ details. Fixed order, and every section is required unless its data layer came b
    the rest exists, or it becomes a preamble instead of a summary.
 
 3. **The arc.** Walk the mood series: opening phase, closing phase, the largest single-day move and
-   which of the five signals moved with it, and any phase-band crossing (Anxiety into Neutral,
+   which component signals moved with it, and any phase-band crossing (Anxiety into Neutral,
    Optimism into Greed). Phase crossings are the part worth naming, because a 4-point move inside a
    band is noise and the same 4 points across a boundary is a regime change.
 
@@ -196,8 +225,9 @@ details. Fixed order, and every section is required unless its data layer came b
    Say plainly that it counts *attention*, not performance.
 
 6. **Signals that fired.** From `insights/latest`, grouped by `insightType`: insider buying,
-   institutional position changes, filing risk-factor changes, volume anomalies. Report the type,
-   the ticker and the insight text. Note the preview cap here if `isPreview` is true.
+   institutional position changes, sentiment baseline deviations, volume anomalies. Report the
+   type, the insight text and its `generatedAt` date. Note the preview cap here if `isPreview` is
+   true.
 
 7. **Where it stands today.** The current market summary headline and the current market-level
    insights, explicitly framed as *today's* read and not part of the retrospective. LAW 4 lives here.
@@ -237,15 +267,17 @@ Say these where they apply rather than burying them all in a footnote.
 - **Market Mood is a daily composite on trading days**, computed from the latest analytical batch. It
   is not a real-time tick, and no value exists for a weekend or holiday.
 - **Story clusters are AI-generated groupings with AI-written titles.** `brokeAt` is when the story
-  broke and `clusteredAt` is when it was clustered; they can differ by hours. Pick one and use it
-  consistently, and say which.
+  broke and `clusteredAt` is when it was clustered; they can differ by hours. Date by `brokeAt`
+  with `clusteredAt` as the fallback, the same rule as the fetch step.
 - **Sentiment on a cluster is an aggregate of the coverage in it**, not a price signal and not a
   forecast. It says how the discussion leaned, nothing more.
-- **Insights are generated on a batch cadence**, so `generatedAt` is the honest as-of, not the moment
-  you called.
+- **Insights are generated on a batch cadence**, so each insight's `generatedAt` (epoch **seconds**)
+  is the honest as-of, not the moment you called.
+- **The market summary carries its own age, in two units.** Its `generatedAt` is epoch **seconds**
+  and its `lastUpdated` is epoch **milliseconds**; read the units or the age is off by a factor of
+  a thousand. Date the "where it stands" section with one of them.
 - **Earnings dates are curated**, and unconfirmed ones move. A weekend earnings date is legitimate
   data for the handful of issuers that report that way; do not shift it to a weekday.
-- **Any price you pull is delayed 15 minutes**, in every session. Never present one as live.
 
 ---
 
@@ -273,9 +305,13 @@ Same fan-out, different window or filter. Each is a small change, and none of th
 Output Law.
 
 - **Last 7 or 14 days.** `filterHours=168` or `336`, `days=7` or `14` on mood. Fewer story pages.
-- **One ticker's month.** Add `GET /api/v1/documents/stories/ticker/{ticker}` and
-  `GET /api/v1/insights/stock/{ticker}`, and keep the market arc as the backdrop the name moved
-  against.
+- **One ticker's month.** `GET /api/v1/documents/stories/ticker/{ticker}` takes `limit` only
+  (default 5, capped 20) with **no lookback window**, so it cannot cover a month on its own. Build
+  the month by filtering the market-wide pages you already fetched
+  (`/documents/stories?filterHours=720`) to clusters whose `tickers` contain the symbol, and use
+  the per-ticker endpoint only as a top-up for that name's own clusters. Add
+  `GET /api/v1/insights/stock/{ticker}` for the name's signals (Free returns the top 3; read
+  `isPreview` and say so), and keep the market arc as the backdrop the name moved against.
 - **One theme's month.** Pick the index from `GET /api/v1/indexes`, lead with its history, and filter
   the clusters to the tickers in that theme.
 - **A weekly cadence.** Run it every Friday with `filterHours=168` and keep the same structure, so

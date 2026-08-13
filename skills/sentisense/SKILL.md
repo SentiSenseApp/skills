@@ -531,7 +531,7 @@ Historical and peer baselines for a metric. **Quota-gated**, available on the Fr
 
 ## Market Mood API (`/api/v2/market-mood`)
 
-SentiSense's proprietary composite market sentiment index. Combines social sentiment, market direction, risk appetite, social momentum, and S&P 500 trend signals into a single 0-100 score with sector breakdown. **Free (API key required).** Free for all tiers, but anonymous calls return 401 api_key_required.
+SentiSense's proprietary composite market sentiment index. Combines social sentiment, market direction, risk appetite, social momentum, S&P 500 trend, and options flow signals into a single 0-100 score with sector breakdown. **Free (API key required).** Free for all tiers, but anonymous calls return 401 api_key_required.
 
 ### GET /api/v2/market-mood
 Composite market sentiment score with history and sector breakdown.
@@ -553,12 +553,13 @@ Response shape:
       {"key": "market_direction", "label": "Market Direction", "value": 71.0, "change": 3.1},
       {"key": "fear_gauge", "label": "Risk Appetite", "value": 58.4, "change": null},
       {"key": "social_momentum", "label": "Social Momentum", "value": 62.1, "change": -0.5},
-      {"key": "spy_trend", "label": "S&P 500 Trend", "value": 68.9, "change": 2.0}
+      {"key": "spy_trend", "label": "S&P 500 Trend", "value": 68.9, "change": 2.0},
+      {"key": "options_flow", "label": "Options Flow", "value": 57.3, "change": 1.4}
     ],
     "history": [
       {"date": "2026-04-01", "timestamp": 1743465600000, "score": 65.2,
        "socialSentiment": 56.1, "marketDirection": 72.0, "fearGauge": 61.0,
-       "socialMomentum": 63.5, "spyTrend": 70.0}
+       "socialMomentum": 63.5, "spyTrend": 70.0, "optionsFlow": null}
     ]
   },
   "sectors": {
@@ -569,6 +570,8 @@ Response shape:
 ```
 
 **Phase interpretation** (`market.phase` and each sector's `phase`, by score): 0-15 Extreme Fear, 16-30 Fear, 31-45 Anxiety, 46-55 Neutral, 56-70 Optimism, 71-85 Greed, 86-100 Extreme Greed. `phase` is `"---"` when the score is null.
+
+The `options_flow` signal joined the composite on 2026-08-13, so `optionsFlow` is `null` on earlier history rows: treat `null` as "signal not yet part of the index", not zero. `signals[]` only lists signals present in the latest reading, so key off `key`, not array position or length.
 
 **Node SDK:**
 ```javascript
