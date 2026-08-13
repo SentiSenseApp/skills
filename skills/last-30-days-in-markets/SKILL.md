@@ -56,7 +56,7 @@ the same 30 days.
 | **Theme indexes** | `GET /api/v1/indexes` then `GET /api/v1/indexes/{indexId}/history?days=30` | Whether a named theme (AI complex, Fed) ran hot or cold across the month |
 | **The events** | `GET /api/v1/documents/stories?filterHours=720&limit=50&offset=N` | What was actually being discussed, clustered and impact-ranked |
 | **Signals** | `GET /api/v1/insights/latest?limit=200` | Insider, institutional, filing and volume signals that fired |
-| **Where it stands** | `GET /api/v1/market-summary` and `GET /api/v1/insights/market` | The current read, as of right now |
+| **Where it stands** | `GET /api/v1/market-summary` and `GET /api/v1/insights/market` | The standing read. Both are batch surfaces, recomputed on a schedule rather than per tick, so carry their age rather than presenting them as this moment |
 | **What is next** | `GET /api/v1/calendar/earnings` | The forward close |
 
 About **14 to 18 calls** for a full brief. On the Free tier that is comfortably inside the monthly

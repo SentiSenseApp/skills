@@ -199,11 +199,12 @@ Rules that keep it readable:
 
 ## Honesty rules, all five load-bearing
 
-**1. Label freshness per field, because it varies inside one row.** Prices are live. Scores,
-sentiment and signals come from the latest analytical batch and are not real-time. A 13F quarter
-that is still filing shows early filers only, so positions will grow. Earnings dates are curated
-and unconfirmed ones shift. Putting a live price next to a batch score with no note invites the
-reader to diff them and conclude something is broken.
+**1. Label freshness per field, because it varies inside one row.** Prices are 15-minute delayed,
+not live: annotate them with `priceAsOf` where the payload carries it. Scores, sentiment and
+signals come from the latest analytical batch and are older still. A 13F quarter that is still
+filing shows early filers only, so positions will grow. Earnings dates are curated and unconfirmed
+ones shift. Putting a price next to a batch score with no note invites the reader to diff them and
+conclude something is broken.
 
 **2. A zero is not a missing value, and this one has bitten us twice in opposite directions.** The
 **SentiSense Score** (`metric/sentisense`, not `metric/sentiment`) is centered on zero, so `0.0`

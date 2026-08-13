@@ -502,12 +502,16 @@ Grounding is not only "is it fetched" but "how old is fetched allowed to be." Bi
 
 | Class | Surfaces | Cache `kind` | How the model renders it |
 |---|---|---|---|
-| Real-time | quote, price, chart points | `realtime` | State the value plainly. Re-fetch on the poll interval, never faster than ~60s on the header. |
+| Delayed price | quote, price, chart points | `realtime` | State the value, then annotate its age: `as of {priceAsOf}` when the payload carries one, otherwise the class delay `delayed 15 min`. Re-fetch on the poll interval, never faster than ~60s on the header. |
 | Batch | Sentiment, SentiSense Score, Mentions, Social Dominance, news clustering, AI summary, insights | `batch` | State the value, then annotate freshness: `as of {dataAsOf}`. Never call it "real time." |
+
+The `kind` values are a frozen contract that installed copies already emit: keep `realtime` and `batch` exactly as spelled, even though the price class is no longer described as real time.
 
 The `dataAsOf` for a batch slot is the payload's `generatedAt` (present on insight and AI-summary surfaces). Surfacing it is not decoration: it is what lets a user trust a `+0.42` sentiment reading taken at the open even though price has moved since. A batch value with no visible age is indistinguishable from a fabricated one.
 
-Compose-time rule the model applies: if two values on one screen have different freshness classes and the question is time-sensitive ("is it still mooning?"), lead with the real-time value and tag the batch value's age, rather than blending both into one implied "now."
+The same reasoning applies to price, which carries a real delay of roughly 15 to 17 minutes during regular hours, so it must not be rendered as if it had no age. Its as-of is **`priceAsOf`**, present on the price and quote payloads. Two neighbouring fields are not this, and using either produces a value that always looks fresh: `timestamp` is when the response was served, and `expiresEpochSecond` is a cache-expiry boundary. When `priceAsOf` is absent, which happens outside regular hours and wherever the upstream data is undated, annotate the constant class delay rather than inventing an age.
+
+Compose-time rule the model applies: if two values on one screen have different freshness classes and the question is time-sensitive ("is it still mooning?"), lead with the freshest value, tag every value with its own age, and never blend them into one implied "now."
 
 ### 3. The grounding requirement (host prompt, not this skill)
 
@@ -1193,7 +1197,7 @@ The values are share-of-voice percentages summing to roughly 100, **not** per-so
 
 **`institutional/quarters` is a bare array** `[{ value, label, reportDate, pending }]` (not wrapped in `data`). Take the `reportDate` of the FIRST quarter whose `pending` is not true (skip any `pending:true` entry); only if every entry is `pending:true`, fall back to `[0]`. Do NOT blindly take `[0].reportDate`: within ~45 days of a quarter close, `[0]` is a still-filing `pending:true` quarter with almost no holders. Pass the resolved `reportDate` to `institutional/holders`.
 
-**Sentiment, SentiSense Score, news clustering, AI summaries, and insights are batch metrics.** Quote / price / chart points are real-time. Show the `generatedAt` timestamp on insight and AI summary surfaces so the user knows how fresh the analysis is. Don't claim "real time" on analytical surfaces.
+**Sentiment, SentiSense Score, news clustering, AI summaries, and insights are batch metrics.** Quote / price / chart points are the fresher class, but they are 15-minute delayed, not live: annotate them with `priceAsOf` where the payload carries it. Show the `generatedAt` timestamp on insight and AI summary surfaces so the user knows how fresh the analysis is. Don't claim "real time" on any surface.
 
 ---
 

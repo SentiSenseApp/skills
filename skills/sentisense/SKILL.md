@@ -164,9 +164,11 @@ curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
   "https://app.sentisense.ai/api/v1/stocks/price?ticker=AAPL"
 ```
 
-Response: `{ ticker, currentPrice, change, changePercent, previousClose, volume, timestamp, expiresEpochSecond, extendedHours? }`.
+Response: `{ ticker, currentPrice, change, changePercent, previousClose, volume, timestamp, priceAsOf?, expiresEpochSecond, extendedHours? }`.
 
-**Prices are delayed 15 minutes.** This applies to every price on this API, in every session, including the `extendedHours` values below. Do not present these quotes as live, and do not use them for execution or for any decision that turns on the current tick. `timestamp` tells you what the value is actually worth: read it rather than assuming freshness.
+**Prices are delayed 15 minutes.** This applies to every price on this API, in every session, including the `extendedHours` values below. Do not present these quotes as live, and do not use them for execution or for any decision that turns on the current tick.
+
+Read **`priceAsOf`** for freshness: it is when the market data behind `currentPrice` is actually from, in epoch milliseconds. Do not use `timestamp` for this. `timestamp` is when the response was served, so it tracks the current clock no matter how old the value is. `priceAsOf` is omitted outside regular hours and whenever the upstream data carries no time of its own, so treat an absent `priceAsOf` as unknown age, not as fresh, and fall back to assuming the 15 minutes.
 
 `currentPrice` is always the regular-session price: the most recent regular-session value during RTH (09:30 to 16:00 ET), and the most recent regular-session close otherwise. The optional `extendedHours` field is present only during pre-market (04:00 to 09:30 ET) or after-hours (16:00 to 20:00 ET) and carries `{ session: "pre" | "post", price, change, changePercent }`, where `change` / `changePercent` are computed vs `currentPrice`.
 
@@ -918,7 +920,7 @@ Aggregate Wall Street consensus: price target band, number of covering analysts,
 
 Response: `{ isPreview, previewReason, data: { ticker, currentPrice, targetLow, targetMean, targetHigh, targetMedian, numberOfAnalysts, upsidePercent, consensusLabel, recommendationMean, strongBuy, buy, hold, sell, strongSell, updatedAt } }`. The five `*Buy/*Sell/hold` count fields are zero in the free preview. Returns 404 when no analyst coverage exists for the ticker.
 
-**`currentPrice` on this endpoint is not the live quote.** It is the reference price captured when the analyst snapshot was written, dated by `updatedAt`, and `upsidePercent` is computed against that same reference so the band and the upside stay internally consistent. Expect it to drift from the live price between snapshots (a few percent is normal). When you need the live price, read `currentPrice` from `/api/v1/stocks/price` or `/api/v1/stocks/{ticker}/quote` instead, where the field does mean the current regular-session price.
+**`currentPrice` on this endpoint is not the live quote.** It is the reference price captured when the analyst snapshot was written, dated by `updatedAt`, and `upsidePercent` is computed against that same reference so the band and the upside stay internally consistent. Expect it to drift from the traded price between snapshots (a few percent is normal). When you need the current regular-session price, read `currentPrice` from `/api/v1/stocks/price` or `/api/v1/stocks/{ticker}/quote` instead, where the field tracks the session and carries the standard 15-minute delay rather than a snapshot's age.
 
 ### GET /api/v1/analyst/{ticker}/actions
 Recent analyst upgrade/downgrade actions for a ticker, newest first. **PRO (preview)** -- Free: 3 most recent, PRO: full list.
