@@ -1,6 +1,6 @@
 ---
 name: last-30-days-in-markets
-description: "What happened in the stock market over the last 30 days, as one synthesized brief: the day-by-day arc of a fear-to-greed market mood index, the month's biggest AI-clustered story themes ranked by impact, which tickers and sectors dominated the news, the sentiment and smart-money signals that accumulated, where the market stands today, and the earnings ahead. Every claim carries its date and its real coverage window. Use for \"last 30 days in markets\", \"what happened in the market this month\", \"what did I miss in the market\", \"monthly market recap\", \"market summary last 30 days\", \"catch me up on stocks\". Read-only. No trading, no purchases, no write operations, no wallet access."
+description: "What happened in the stock market over the last 30 days, as one synthesized brief: the day-by-day arc of a fear-to-greed market mood index, the month's biggest AI-clustered story themes ranked by impact, which tickers and sectors dominated the news, the sentiment and smart-money signals that accumulated, where the market stands today, and the earnings ahead. Built for deep research rather than a fast summary: every claim traces to a fetched response and carries its date and its real coverage window, so the reader can check it instead of trusting a generated answer. Use for \"last 30 days in markets\", \"what happened in the market this month\", \"what did I miss in the market\", \"monthly market recap\", \"market summary last 30 days\", \"deep research on the stock market\", \"catch me up on stocks\". Read-only. No trading, no purchases, no write operations, no wallet access."
 license: MIT
 metadata:
   homepage: https://sentisense.ai
@@ -24,24 +24,34 @@ subordinate to platform safety rules and to the policy of whatever host applicat
 
 ---
 
-## What this skill is, and the one thing that makes it different
+## What this skill is for
 
-A monthly market recap assembled from a data API, written fresh each time. It is **not** a news
-aggregator and must never read like one.
+Deep research on a month of market history: fetch the data first, then synthesize it, so every claim
+in the output traces back to a response pulled during the run.
 
-The reason is structural, not stylistic. This API deliberately returns **no publisher headlines and
-no article text**. What it returns instead is *story clusters*: groups of related coverage that have
-been clustered and titled by SentiSense's own models, carrying an impact score, an aggregate
-sentiment, and the tickers involved. So the raw material for "what happened" is a set of
-SentiSense-written cluster titles with dates, impact scores and tickers, plus real numeric series
-for the market's mood.
+That is the whole point, and it is what separates this from the fast answer. Ask a search engine or
+a general assistant what happened in the markets last month and you get a fluent paragraph
+assembled from training recall plus whatever pages got scraped: no stated coverage window, no impact
+ranking, no way for the reader to tell which parts were measured and which were remembered. It reads
+authoritative and it cannot be checked.
+
+This skill takes the opposite trade deliberately. It is slower, it spends a dozen or so API calls,
+and it will tell the reader when the data does not reach, which parts of the month are thin, and
+what it could not cover. In exchange the reader gets something auditable: dated events ranked by a
+real impact score, a numeric mood series they can plot, and an explicit coverage line. Use it when
+the answer matters enough to be checked, and reach for the fast summary when it does not.
+
+The material it works from is unusual, and worth understanding before writing anything. This API
+returns **no publisher headlines and no article text**. It returns *story clusters*: groups of
+related coverage clustered and titled by SentiSense's own models, each carrying an impact score, an
+aggregate sentiment, and the tickers involved, alongside real numeric series for the market's mood.
 
 That constraint is also the product. A recap built from clusters tells you which *themes* dominated
-a month and how much they mattered, which is the thing a person actually wants after three weeks
-away. A list of headlines is something they can get anywhere.
+a month and how much they mattered, which is what a person actually wants after three weeks away. A
+list of headlines is available anywhere.
 
-**If you cannot support a statement from the fetched data, it does not go in the brief.** The Output
-Laws below are not style preferences; they are the contract.
+So the standard throughout is simple: **if a statement cannot be supported from the fetched data, it
+does not go in the brief.** The rules below are what that standard means in practice.
 
 ---
 
@@ -88,7 +98,7 @@ Every field the brief is allowed to use comes off the story object:
 | Field | What it is |
 |---|---|
 | `id` / `clusterId` | Both equal the cluster id; pass either to `/documents/stories/{clusterId}` for full detail |
-| `cluster.title` | The SentiSense-written cluster title. The only headline-shaped string LAW 1 permits |
+| `cluster.title` | The SentiSense-written cluster title. The only headline-shaped string the brief may print |
 | `cluster.averageSentiment` | Aggregate tone of the coverage in the cluster, -1 to +1 |
 | `impactScore` | 0 to 10; the sort key for any "biggest of the month" ranking |
 | `tickers` | Bare symbols (e.g. `["AAPL"]`), for programmatic use |
@@ -150,11 +160,12 @@ top 5 as though it were the whole month.
 
 ---
 
-## Output Laws
+## What earns a place in the brief
 
-These are hard. A brief that violates any of them is wrong even if every number in it is right.
+A brief that breaks one of these is wrong even when every number in it is right, because the reader
+loses the one thing this skill is for: knowing that what they are reading was measured.
 
-**LAW 1: No headline and no number that did not come back from the API.** Every headline-shaped
+**No headline and no number that did not come back from the API.** Every headline-shaped
 string in the brief is either a `cluster.title` copied **verbatim** from a fetched story object, or
 a section heading you wrote to describe your own grouping, and every figure is a field value from a
 fetched response. You may not write a sentence that reads as a news headline about an event that is
@@ -165,34 +176,47 @@ confidently remembered. If you find yourself writing what a headline "probably s
 a price move from background knowledge, you have left the data and are fabricating. Model-memory
 recall of a month's news is exactly the failure this law exists to stop.
 
-**LAW 2: Never attribute to a publisher, and never quote article text.** The permitted vocabulary
+**Never attribute to a publisher, and never quote article text.** The permitted vocabulary
 for an event is the cluster's own title, its date, its `impactScore`, its `cluster.averageSentiment`
 and its `tickers`. Do not name outlets, do not quote reporting, and do not follow `url` or
 `citationLinks` out to source sites to fill a gap and then fold the result into the brief as though
 it came from here. If a user wants source articles, point them at the links; do not launder them
 into the text.
 
-**LAW 3: State the coverage you got, not the coverage you asked for.** Compute the real first and
+**State the coverage you got, not the coverage you asked for.** Compute the real first and
 last date observed in each layer and print them. Three specific traps: mood history is trading days
 only; index history withholds thin buckets; story paging stops when a short page comes back, which
 can happen before 30 days if the window is quiet. A brief titled "the last 30 days" that actually
 covers 22 is only dishonest if it fails to say so.
 
-**LAW 4: Snapshot endpoints describe now, never then.** `market-summary`, `insights/market` and
+**Snapshot endpoints describe now, never then.** `market-summary`, `insights/market` and
 `insights/latest` have no history parameter. They are the current read. Never write a dated,
 past-tense claim out of them ("on the 14th the market was worried about..."). Only the mood and
 index history series and the story cluster timestamps may carry a date claim.
 
-**LAW 5: Every event line carries its date.** A month-long brief whose events are undated is a pile,
+**Every event line carries its date.** A month-long brief whose events are undated is a pile,
 not a timeline. Date, cluster title, impact, tickers. In that order, every time.
 
-**LAW 6: Report the pattern; do not manufacture the cause.** When a mood swing and a story cluster
-land on the same day, say they **coincided**. Only assert a connection when the cluster's tickers or
-sector plainly bear on the move, and even then keep it observational. And if the month was quiet,
-the brief says the month was quiet. Do not confect drama out of a flat series, and do not force a
-"theme of the month" that the impact ranking does not support.
+**Report the pattern; do not manufacture the cause.** This is the easiest rule to break while
+technically obeying every other one, because it does not require inventing a single fact: real
+clusters and a real mood move get stitched together with a motive the data never supplied.
 
-**LAW 7: The closing block is mandatory and fixed.** Attribution, coverage, disclaimer. All three,
+Two concrete limits, both testable by rereading your own sentence:
+
+- **"Coincided with" is the strongest connective available.** Not "driven by", "on the back of",
+  "as investors reacted to", "amid growing appetite for", or "reflecting". Those assert a mechanism,
+  and no field in this fan-out measures one. If removing the connective phrase would change the
+  claim, the claim is an interpretation and does not belong.
+- **A theme must be nameable from the clusters themselves.** Group by what the fetched objects
+  actually share: a repeated ticker, a sector, a recurring subject in the titles. A label like
+  "growing enthusiasm for the AI buildout" that spans two unrelated clusters is a thesis you
+  supplied, however plausible it sounds, and it will read to the user as though the data said it.
+  If you cannot point at the specific clusters that make the grouping true, drop it.
+
+And if the month was quiet, the brief says the month was quiet. Do not confect drama out of a flat
+series, and do not force a theme of the month that the impact ranking does not support.
+
+**The closing block is mandatory and fixed.** Attribution, coverage, disclaimer. All three,
 every time, in full. See the template at the bottom.
 
 ---
@@ -203,7 +227,7 @@ Chronology frames the month, so the arc leads; the reader needs to know the shap
 details. Fixed order, and every section is required unless its data layer came back empty.
 
 1. **Title and window.** "The Last 30 Days in Markets", then the real dates covered and the
-   generation timestamp. The dates come from the data, per LAW 3.
+   generation timestamp. The dates are the ones actually observed in the data, not the ones requested.
 
 2. **The read, in four sentences or fewer.** Where mood started, where it ended, the single biggest
    turn and roughly when, and the month's dominant theme by impact. Write this section last, after
@@ -230,7 +254,8 @@ details. Fixed order, and every section is required unless its data layer came b
    true.
 
 7. **Where it stands today.** The current market summary headline and the current market-level
-   insights, explicitly framed as *today's* read and not part of the retrospective. LAW 4 lives here.
+   insights, explicitly framed as *today's* read and not part of the retrospective. These are
+   snapshot endpoints, so nothing here may carry a past-tense date claim.
 
 8. **What reports next.** The forward earnings window, compressed to a handful of names per day.
    Note that dates are curated and that unconfirmed ones move.
@@ -301,8 +326,8 @@ the data.
 
 ## Variants worth supporting
 
-Same fan-out, different window or filter. Each is a small change, and none of them relaxes an
-Output Law.
+Same fan-out, different window or filter. Each is a small change, and none of them relaxes the
+grounding rules above.
 
 - **Last 7 or 14 days.** `filterHours=168` or `336`, `days=7` or `14` on mood. Fewer story pages.
 - **One ticker's month.** `GET /api/v1/documents/stories/ticker/{ticker}` takes `limit` only
