@@ -56,15 +56,16 @@ Prefer one command over composing HTTP calls? The official CLI ships inside the 
 npm package, so there is nothing to install:
 
 ```bash
-npx -y sentisense@latest health
-npx -y sentisense@latest quote NVDA
-npx -y sentisense@latest sentiment TSLA --days 30
-npx -y sentisense@latest mood --json
+npx -y sentisense@0.45.0 health
+npx -y sentisense@0.45.0 quote NVDA
+npx -y sentisense@0.45.0 sentiment TSLA --days 30
+npx -y sentisense@0.45.0 mood --json
 ```
 
 Auth: set `SENTISENSE_API_KEY` in the environment, or store it once with
-`npx -y sentisense@latest auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file
-mode 600). Use version 0.44.0 or newer.
+`npx -y sentisense@0.45.0 auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file
+mode 600; local to your machine, remove anytime with `auth --remove`). Commands here pin
+version 0.45.0 deliberately: a pinned version runs reviewed, immutable code.
 
 Identity works the same as the User-Agent guidance above, and the CLI stamps it for you: set
 `SENTISENSE_SKILL=sentisense` and, if you like, `SENTISENSE_AGENT_NAME=<what your agent is
@@ -76,7 +77,7 @@ codes are stable (0 ok, 1 API error, 2 usage, 3 auth, 4 not found, 5 rate limite
 1-versus-2 split is worth branching on: 1 means the request went out and the API rejected it (a
 validation `400`, say), while 2 means the CLI refused the input before any request was sent. For the full
 command list and deeper CLI mechanics, install the dedicated `sentisense-cli` skill or run
-`npx -y sentisense@latest --help`.
+`npx -y sentisense@0.45.0 --help`.
 
 Everything the CLI does is also available as the plain REST calls documented below; the CLI is
 a convenience, not a requirement.
@@ -320,7 +321,7 @@ Aggregate metrics such as sentiment and mention counts incorporate signals from 
 
 > Via the MCP connector this same picture comes back from the `get_stock_snapshot` tool rather than a separate sentiment tool.
 
-CLI equivalent: `npx -y sentisense@latest sentiment NVDA --json` (this response is under `.sentiment`, next to a Score history series)
+CLI equivalent: `npx -y sentisense@0.45.0 sentiment NVDA --json` (this response is under `.sentiment`, next to a Score history series)
 
 ### GET /api/v1/stocks/{ticker}/entities
 Related ontology entities (CEO, products, partners). **Public.** Each entry carries a `urlSlug` (e.g. `Tim-Cook`) that plugs into the Metrics API `{entityId}` parameter.
@@ -459,7 +460,7 @@ Response: `{ ticker, currentPrice, change, changePercent, volume, open, dayHigh,
 
 ETF tickers (e.g. `VTI`, `SPY`) return `400 ticker_is_etf` from this endpoint. Use `GET /api/v1/etfs/{ticker}/quote` instead, which returns AUM, expense ratio, NAV, and inception date rather than market cap, P/E, and EPS.
 
-CLI equivalent: `npx -y sentisense@latest quote NVDA --json`
+CLI equivalent: `npx -y sentisense@0.45.0 quote NVDA --json`
 
 ### GET /api/v1/stocks/{ticker}/kpis
 Company-specific KPI time-series. Curated GAAP and non-GAAP metrics from earnings filings: iPhone unit sales, Tesla deliveries, AWS revenue, Netflix paid net adds, etc. **PRO (preview)** -- Free: metadata only with empty `kpis` list, PRO: full series. Returns 404 for tickers without curated coverage.
@@ -712,7 +713,7 @@ const mood = await client.marketMood.get();
 console.log(mood.market.currentScore, mood.market.phase);
 ```
 
-CLI equivalent: `npx -y sentisense@latest mood --json`
+CLI equivalent: `npx -y sentisense@0.45.0 mood --json`
 
 ---
 
@@ -777,12 +778,12 @@ AI-curated news story clusters. **Public.**
 
 Response: Story objects with a top-level `id` AND `clusterId` (both equal to the cluster id -- pass either to `/documents/stories/{clusterId}`), plus `cluster.title`, `cluster.averageSentiment`, `tickers`, `displayTickers`, `impactScore` (0-10), `brokeAt` (epoch seconds, nullable), `cluster.clusteredAt` (epoch seconds). Use `tickers` (bare symbols, e.g. `["AAPL"]`) programmatically; `displayTickers` are human-formatted labels (e.g. `["Apple Inc (AAPL)"]`) for display only, do not parse symbols out of them. The `cluster.createdAt` field (epoch millis) is deprecated and will be removed on or after 2026-08-16; use `cluster.clusteredAt`.
 
-CLI equivalent: `npx -y sentisense@latest news --days 2 --limit 20 --json` (the CLI's `--days` sends `filterHours` = days x 24; needs 0.45.0 or newer)
+CLI equivalent: `npx -y sentisense@0.45.0 news --days 2 --limit 20 --json` (the CLI's `--days` sends `filterHours` = days x 24; needs 0.45.0 or newer)
 
 ### GET /api/v1/documents/stories/ticker/{ticker}
 News stories for a specific stock. **Public.** Takes `limit` only (default 5, capped at 20): there is no lookback window here, so `days` / `hours` / `filterHours` are ignored. Use `/documents/stories` with `filterHours` for a freshness window.
 
-CLI equivalent: `npx -y sentisense@latest news NVDA --limit 5 --json`
+CLI equivalent: `npx -y sentisense@0.45.0 news NVDA --limit 5 --json`
 
 ### GET /api/v1/documents/stories/{clusterId}
 Full detail for a single story cluster. **Public** -- Free: 10 story views/month, PRO: unlimited. Each list item from `/stories` and `/stories/ticker/{ticker}` carries a top-level `id` AND a `clusterId` (both equal to the cluster id); pass either one here as `{clusterId}`.
@@ -818,7 +819,7 @@ Aggregate institutional buying/selling per ticker. **Public (preview)** -- Free:
 
 Response: `{ isPreview, previewReason, data: { inflows: [...], outflows: [...], reportDate, isPending, filerCount, baselineFilerCount } }`. `reportDate` is the quarter served (useful when you omitted the param). `isPending` is true when that quarter is still inside the 45-day 13F filing window, so only early filers are represented; when pending, `filerCount` and `baselineFilerCount` give the coverage (e.g., 578 of 8789 filers) and are null otherwise. Each flow includes net share changes, new/closed positions, and per-category breakdowns (indexFundNetChange, hedgeFundNetChange, etc.). Flows are ranked by `dollarFlowUsd` (= `netSharesChange × avgClosePrice`): inflows DESC, outflows ASC. `avgClosePrice` is null and `dollarFlowUsd` is 0 for tickers without a cached quarterly price; clients should fall back to `netSharesChange` for those rows.
 
-CLI equivalent: `npx -y sentisense@latest flows --limit 50 --json`
+CLI equivalent: `npx -y sentisense@0.45.0 flows --limit 50 --json`
 
 ### GET /api/v1/institutional/holders/{ticker}
 Institutional holders for a stock. **Public (preview)** -- Free: top 5, PRO: full data.
@@ -833,7 +834,7 @@ Institutional holders for a stock. **Public (preview)** -- Free: top 5, PRO: ful
 
 Response: `{ isPreview, previewReason, data: { ticker, companyName, reportDate, totalInstitutionalShares, holderCount, holders: [...] } }`. The holder list is nested at `data.holders` (not `data` directly). Each holder includes filer name, category, shares, value, change type (NEW/INCREASED/DECREASED/SOLD_OUT/UNCHANGED). `holderCount` is always the full-quarter count; on paged requests `data` also carries `returnedCount`, `offset`, and `notableChanges` (`{count, top}`: holders with a 10%+ change on 10k+ shares, top 5 by dollar impact).
 
-CLI equivalent: `npx -y sentisense@latest flows NVDA --json` (it reads `/quarters` first and passes the latest settled `reportDate`)
+CLI equivalent: `npx -y sentisense@0.45.0 flows NVDA --json` (it reads `/quarters` first and passes the latest settled `reportDate`)
 
 ### GET /api/v1/institutional/activist
 Activist investor positions (NEW or INCREASED stakes). **Public (preview)** -- Free: top 3, PRO: full data.
@@ -911,7 +912,7 @@ for t in trades.data:
     print(f"{t['transactionDate']} {t['insiderName']} {t['transactionType']} {t['sharesTransacted']} shares")
 ```
 
-CLI equivalent: `npx -y sentisense@latest insiders AAPL --days 90 --json`
+CLI equivalent: `npx -y sentisense@0.45.0 insiders AAPL --days 90 --json`
 
 ### GET /api/v1/insider/cluster-buys
 Cluster buy signals: stocks where 3+ distinct insiders purchased recently. **Public (preview)** -- Free: top 5, PRO: full data.
@@ -952,7 +953,7 @@ for trade in activity.data:
     print(f"{trade['politicianName']} ({trade['party']}-{trade['state']}): {trade['transactionType']} {trade['ticker']}")
 ```
 
-CLI equivalent: `npx -y sentisense@latest congress --days 90 --limit 200 --json` (no `offset`, so the CLI reads the first page only)
+CLI equivalent: `npx -y sentisense@0.45.0 congress --days 90 --limit 200 --json` (no `offset`, so the CLI reads the first page only)
 
 ### GET /api/v1/politicians/filings/{ticker}
 Congressional trades for a specific stock, sorted by disclosure date (most recently disclosed first). **Public (preview)** -- Free: top 3, PRO: full data.
@@ -964,7 +965,7 @@ Congressional trades for a specific stock, sorted by disclosure date (most recen
 
 Response: same preview wrapper and trade object schema as `/activity`.
 
-CLI equivalent: `npx -y sentisense@latest congress NVDA --days 90 --json`
+CLI equivalent: `npx -y sentisense@0.45.0 congress NVDA --days 90 --json`
 
 ### GET /api/v1/politicians/members
 All tracked politicians with trading summaries, sorted by total trade count. **Public (preview)** -- Free: top 5, PRO: full list.
@@ -1012,7 +1013,7 @@ for i in result.data:
     print(f"[{i['urgency'].upper()}] {i['insightType']}: {i['insightText'][:80]}")
 ```
 
-CLI equivalent: `npx -y sentisense@latest insights AAPL --urgency high --json` (`--type` covers `insightType`)
+CLI equivalent: `npx -y sentisense@0.45.0 insights AAPL --urgency high --json` (`--type` covers `insightType`)
 
 ### GET /api/v1/insights/stock/{ticker}/range
 Per-stock insights within a date range, sorted by urgency then confidence. **PRO (preview)** -- Free: top 3, PRO: full list. Returns `400 invalid_parameter` when `startDate` is after `endDate`.
@@ -1080,7 +1081,7 @@ Response: `{ isPreview, previewReason, data: { ticker, currentPrice, targetLow, 
 
 **`currentPrice` on this endpoint is not the live quote.** It is the reference price captured when the analyst snapshot was written, dated by `updatedAt`, and `upsidePercent` is computed against that same reference so the band and the upside stay internally consistent. Expect it to drift from the traded price between snapshots (a few percent is normal). When you need the current regular-session price, read `currentPrice` from `/api/v1/stocks/price` or `/api/v1/stocks/{ticker}/quote` instead, where the field tracks the session and carries the standard 15-minute delay rather than a snapshot's age.
 
-CLI equivalent: `npx -y sentisense@latest analysts AAPL --json` (this response is under `.consensus`)
+CLI equivalent: `npx -y sentisense@0.45.0 analysts AAPL --json` (this response is under `.consensus`)
 
 ### GET /api/v1/analyst/{ticker}/actions
 Recent analyst upgrade/downgrade actions for a ticker, newest first. **PRO (preview)** -- Free: 3 most recent, PRO: full list.
@@ -1092,7 +1093,7 @@ Recent analyst upgrade/downgrade actions for a ticker, newest first. **PRO (prev
 
 Action object: `{ ticker, actionDate, firm, actionType (UPGRADE/DOWNGRADE/INITIATE/REITERATE/OTHER), fromGrade, toGrade }`.
 
-CLI equivalent: `npx -y sentisense@latest analysts AAPL --days 90 --json` (this response is under `.actions`)
+CLI equivalent: `npx -y sentisense@0.45.0 analysts AAPL --days 90 --json` (this response is under `.actions`)
 
 ### GET /api/v1/analyst/{ticker}/estimates
 Forward EPS estimates and recent earnings surprise history. **PRO (preview)** -- Free: 1 estimate (current quarter) + 2 most recent surprises, PRO: full history.
@@ -1245,7 +1246,7 @@ curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
   "https://app.sentisense.ai/api/v1/stocks/NVDA/options/summary"
 ```
 
-CLI equivalent: `npx -y sentisense@latest options NVDA --json`
+CLI equivalent: `npx -y sentisense@0.45.0 options NVDA --json`
 
 ETFs use the same path, and it is the only way to reach them since the Radar board is stocks-only:
 
@@ -1311,7 +1312,7 @@ The full catalog for both universes: every filterable field with its group, unit
 
 Response: `{ stock: [...], etf: [...] }`, each entry `{ name, label, group, type, unit, ops, sortable, description }`. The string-typed ETF fields (`ISSUER`, `ASSET_CLASS`, `TRACKED_INDEX`) also carry a `values` array populated from the live universe, so pickers stay current without a redeploy.
 
-CLI equivalent: `npx -y sentisense@latest screen --fields --json`
+CLI equivalent: `npx -y sentisense@0.45.0 screen --fields --json`
 
 Stock fields by group:
 
@@ -1352,7 +1353,7 @@ curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
   "https://app.sentisense.ai/api/v1/screener/screens"
 ```
 
-CLI equivalent: `npx -y sentisense@latest screen --list --json` (run one with `screen --screen <id>`)
+CLI equivalent: `npx -y sentisense@0.45.0 screen --list --json` (run one with `screen --screen <id>`)
 
 ### POST /api/v1/screener/execute
 Run a plan against the stock universe. **API key required.**
@@ -1380,7 +1381,7 @@ curl -X POST "https://app.sentisense.ai/api/v1/screener/execute" \
   }'
 ```
 
-CLI equivalent: `npx -y sentisense@latest screen --filter SENTI_SCORE_7D:GTE:13 --filter ANALYST_BUY_RATIO_PCT:LTE:30 --filter ANALYST_COUNT:GTE:5 --sort SENTI_SCORE_7D:DESC --limit 25 --json`
+CLI equivalent: `npx -y sentisense@0.45.0 screen --filter SENTI_SCORE_7D:GTE:13 --filter ANALYST_BUY_RATIO_PCT:LTE:30 --filter ANALYST_COUNT:GTE:5 --sort SENTI_SCORE_7D:DESC --limit 25 --json`
 
 That is the "crowd is bullish, the street is not" screen. To run the same plan over a watchlist instead, add `"tickers": ["NVDA", "AMD", "AVGO"]` next to `plan`.
 
@@ -1414,7 +1415,7 @@ curl -X POST "https://app.sentisense.ai/api/v1/screener/etfs/execute" \
   }'
 ```
 
-CLI equivalent: `npx -y sentisense@latest screen --etf --filter CONSTITUENTS_WEIGHTED_SENTISENSE:GTE:13 --filter WEIGHT_COVERED_PCT:GTE:80 --filter EXPENSE_RATIO:LTE:0.002 --sort CONSTITUENTS_WEIGHTED_SENTISENSE:DESC --limit 25 --json`
+CLI equivalent: `npx -y sentisense@0.45.0 screen --etf --filter CONSTITUENTS_WEIGHTED_SENTISENSE:GTE:13 --filter WEIGHT_COVERED_PCT:GTE:80 --filter EXPENSE_RATIO:LTE:0.002 --sort CONSTITUENTS_WEIGHTED_SENTISENSE:DESC --limit 25 --json`
 
 **When to use these:** call `/fields` once at startup and cache it, use `/screens` when the user asks for something a curated screen already expresses (execute its `plan` verbatim), and build a plan yourself when they want a cross the curated set does not cover. Full docs: <https://sentisense.ai/docs/api/screener>.
 
@@ -1569,7 +1570,7 @@ for e in cal.earnings:
     print(f"{e['earningsDate']} {e['ticker']} ({e['earningsTime']})")
 ```
 
-CLI equivalent: `npx -y sentisense@latest earnings --week next --json` (also takes `--from`, `--to`, `--confirmed`)
+CLI equivalent: `npx -y sentisense@0.45.0 earnings --week next --json` (also takes `--from`, `--to`, `--confirmed`)
 
 ---
 
@@ -1597,7 +1598,7 @@ The FREE preview quarter is shaped, not cut: `fiscalPeriod`, `reportDate` and `h
 
 `guidance` is prose, not a number: PRO callers get the language and classify it themselves, and the classification must let no-guidance language win before any direction word ("no formal guidance was issued ... increasingly difficult" is not a raise). Absence is explicit rather than omitted: a quarter with no call summary sets `hasTranscript: false`, so a client can say "no call summary yet" instead of rendering nothing.
 
-CLI equivalent: `npx -y sentisense@latest earnings AAPL --limit 12 --json` (a ticker switches the command from the calendar to this report)
+CLI equivalent: `npx -y sentisense@0.45.0 earnings AAPL --limit 12 --json` (a ticker switches the command from the calendar to this report)
 
 ### GET /api/v1/earnings/recent
 The cross-ticker backward-looking feed: which covered companies reported on or after `today - days`, newest first. Drives a post-earnings sweep ("who reported this week"), then follow up per ticker with the per-quarter analysis above. **API key required**, no tier gate: every key receives the full window it asks for. Params: `days` (1 to 31, default 7; above 31 is capped, below 1 returns `400 invalid_days`), `limit` (1 to 100, default 50; above 100 is capped, below 1 returns `400 invalid_limit`).
