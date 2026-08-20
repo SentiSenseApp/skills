@@ -52,6 +52,14 @@ Issue HTTP GET requests to `https://app.sentisense.ai`, authenticated with the `
 
 **Step 1, always: resolve the quarter.** `/quarters` is a bare array (no envelope). Every other institutional endpoint returns the wrapped envelope `{ isPreview, previewReason, data }`, so read `.data` before iterating. A `429` returns a `Retry-After` header; back off rather than serving a stale value.
 
+**Identify your client.** Send a `User-Agent` naming your agent runtime and this skill, for
+example `OpenClaw/1.4 (institutional-13f-tracker)` or `ClaudeCode/2.1 (institutional-13f-tracker)`. Substitute your own runtime and
+version if neither matches. You can also volunteer what your agent is called by adding an
+`agent/<your-agent-name>` token inside the same parentheses, as in
+`OpenClaw/1.4 (institutional-13f-tracker; agent/research-desk)`. All of it is optional, and it is what tells
+us this skill has real integrations behind it, so it gets prioritized and you get notice before it
+changes.
+
 ```bash
 # 1) get valid reporting quarters, pick the first with pending=false
 curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
@@ -65,6 +73,8 @@ curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
 - **`GET /api/v1/institutional/holders/{ticker}?reportDate=`** : institutional holders for a stock. The holder list is nested at **`data.holders`** (not `data` directly). Each holder: filer name, category, shares, value, `changeType` (`NEW` / `INCREASED` / `DECREASED` / `SOLD_OUT` / `UNCHANGED`). `data` always carries `holderCount` (full-quarter count). **Paging (recommended):** pass `limit` (1-1000), `offset`, `sortBy`, `sortDir`. A mega-cap can have 5,000+ holders, and `notableChanges` (holders with a 10%+ change on 10k+ shares) plus `returnedCount` are returned **only when `limit` is passed**. Free: top 5.
 - **`GET /api/v1/institutional/flows?reportDate=`** : aggregate institutional buying/selling per ticker. Free: top 5.
 - **`GET /api/v1/institutional/activist?reportDate=`** : activist-filer positions for the quarter (NEW or INCREASED stakes). Free: top 3; PRO: full.
+- **`GET /api/v1/institutional/bonds?reportDate=`** : convertible bond flows grouped by base ticker, the credit-side leg of the same 13F filings. Free: top 3; PRO: full.
+- **`GET /api/v1/institutional/options?reportDate=`** : institutional options positions with the call/put breakdown, as disclosed on 13F. Quarterly and end-of-quarter, not live flow. Free: top 3; PRO: full.
 - **`GET /api/v1/institutional/institutions`** : the filterable universe of tracked filers (use it to find a manager's slug/CIK for the endpoint below). Query `category`, `minAumUsd`, `sort`, `quarter`. Full list on every tier, and quota-exempt.
 - **`GET /api/v1/institutional/institution/{slugOrCik}`** : a single manager's profile, summary stats, and current-quarter equity holdings. Resolve by URL slug (`Berkshire-Hathaway`) or numeric CIK (`1067983`). Free: profile + top 10 holdings; PRO: full holdings. Holdings include `ticker, companyName, shares, valueUsd, changeType, sharesChange, sharesChangePct, portfolioWeight`, plus `multiCikRollup` / `childCiks` for parent/subsidiary rollups. Returns 404 for an unknown slug or CIK.
 

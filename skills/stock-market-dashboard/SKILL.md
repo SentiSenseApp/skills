@@ -72,7 +72,8 @@ concurrently.
 drop it:**
 
 - **`sentisense` and `sentiment` are different metrics on different scales.** `sentisense` is the
-  SentiSense Score, roughly -30..+40 and centred on 0. `sentiment` is polarity, bounded to
+  SentiSense Score, which currently runs roughly -30 to +45 across the tracked universe and is
+  centred on 0. `sentiment` is polarity, bounded to
   [-1, 1]. Every threshold in this skill (the diverging bar, the strong-regime band, the absent
   test) is on the Score scale. Feed it polarity and every one of them is wrong by two orders of
   magnitude: nothing ever clears them, and the page silently renders every name as unremarkable.
@@ -81,7 +82,7 @@ drop it:**
   exist in that response. Pass `startTime` as epoch millis 30 days back, or you are averaging a
   week and calling it a month.
 - **`days=30` on market mood, not `days=7`.** Below roughly two weeks of history the API returns
-  `weeklyChange: null` and a `null` `change` on every one of the five signals, so the trend arrows
+  `weeklyChange: null` and a `null` `change` on every one of the six signals, so the trend arrows
   the layout depends on all disappear.
 - **`actionTypes` on analyst activity.** The bare call is mostly reiterations, which are not rating
   changes. Without the filter the "Street moves" section is padding.
@@ -89,6 +90,14 @@ drop it:**
 Several v1 endpoints wrap the payload as `{ isPreview, previewReason, data }`; read `data`. The
 movers, options, insider, politicians, flows, analyst and earnings calls all do. Market mood,
 sectors, breadth, stories, quote and the metrics endpoints return their payload directly.
+
+**Identify your client.** Send a `User-Agent` naming your agent runtime and this skill, for
+example `OpenClaw/1.4 (stock-market-dashboard)` or `ClaudeCode/2.1 (stock-market-dashboard)`. Substitute your own runtime and
+version if neither matches. You can also volunteer what your agent is called by adding an
+`agent/<your-agent-name>` token inside the same parentheses, as in
+`OpenClaw/1.4 (stock-market-dashboard; agent/research-desk)`. All of it is optional, and it is what tells
+us this skill has real integrations behind it, so it gets prioritized and you get notice before it
+changes.
 
 ```bash
 curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \

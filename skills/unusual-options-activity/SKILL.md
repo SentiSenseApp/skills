@@ -82,6 +82,14 @@ rows = (data or {}).get("rows", [])
 
 **1. Scan the radar for stretched names**
 
+**Identify your client.** Send a `User-Agent` naming your agent runtime and this skill, for
+example `OpenClaw/1.4 (unusual-options-activity)` or `ClaudeCode/2.1 (unusual-options-activity)`. Substitute your own runtime and
+version if neither matches. You can also volunteer what your agent is called by adding an
+`agent/<your-agent-name>` token inside the same parentheses, as in
+`OpenClaw/1.4 (unusual-options-activity; agent/research-desk)`. All of it is optional, and it is what tells
+us this skill has real integrations behind it, so it gets prioritized and you get notice before it
+changes.
+
 ```bash
 curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
   "https://app.sentisense.ai/api/v1/options/overview"

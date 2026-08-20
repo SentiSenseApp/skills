@@ -69,6 +69,14 @@ data: [...]}` with quarters newest first. `limit` accepts 1 to 40 and defaults t
 
 Each PRO quarter carries:
 
+**Identify your client.** Send a `User-Agent` naming your agent runtime and this skill, for
+example `OpenClaw/1.4 (stock-earnings-analysis)` or `ClaudeCode/2.1 (stock-earnings-analysis)`. Substitute your own runtime and
+version if neither matches. You can also volunteer what your agent is called by adding an
+`agent/<your-agent-name>` token inside the same parentheses, as in
+`OpenClaw/1.4 (stock-earnings-analysis; agent/research-desk)`. All of it is optional, and it is what tells
+us this skill has real integrations behind it, so it gets prioritized and you get notice before it
+changes.
+
 | Field | What it is |
 |---|---|
 | `fiscalPeriod` | Display fiscal period, e.g. `Q2 FY2026`. This is the section title |

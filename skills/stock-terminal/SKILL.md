@@ -62,6 +62,14 @@ Use of the SentiSense API is subject to the [API Terms of Service](https://senti
 
 ## Authentication
 
+**Identify your client.** Send a `User-Agent` naming your agent runtime and this skill, for
+example `OpenClaw/1.4 (stock-terminal)` or `ClaudeCode/2.1 (stock-terminal)`. Substitute your own runtime and
+version if neither matches. You can also volunteer what your agent is called by adding an
+`agent/<your-agent-name>` token inside the same parentheses, as in
+`OpenClaw/1.4 (stock-terminal; agent/research-desk)`. All of it is optional, and it is what tells
+us this skill has real integrations behind it, so it gets prioritized and you get notice before it
+changes.
+
 ```bash
 curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
   "https://app.sentisense.ai/api/v1/stocks/price?ticker=NVDA"
@@ -753,7 +761,7 @@ Below the table, write a one-line "edge" summary: which ticker has the better co
 1. `GET /api/v1/stocks/market-status`
 2. `GET /api/v2/market-mood`
 3. `GET /api/v1/market-summary`
-4. `GET /api/v1/insights/market` (top 5)
+4. `GET /api/v1/insights/market` (top 3)
 5. `GET /api/v1/stocks/prices?tickers=SPY,QQQ,IWM,DIA`
 
 **Output template:**
@@ -762,13 +770,17 @@ DAILY BRIEF · {date} · Market {OPEN/CLOSED}
 ────────────────────────────────────────────
 INDEXES   $SPY {p} ({d}%)  $QQQ {p} ({d}%)  $IWM {p} ({d}%)  $DIA {p} ({d}%)
 MOOD      {score} ({phase})  {weeklyChange} 7d
-HEADLINE  {marketSummary.headline}
+HEADLINE  {headline}
 
 TOP SIGNALS
 1. {insight1.insightText}
 2. {insight2.insightText}
 3. {insight3.insightText}
 ```
+
+`{headline}` comes from call 3, `GET /api/v1/market-summary`: the response is flat at the
+root (`expandedContent`, `generatedAt`, `headline`, `lastUpdated`), there is no `marketSummary`
+wrapper.
 
 `/api/v1/insights/market` items expose `insightText` (no `headline` field) and carry no
 standalone `ticker` field; the ticker is embedded in `insightText` (and in `insightId`), so
@@ -812,12 +824,15 @@ Market Dir     {v}  ({d})
 Risk Appetite  {v}  ({d})
 Social Mom     {v}  ({d})
 S&P 500 Trend  {v}  ({d})
+Options Flow   {v}  ({d})
 
 SECTORS (top 3 / bottom 3)
-Tech     {s} ({d})    Energy   {s} ({d})
-Comms    {s} ({d})    Utils    {s} ({d})
-Disc     {s} ({d})    Staples  {s} ({d})
+{sectorName1}  {s} ({d})    {sectorName4}  {s} ({d})
+{sectorName2}  {s} ({d})    {sectorName5}  {s} ({d})
+{sectorName3}  {s} ({d})    {sectorName6}  {s} ({d})
 ```
+
+Sort the `sectors` dict by `currentScore` descending; `{sectorName1..3}` are the top 3 (left column), `{sectorName4..6}` are the bottom 3 (right column, still highest-to-lowest of that group). The response returns 11 GICS level-1 sectors with full names (e.g. `Information Technology`, `Communication Services`, `Consumer Discretionary`); if a full name doesn't fit the grid, abbreviate consistently and say in the output that names are abbreviated, rather than guessing a fixed shorthand per sector.
 
 ---
 
@@ -1245,7 +1260,7 @@ CALENDAR      GET /api/v1/calendar/earnings?week=this|next     (Public preview: 
 MARKET        GET /api/v1/market-summary
 ```
 
-**Wrap vs flat (verify per endpoint, do not assume).** Read these FLAT, with no `.data`: `price`, `prices`, `chart`, `popular`, `market-mood`, `stocks/{T}/profile`, `descriptions`, and `sentiment` (bare array). `institutional/quarters` is a bare array too (take the `reportDate` of the first entry whose `pending` is not true; skip `pending:true` quarters, do not blindly take `[0].reportDate`). `documents/ticker` has its own shape `{ documents, totalCount, ... }` (read `.documents[]`). These ARE wrapped in `{ isPreview, previewReason, data }` (read `.data`): `insider/*`, `analyst/*`, `insights/*`, `politicians/*`, `institutional/holders`. When unsure, accept both: `const rows = Array.isArray(raw) ? raw : (raw?.data ?? raw)`.
+**Wrap vs flat (verify per endpoint, do not assume).** Read these FLAT, with no `.data`: `price`, `prices`, `chart`, `popular`, `market-mood`, `stocks/{T}/profile`, `descriptions`, and `sentiment` (bare array). `institutional/quarters` is a bare array too (take the `reportDate` of the first entry whose `pending` is not true; skip `pending:true` quarters, do not blindly take `[0].reportDate`). `documents/ticker` has its own shape `{ documents, totalCount, ... }` (read `.documents[]`). These ARE wrapped in `{ isPreview, previewReason, data }` (read `.data`): `insider/*`, `analyst/*`, `insights/*`, `politicians/*`, `institutional/holders`, and `calendar/earnings` (whose `data` is a dict, so read `data.earnings[]`). When unsure, accept both: `const rows = Array.isArray(raw) ? raw : (raw?.data ?? raw)`.
 
 ---
 

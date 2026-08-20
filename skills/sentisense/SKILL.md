@@ -34,13 +34,50 @@ curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
   "https://app.sentisense.ai/api/v1/..."
 ```
 
+**Identify your client.** Send a `User-Agent` naming your agent runtime and this skill, for
+example `OpenClaw/1.4 (sentisense)` or `ClaudeCode/2.1 (sentisense)`. Substitute your own runtime and
+version if neither matches. You can also volunteer what your agent is called by adding an
+`agent/<your-agent-name>` token inside the same parentheses, as in
+`OpenClaw/1.4 (sentisense; agent/research-desk)`. All of it is optional, and it is what tells
+us this skill has real integrations behind it, so it gets prioritized and you get notice before it
+changes.
+
 ```python
 import os
 from sentisense import SentiSenseClient
 client = SentiSenseClient(api_key=os.environ["SENTISENSE_API_KEY"])
 ```
 
-All API endpoints require an API key. Get one free at https://app.sentisense.ai/get-api-key (manage it anytime in the [Developer Console](https://app.sentisense.ai/settings/developer)).
+All API endpoints require an API key. Get one free at https://app.sentisense.ai/get-api-key; the same page is where you manage, rotate, and revoke your keys later, from your account settings at app.sentisense.ai.
+
+### CLI quickstart (optional)
+
+Prefer one command over composing HTTP calls? The official CLI ships inside the `sentisense`
+npm package, so there is nothing to install:
+
+```bash
+npx -y sentisense@latest health
+npx -y sentisense@latest quote NVDA
+npx -y sentisense@latest sentiment TSLA --days 30
+npx -y sentisense@latest mood --json
+```
+
+Auth: set `SENTISENSE_API_KEY` in the environment, or store it once with
+`npx -y sentisense@latest auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file
+mode 600). Use version 0.44.0 or newer.
+
+Identity works the same as the User-Agent guidance above, and the CLI stamps it for you: set
+`SENTISENSE_SKILL=sentisense` and, if you like, `SENTISENSE_AGENT_NAME=<what your agent is
+called>`.
+
+Output is plain text when piped and formatted in a terminal; add `--json` for the exact API
+response, envelope included, so every response shape documented below applies unchanged. Exit
+codes are stable (0 ok, 2 usage, 3 auth, 4 not found, 5 rate limited, 6 network). For the full
+command list and deeper CLI mechanics, install the dedicated `sentisense-cli` skill or run
+`npx -y sentisense@latest --help`.
+
+Everything the CLI does is also available as the plain REST calls documented below; the CLI is
+a convenience, not a requirement.
 
 ### Access Tiers
 
@@ -116,6 +153,13 @@ Market overview combining prices, sentiment, and top signals.
 - `GET /api/v1/insights/market` for the top market-moving signals right now
 - `GET /api/v1/stocks/prices?tickers=SPY,QQQ,IWM,DIA` for index tracking
 
+### Cross-Signal Stock Screener
+Filter the whole tracked universe on the SentiSense Score and attention in the same query as analyst consensus, technicals and price. The differentiated screens are the disagreements: crowd bullish where the street is not, price below its 200-day while the Score is rising.
+- `GET /api/v1/screener/fields` once at startup for the filterable field catalog (stock and ETF), then build filters from it
+- `GET /api/v1/screener/screens` for 28 curated screens, each with a plan you can execute as-is
+- `POST /api/v1/screener/execute` to run a plan against the stock universe (or a `tickers` watchlist)
+- `POST /api/v1/screener/etfs/execute` for the same against the ETF universe
+
 ### Market Sentiment Structure
 Which way the market's tone leans, and how widely it's shared. Daily snapshots.
 - `GET /api/v1/sentiment/sectors` for the 11 GICS sectors vs the market's own tone (`consensusVsMarket` + "Hotter/Cooler than market" labels; market-relative because news tone skews positive as a genre)
@@ -147,6 +191,7 @@ Do not hallucinate these. They are not part of the SentiSense API:
 - `/api/v1/chat` or `/api/v1/ask`: the AI chat is not accessible via API
 - `/api/v2/sentiment`: the correct path is `/api/v2/metrics/entity/{id}/metric/sentiment`
 - `/api/v1/congress` or `/api/v1/congressional`: the correct path is `/api/v1/politicians`
+- `/api/v1/screener/plan` and `/api/v1/screener/plans`: there is no natural-language screen planner and no saved-screen store on the public API. Build the plan object yourself and post it to `/api/v1/screener/execute`, or execute one of the curated plans from `/api/v1/screener/screens`
 
 ---
 
@@ -164,7 +209,9 @@ curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
   "https://app.sentisense.ai/api/v1/stocks/price?ticker=AAPL"
 ```
 
-Response: `{ ticker, currentPrice, change, changePercent, previousClose, volume, timestamp, priceAsOf?, expiresEpochSecond, extendedHours? }`.
+Response: `{ ticker, currentPrice, change, changePercent, previousClose, volume, timestamp, priceAsOf?, expiresEpochSecond, extendedHours?, listingStatus?, delistedDate?, delistingReason? }`.
+
+**A delisted symbol returns its last trade price, not an error, and `listingStatus` is what marks that price as frozen.** The three listing fields are present only when the symbol is delisted or pending delisting, and absent otherwise. `listingStatus` is `"DELISTED"` or `"PENDING_DELISTING"`; `delistedDate` is the ISO date trading stopped; `delistingReason` is one of `acquired`, `take_private`, `bankruptcy`, `exchange_rule`, `merged`. On a `"DELISTED"` symbol the price, change, and change percent never advance again, so do not render them as a current tick.
 
 **Prices are delayed 15 minutes.** This applies to every price on this API, in every session, including the `extendedHours` values below. Do not present these quotes as live, and do not use them for execution or for any decision that turns on the current tick.
 
@@ -173,7 +220,7 @@ Read **`priceAsOf`** for freshness: it is when the market data behind `currentPr
 `currentPrice` is always the regular-session price: the most recent regular-session value during RTH (09:30 to 16:00 ET), and the most recent regular-session close otherwise. The optional `extendedHours` field is present only during pre-market (04:00 to 09:30 ET) or after-hours (16:00 to 20:00 ET) and carries `{ session: "pre" | "post", price, change, changePercent }`, where `change` / `changePercent` are computed vs `currentPrice`.
 
 ### GET /api/v1/stocks/prices
-Batch latest prices, 15-minute delayed (see `/price` above). **Public.** Returns a JSON array; each element has the same shape as `/price` (including a `ticker` field and an optional `extendedHours` object).
+Batch latest prices, 15-minute delayed (see `/price` above). **Public.** Returns a JSON array; each element has the same shape as `/price` (including a `ticker` field, an optional `extendedHours` object, and the optional `listingStatus` / `delistedDate` / `delistingReason` fields), so check each element for a frozen price rather than assuming a batch is uniformly live.
 
 | Param | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -231,6 +278,8 @@ Company profiles with branding, industry, and market cap; `sector` when availabl
 ### GET /api/v1/stocks/{ticker}/profile
 Company profile (CEO, sector, industry). **Public.**
 
+Also carries `listingStatus`, `delistedDate` and `delistingReason` when the symbol is delisted or pending delisting. All three are absent for a normally listed symbol. Values match `/price` above: `listingStatus` is `"DELISTED"` or `"PENDING_DELISTING"`, `delistedDate` is the ISO date trading stopped, `delistingReason` is one of `acquired`, `take_private`, `bankruptcy`, `exchange_rule`, `merged`.
+
 ### GET /api/v1/stocks/{ticker}/similar
 Peer/similar stocks. **Public.**
 
@@ -245,12 +294,12 @@ Returns `ticker`, `companyName`, `asOf`, then:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `sentisenseScore` | number | Latest Score (0-centered composite of sentiment and mentions, unbounded) |
+| `sentisenseScore` | number or null | Today's Score (0-centered composite of sentiment and mentions, unbounded). Null until today's reading lands, see the note below |
 | `sentisenseScoreAvg30d` | number | 30-day average, the stable regime figure |
 | `sentisenseScoreDelta30d` | number | Change over 30 days |
 | `scoreLabel` | string | Seven-band label of the 30-day average |
 | `direction` | string | `Bullish`, `Neutral` or `Bearish`, from the 30-day average |
-| `latestDirection` | string | Same three bands, from today's read |
+| `latestDirection` | string or null | Same three bands, from today's read. Null in lockstep with `sentisenseScore` |
 | `trend` | string | `UP`, `DOWN` or `FLAT` |
 | `scoreSparkline` | number[] | Daily Score series |
 | `mentions` / `mentionsAvg30d` | number | Today's mention volume, and the 30-day daily average |
@@ -263,9 +312,13 @@ Returns `ticker`, `companyName`, `asOf`, then:
 
 Use this when you want the headline read in one call. Use `GET /api/v2/metrics/entity/{ticker}/metric/sentiment` instead when you need a time series over a specific window. Returns `404` when the ticker has no sentiment coverage.
 
+**`sentisenseScore` and `latestDirection` are today's reading, and are `null` until the day's first analytics run lands** (mid-morning ET, later at weekends). Poll before that and every ticker returns null for these two, which is a timing state and not an outage. The rest of the response is unaffected: `scoreLabel`, `direction` and `sentisenseScoreAvg30d` are all computed from the 30-day average, so prefer those when you need a headline that is always present. A null here means "no reading yet", never a Score of zero. A measured 0.0 is served as `0.0`, so do not coerce null to 0, and do not infer absence by thresholding the 30-day average, which would suppress genuine neutrals.
+
 Aggregate metrics such as sentiment and mention counts incorporate signals from sources that are not individually retrievable as documents, so document counts from the Documents API are not a complete audit trail of a score.
 
 > Via the MCP connector this same picture comes back from the `get_stock_snapshot` tool rather than a separate sentiment tool.
+
+CLI equivalent: `npx -y sentisense@latest sentiment NVDA --json` (this response is under `.sentiment`, next to a Score history series)
 
 ### GET /api/v1/stocks/{ticker}/entities
 Related ontology entities (CEO, products, partners). **Public.** Each entry carries a `urlSlug` (e.g. `Tim-Cook`) that plugs into the Metrics API `{entityId}` parameter.
@@ -395,11 +448,15 @@ Short volume trading data. **Public.**
 ### GET /api/v1/stocks/{ticker}/quote
 Aggregate quote snapshot: latest price (15-minute delayed), today OHLC, 52-week range, market cap, P/E, EPS TTM, dividend yield, 200-day moving average. Single call for detail pages. **API key required.**
 
-Response: `{ ticker, currentPrice, change, changePercent, volume, open, dayHigh, dayLow, previousClose, week52High, week52Low, marketCap, peRatio, epsTTM, dividendYield, movingAverage200Day, reportedCurrency, timestamp, extendedHours? }` -- all fields except `ticker` are nullable. `currentPrice` is always the regular-session price; the optional `extendedHours` object (`{ session, price, change, changePercent }`) is present only during pre-market or after-hours. `movingAverage200Day` is `null` when fewer than 200 trading days of history exist. `reportedCurrency` ("USD", "EUR", "KRW", ...) names the currency `epsTTM` is reported in, matching the fundamentals endpoints. Cached 15 s server-side.
+Response: `{ ticker, currentPrice, change, changePercent, volume, open, dayHigh, dayLow, previousClose, week52High, week52Low, marketCap, peRatio, epsTTM, dividendYield, movingAverage200Day, reportedCurrency, timestamp, extendedHours?, listingStatus?, delistedDate?, delistingReason? }` -- all fields except `ticker` are nullable. `currentPrice` is always the regular-session price; the optional `extendedHours` object (`{ session, price, change, changePercent }`) is present only during pre-market or after-hours. `movingAverage200Day` is `null` when fewer than 200 trading days of history exist. `reportedCurrency` ("USD", "EUR", "KRW", ...) names the currency `epsTTM` is reported in, matching the fundamentals endpoints. Cached 15 s server-side.
 
 **Null fields are omitted, and foreign filers omit the fundamentals trio.** A null field is left out of the JSON entirely rather than serialized as `null`, so do not assume a key is present: read defensively. In particular `reportedCurrency`, `epsTTM` and `peRatio` are all absent on foreign ADR filers such as `ASML` and `TM`, while price fields and `dividendYield` are served normally. This is the same cross-currency rule as the fundamentals endpoints: the price is the USD ADR price and the filer's earnings are in home currency, so `peRatio` is withheld rather than computed across two currencies. Do not divide `currentPrice` by a non-USD `epsTTM` to fill the gap yourself.
 
+**Delisted symbols keep quoting their last trade.** `listingStatus`, `delistedDate` and `delistingReason` are present only when the symbol is delisted or pending delisting, and absent otherwise, with the same values as `/price`. When `listingStatus` reads `"DELISTED"`, every price field in this payload is frozen at the last trade before `delistedDate` and nothing else in the response says so.
+
 ETF tickers (e.g. `VTI`, `SPY`) return `400 ticker_is_etf` from this endpoint. Use `GET /api/v1/etfs/{ticker}/quote` instead, which returns AUM, expense ratio, NAV, and inception date rather than market cap, P/E, and EPS.
+
+CLI equivalent: `npx -y sentisense@latest quote NVDA --json`
 
 ### GET /api/v1/stocks/{ticker}/kpis
 Company-specific KPI time-series. Curated GAAP and non-GAAP metrics from earnings filings: iPhone unit sales, Tesla deliveries, AWS revenue, Netflix paid net adds, etc. **PRO (preview)** -- Free: metadata only with empty `kpis` list, PRO: full series. Returns 404 for tickers without curated coverage.
@@ -529,6 +586,79 @@ Historical and peer baselines for a metric. **Quota-gated**, available on the Fr
 
 ---
 
+## Market Sentiment API (`/api/v1/sentiment`)
+
+Market-wide sentiment structure: which way tone leans by sector, and how widely that lean is shared. Both endpoints serve a precomputed daily snapshot, so serving never recomputes and the values move once a day. Both are **Quota-gated** (API key required, each call counts against your monthly quota), take **no parameters**, and return their payload **flat**, with no `{isPreview, previewReason, data}` wrapper.
+
+Read tone here as market-relative. News and social tone carries a large structural positive skew as a genre, so an absolute sector reading is bullish almost every day and says little on its own. What carries information is a sector's distance from the market's own tone.
+
+### GET /api/v1/sentiment/sectors
+The 11 GICS sectors measured against the market's own tone, with the most bullish and most bearish member stock per sector. No parameters.
+
+Response: `{schemaVersion, generatedAt, asOf, narrative, marketConsensusRatio, sectors: [...]}`. `generatedAt` is epoch seconds, `asOf` is the ISO `YYYY-MM-DD` day the snapshot covers, `narrative` is a ready-to-print one-line summary, and `marketConsensusRatio` is the whole covered universe's directional-consensus ratio, the baseline every sector is measured against.
+
+```json
+{
+  "schemaVersion": "1.0",
+  "generatedAt": 1787177768,
+  "asOf": "2026-08-19",
+  "narrative": "As of 2026-08-19, Energy runs hottest versus the market's own tone, across 1028 covered US stocks.",
+  "marketConsensusRatio": 0.3259,
+  "sectors": [
+    {
+      "sector": "Energy",
+      "meanSentiment": 0.2086, "label": "Bullish",
+      "meanScore": 4.6723, "scoreLabel": "Neutral",
+      "consensusRatio": 0.4359, "consensusVsMarket": 0.11,
+      "consensusLabel": "Hotter than market",
+      "bullMentions": 844, "bearMentions": 331,
+      "stockCount": 52, "totalMentions": 339,
+      "topStock": {"ticker": "APA", "value": 0.9},
+      "bottomStock": {"ticker": "MUR", "value": -0.4}
+    }
+  ]
+}
+```
+
+Four field notes worth reading before rendering any of it:
+
+- **`consensusVsMarket` is the value to rank or color by.** It is `consensusRatio` minus `marketConsensusRatio`. A negative value means **cooler than the market**, not bearish; `consensusLabel` already carries the safe wording ("Hotter than market", "In line with market", "Cooler than market").
+- **`meanSentiment` and `meanScore` are different scales.** The first is polarity on [-1, 1]; the second is the SentiSense Score, open-ended and banded by `scoreLabel`. Do not compare them or plot them on one axis. `consensusRatio` is a tone ratio and is not a Score either, so do not run it through the Score bands.
+- **`stockCount` and `totalMentions` are confidence cues.** A sector carrying a handful of covered names is a thin reading; show the count next to the tile.
+- **`topStock` and `bottomStock`** are the sector's most bullish and most bearish member by polarity, each `{ticker, value}`, ready for a drill-down link.
+
+### GET /api/v1/sentiment/breadth
+The sentiment analogue of the advance/decline line: across the covered universe, what share of stocks is bullish versus bearish, today and daily back through the backfilled history. No parameters.
+
+Response: `{schemaVersion, generatedAt, asOf, minMentions, latest: {...}, series: [...]}`. `latest` is today's bucket, `series` is the daily history oldest to newest (the stacked distribution chart), and `minMentions` is the mention floor a stock must clear to be counted at all.
+
+```json
+{
+  "schemaVersion": "1.0",
+  "generatedAt": 1787177768,
+  "asOf": "2026-08-19",
+  "minMentions": 5,
+  "latest": {
+    "date": "2026-08-19",
+    "coveredStocks": 459, "totalMentions": 7984,
+    "bullish": 318, "neutral": 76, "bearish": 65,
+    "bullishPct": 69.28, "neutralPct": 16.56, "bearishPct": 14.16,
+    "netBreadth": 55.12,
+    "bullishMentionPct": 76.32, "neutralMentionPct": 14.4, "bearishMentionPct": 9.28,
+    "sentimentDispersion": 0.2884
+  },
+  "series": [{"date": "2026-07-02", "...": "same shape as latest"}]
+}
+```
+
+Every bucket carries the same classification under two weightings, and mixing them is the easy mistake. `bullish` / `neutral` / `bearish` and their `*Pct` are **stock-weighted**: one vote per covered stock, the true advance/decline analogue. `bullishMentionPct` / `neutralMentionPct` / `bearishMentionPct` are **mention-weighted**: the same votes weighted by how much each stock is being talked about. The two diverge when a few heavily discussed names lean against the crowd, which is itself the interesting reading.
+
+- `netBreadth` is `bullishPct` minus `bearishPct`, in percentage points on [-100, 100]. It says which way the market leans.
+- `sentimentDispersion` is the spread of per-stock polarity across that same universe. High means the tape is splitting name by name (a stock-picker's market), low means one shared mood is washing over everything. It says how much the market agrees with itself, which is a different question from which way it leans. Null when fewer than two stocks qualify.
+- `coveredStocks` is the denominator and it moves day to day with news volume, so compare percentages across days, never raw counts.
+
+---
+
 ## Market Mood API (`/api/v2/market-mood`)
 
 SentiSense's proprietary composite market sentiment index. Combines social sentiment, market direction, risk appetite, social momentum, S&P 500 trend, and options flow signals into a single 0-100 score with sector breakdown. **Free (API key required).** Free for all tiers, but anonymous calls return 401 api_key_required.
@@ -559,7 +689,7 @@ Response shape:
     "history": [
       {"date": "2026-04-01", "timestamp": 1743465600000, "score": 65.2,
        "socialSentiment": 56.1, "marketDirection": 72.0, "fearGauge": 61.0,
-       "socialMomentum": 63.5, "spyTrend": 70.0, "optionsFlow": null}
+       "socialMomentum": 63.5, "spyTrend": 70.0, "optionsFlow": 59.8}
     ]
   },
   "sectors": {
@@ -571,13 +701,15 @@ Response shape:
 
 **Phase interpretation** (`market.phase` and each sector's `phase`, by score): 0-15 Extreme Fear, 16-30 Fear, 31-45 Anxiety, 46-55 Neutral, 56-70 Optimism, 71-85 Greed, 86-100 Extreme Greed. `phase` is `"---"` when the score is null.
 
-The `options_flow` signal joined the composite on 2026-08-13, so `optionsFlow` is `null` on earlier history rows: treat `null` as "signal not yet part of the index", not zero. `signals[]` only lists signals present in the latest reading, so key off `key`, not array position or length.
+`signals[]` only lists signals present in the latest reading, so key off `key`, not array position or length.
 
 **Node SDK:**
 ```javascript
 const mood = await client.marketMood.get();
 console.log(mood.market.currentScore, mood.market.phase);
 ```
+
+CLI equivalent: `npx -y sentisense@latest mood --json`
 
 ---
 
@@ -642,8 +774,12 @@ AI-curated news story clusters. **Public.**
 
 Response: Story objects with a top-level `id` AND `clusterId` (both equal to the cluster id -- pass either to `/documents/stories/{clusterId}`), plus `cluster.title`, `cluster.averageSentiment`, `tickers`, `displayTickers`, `impactScore` (0-10), `brokeAt` (epoch seconds, nullable), `cluster.clusteredAt` (epoch seconds). Use `tickers` (bare symbols, e.g. `["AAPL"]`) programmatically; `displayTickers` are human-formatted labels (e.g. `["Apple Inc (AAPL)"]`) for display only, do not parse symbols out of them. The `cluster.createdAt` field (epoch millis) is deprecated and will be removed on or after 2026-08-16; use `cluster.clusteredAt`.
 
+CLI equivalent: `npx -y sentisense@latest news --limit 20 --json` (the CLI does not expose `filterHours`)
+
 ### GET /api/v1/documents/stories/ticker/{ticker}
 News stories for a specific stock. **Public.** Takes `limit` only (default 5, capped at 20): there is no lookback window here, so `days` / `hours` / `filterHours` are ignored. Use `/documents/stories` with `filterHours` for a freshness window.
+
+CLI equivalent: `npx -y sentisense@latest news NVDA --limit 5 --json`
 
 ### GET /api/v1/documents/stories/{clusterId}
 Full detail for a single story cluster. **Public** -- Free: 10 story views/month, PRO: unlimited. Each list item from `/stories` and `/stories/ticker/{ticker}` carries a top-level `id` AND a `clusterId` (both equal to the cluster id); pass either one here as `{clusterId}`.
@@ -679,6 +815,8 @@ Aggregate institutional buying/selling per ticker. **Public (preview)** -- Free:
 
 Response: `{ isPreview, previewReason, data: { inflows: [...], outflows: [...], reportDate, isPending, filerCount, baselineFilerCount } }`. `reportDate` is the quarter served (useful when you omitted the param). `isPending` is true when that quarter is still inside the 45-day 13F filing window, so only early filers are represented; when pending, `filerCount` and `baselineFilerCount` give the coverage (e.g., 578 of 8789 filers) and are null otherwise. Each flow includes net share changes, new/closed positions, and per-category breakdowns (indexFundNetChange, hedgeFundNetChange, etc.). Flows are ranked by `dollarFlowUsd` (= `netSharesChange × avgClosePrice`): inflows DESC, outflows ASC. `avgClosePrice` is null and `dollarFlowUsd` is 0 for tickers without a cached quarterly price; clients should fall back to `netSharesChange` for those rows.
 
+CLI equivalent: `npx -y sentisense@latest flows --limit 50 --json`
+
 ### GET /api/v1/institutional/holders/{ticker}
 Institutional holders for a stock. **Public (preview)** -- Free: top 5, PRO: full data.
 
@@ -691,6 +829,8 @@ Institutional holders for a stock. **Public (preview)** -- Free: top 5, PRO: ful
 | `sortDir` | string | No | `desc` (default) or `asc` (used with `limit`) |
 
 Response: `{ isPreview, previewReason, data: { ticker, companyName, reportDate, totalInstitutionalShares, holderCount, holders: [...] } }`. The holder list is nested at `data.holders` (not `data` directly). Each holder includes filer name, category, shares, value, change type (NEW/INCREASED/DECREASED/SOLD_OUT/UNCHANGED). `holderCount` is always the full-quarter count; on paged requests `data` also carries `returnedCount`, `offset`, and `notableChanges` (`{count, top}`: holders with a 10%+ change on 10k+ shares, top 5 by dollar impact).
+
+CLI equivalent: `npx -y sentisense@latest flows NVDA --json` (it reads `/quarters` first and passes the latest settled `reportDate`)
 
 ### GET /api/v1/institutional/activist
 Activist investor positions (NEW or INCREASED stakes). **Public (preview)** -- Free: top 3, PRO: full data.
@@ -768,6 +908,8 @@ for t in trades.data:
     print(f"{t['transactionDate']} {t['insiderName']} {t['transactionType']} {t['sharesTransacted']} shares")
 ```
 
+CLI equivalent: `npx -y sentisense@latest insiders AAPL --days 90 --json`
+
 ### GET /api/v1/insider/cluster-buys
 Cluster buy signals: stocks where 3+ distinct insiders purchased recently. **Public (preview)** -- Free: top 5, PRO: full data.
 
@@ -807,6 +949,8 @@ for trade in activity.data:
     print(f"{trade['politicianName']} ({trade['party']}-{trade['state']}): {trade['transactionType']} {trade['ticker']}")
 ```
 
+CLI equivalent: `npx -y sentisense@latest congress --days 90 --limit 200 --json` (no `offset`, so the CLI reads the first page only)
+
 ### GET /api/v1/politicians/filings/{ticker}
 Congressional trades for a specific stock, sorted by disclosure date (most recently disclosed first). **Public (preview)** -- Free: top 3, PRO: full data.
 
@@ -816,6 +960,8 @@ Congressional trades for a specific stock, sorted by disclosure date (most recen
 | `lookbackDays` | int | No | 90 | Trailing window applied to the disclosure date (1-365) |
 
 Response: same preview wrapper and trade object schema as `/activity`.
+
+CLI equivalent: `npx -y sentisense@latest congress NVDA --days 90 --json`
 
 ### GET /api/v1/politicians/members
 All tracked politicians with trading summaries, sorted by total trade count. **Public (preview)** -- Free: top 5, PRO: full list.
@@ -830,8 +976,12 @@ Detailed profile for a single politician: summary stats, recent trades, and top 
 | Param | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `slug` | path | Yes | - | Politician URL slug (from `/members`) |
+| `limit` | int | No | 200 | Trades per page in `recentTrades`. Above 500 is clamped to 500; below 1 returns 400 `invalid_limit` |
+| `offset` | int | No | 0 | Trades to skip, for paging the history. Negative returns 400 `invalid_offset` |
 
-Response: `{ isPreview, previewReason, data: { profile: {...}, recentTrades: [...], topTickers: [...] } }`.
+Response: `{ isPreview, previewReason, totalCount, data: { profile: {...}, recentTrades: [...], topTickers: [...] } }`.
+
+`recentTrades` is one page of the member's history, newest transaction first, not all of it. Most members disclose a few dozen trades and arrive complete in the default page; a handful have disclosed thousands. `totalCount` is the whole history, so `offset + recentTrades.length < totalCount` means there is another page. `profile` and `topTickers` always describe the whole history whatever page you ask for, so `profile.totalTrades` does not shrink with a small `limit`.
 
 ---
 
@@ -858,6 +1008,8 @@ result = client.get_stock_insights("AAPL", urgency="high")
 for i in result.data:
     print(f"[{i['urgency'].upper()}] {i['insightType']}: {i['insightText'][:80]}")
 ```
+
+CLI equivalent: `npx -y sentisense@latest insights AAPL --urgency high --json` (`--type` covers `insightType`)
 
 ### GET /api/v1/insights/stock/{ticker}/range
 Per-stock insights within a date range, sorted by urgency then confidence. **PRO (preview)** -- Free: top 3, PRO: full list. Returns `400 invalid_parameter` when `startDate` is after `endDate`.
@@ -925,6 +1077,8 @@ Response: `{ isPreview, previewReason, data: { ticker, currentPrice, targetLow, 
 
 **`currentPrice` on this endpoint is not the live quote.** It is the reference price captured when the analyst snapshot was written, dated by `updatedAt`, and `upsidePercent` is computed against that same reference so the band and the upside stay internally consistent. Expect it to drift from the traded price between snapshots (a few percent is normal). When you need the current regular-session price, read `currentPrice` from `/api/v1/stocks/price` or `/api/v1/stocks/{ticker}/quote` instead, where the field tracks the session and carries the standard 15-minute delay rather than a snapshot's age.
 
+CLI equivalent: `npx -y sentisense@latest analysts AAPL --json` (this response is under `.consensus`)
+
 ### GET /api/v1/analyst/{ticker}/actions
 Recent analyst upgrade/downgrade actions for a ticker, newest first. **PRO (preview)** -- Free: 3 most recent, PRO: full list.
 
@@ -934,6 +1088,8 @@ Recent analyst upgrade/downgrade actions for a ticker, newest first. **PRO (prev
 | `lookbackDays` | int | No | 90 | Days of history to return |
 
 Action object: `{ ticker, actionDate, firm, actionType (UPGRADE/DOWNGRADE/INITIATE/REITERATE/OTHER), fromGrade, toGrade }`.
+
+CLI equivalent: `npx -y sentisense@latest analysts AAPL --days 90 --json` (this response is under `.actions`)
 
 ### GET /api/v1/analyst/{ticker}/estimates
 Forward EPS estimates and recent earnings surprise history. **PRO (preview)** -- Free: 1 estimate (current quarter) + 2 most recent surprises, PRO: full history.
@@ -1086,6 +1242,8 @@ curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
   "https://app.sentisense.ai/api/v1/stocks/NVDA/options/summary"
 ```
 
+CLI equivalent: `npx -y sentisense@latest options NVDA --json`
+
 ETFs use the same path, and it is the only way to reach them since the Radar board is stocks-only:
 
 ```bash
@@ -1109,6 +1267,153 @@ curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
 ```
 
 **When to use these:** call `/options/overview` (no ticker) for the market-wide read of where options activity and implied volatility are unusual today, then drill into a name with `/stocks/{ticker}/options/summary` for its full dossier (walls, max pain, unusual contracts). For a macro or sector read, use `data.etfRows` from the overview, or go straight to an ETF dossier (`SPY`, `QQQ`, `IWM`, `TLT`, `GLD`, the sector `XL*` funds). Use `/stocks/{ticker}/options/history` to chart how a reading (IV, put/call, skew) has trended over time (history is backfilled from mid-2024, so `5y` currently returns about two years). Every value is a percentile of that stock's own past, so read it as "elevated or muted versus this stock's own history", not as a cross-stock ranking.
+
+---
+
+## Screener API (`/api/v1/screener`)
+
+Run a structured filter over the tracked universe and get every matching row back in one response. This is the only place where the SentiSense Score and attention are queryable in the same filter as analyst consensus, technicals and price. That cross is the point: screening on analyst ratings alone is something a dozen free tools already do, screening on analyst ratings where the SentiSense Score disagrees is not.
+
+Four endpoints, all **API key required**. Call `/fields` once to learn the catalog, then execute plans against it. Screens read a snapshot that refreshes every 20 minutes and the Score windows behind it are daily, so this is not a quote feed and should not be polled per second (for live prices use the Stocks API quote endpoints). One screen is one request no matter how many rows it returns, so prefer one broad screen plus client-side slicing over many narrow ones.
+
+**The plan object.** Every screen is a `plan`, and the same shape works for both universes.
+
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| `filters` | array | required | ANDed together. There is no OR: run two screens and merge |
+| `sort` | object | none | `{ "fieldName": "<FIELD>", "dir": "ASC" \| "DESC" }` |
+| `universe` | string | set by the path | The body value is a no-op; the endpoint you call decides stock vs ETF |
+
+Each filter is `{ "fieldName": "<FIELD>", "op": "<OP>", "value": <number> }`. Operators: `GTE`, `LTE`, `GT`, `LT`, `EQ`, `NEQ`, `IN`, `NOT_IN`. `IN` / `NOT_IN` take a `values` array instead of `value` and are only meaningful on the string-typed ETF fields (`ISSUER`, `ASSET_CLASS`, `TRACKED_INDEX`). Every curated plan from `/screens` carries `fieldName` on every filter and sort, in both universes, so read that one key. A legacy `field` key (the stock-only enum) is also accepted on input and still appears alongside `fieldName` on some stock plans; it holds the same name and can be ignored. When both are present, `fieldName` wins.
+
+**`limit` sits next to `plan` on the request body, never inside it.** The plan object has no `limit` field, so a nested one is ignored and you silently get the default. It defaults to 100 and caps at 500.
+
+**Nulls never match.** A row missing the field you filtered on is excluded in both directions, so `RETURN_1Y >= 0` and `RETURN_1Y < 0` do not partition the universe: a stock listed four months ago is in neither result. Sorting puts nulls last regardless of direction. Coverage is not uniform (analyst fields cover most of the universe, the 200-day technicals only names with at least 200 trading days of history), so when a screen returns fewer rows than you expect, check coverage before you touch your thresholds.
+
+**Reading the SentiSense Score.** Most interesting screens filter on the Score, and it is not sentiment polarity. Sentiment is a [-1, 1] polarity measure; the Score is an unbounded, volume-aware measure of directional conviction that currently runs roughly -30 to +45 across the tracked universe. Filter on the band edges (`5`, `13`, `23`), not on polarity-scale values like `0.5`, which behave as "any positive score":
+
+| Range | Reading |
+|-------|---------|
+| -5 to +5 | Neutral |
+| +5 to +13 | Slightly bullish |
+| +13 to +23 | Bullish |
+| +23 and above | Strong |
+
+Symmetric on the bearish side. `SENTI_SCORE_7D` and `SENTI_SCORE_1M` are window averages; `SCORE_CHANGE_7D` is the 7-day Score minus the 1-month baseline, so positive means strengthening against the longer window.
+
+**The Score is a nowcast, not a forecast.** It reads how bullish or bearish the market currently is on a stock, weighted by how actively that stock is being discussed. It does not predict price. Present a screen as what it is, a filtered list of current readings, and never label a high Score a buy signal, a price target, or a prediction.
+
+### GET /api/v1/screener/fields
+The full catalog for both universes: every filterable field with its group, unit, accepted operators, sortability and a human description. **API key required.** No parameters. Call this once and build filters from the response rather than hardcoding names, and you inherit new fields as they ship.
+
+Response: `{ stock: [...], etf: [...] }`, each entry `{ name, label, group, type, unit, ops, sortable, description }`. The string-typed ETF fields (`ISSUER`, `ASSET_CLASS`, `TRACKED_INDEX`) also carry a `values` array populated from the live universe, so pickers stay current without a redeploy.
+
+CLI equivalent: `npx -y sentisense@latest screen --fields --json`
+
+Stock fields by group:
+
+| Group | Fields |
+|-------|--------|
+| Sentiment | `SENTI_SCORE_7D`, `SENTI_SCORE_1M`, `SCORE_CHANGE_7D`, `SENTIMENT_DIRECTION`, `SENTI_SCORE_TREND_7D`, `SENTI_SCORE_TREND_30D`, `SENTI_SCORE_RISING_STREAK_30D` |
+| Popularity | `SOCIAL_DOMINANCE`, `MENTION_SHARE`, `MENTION_VELOCITY`, `DOMINANCE_CHANGE` |
+| Price & size | `MARKET_CAP`, `PRICE`, `CHANGE_PERCENT`, `CHANGE`, `VOLUME`, `PCT_OFF_52W_HIGH`, `PCT_OFF_52W_LOW`, `PRICE_TREND_30D` |
+| Analyst | `ANALYST_BUY_RATIO_PCT`, `ANALYST_TARGET_UPSIDE_PCT`, `ANALYST_COUNT`, `ANALYST_RATING_MOMENTUM_30D`, `ANALYST_RATING_MEAN` |
+| Technical | `PCT_OFF_200D_MA`, `PCT_OFF_50D_MA`, `MA_CROSS_STATE`, `RETURN_1M`, `RETURN_3M`, `RETURN_6M`, `RETURN_1Y`, `VOLATILITY_30D` |
+
+ETF fields by group:
+
+| Group | Fields |
+|-------|--------|
+| Sentiment | `CONSTITUENTS_WEIGHTED_SENTISENSE`, `DIRECT_SENTISENSE` |
+| Analyst | `WEIGHTED_ANALYST_UPSIDE` |
+| Price & size | `MARKET_CAP` (AUM), `EXPENSE_RATIO`, `CURRENT_PRICE`, `CHANGE_PERCENT`, `PRICE_CHANGE`, `VOLUME`, `PCT_OFF_52W_HIGH`, `PCT_OFF_52W_LOW` |
+| Coverage | `WEIGHT_COVERED_PCT`, `HOLDINGS_COUNT` |
+| Profile | `ISSUER`, `ASSET_CLASS`, `TRACKED_INDEX` |
+
+**Four field semantics worth stating outright**, because guessing them wrong produces a screen that looks fine and means nothing:
+
+- **`SENTI_SCORE_*` and `SCORE_CHANGE_*` are the SentiSense Score, not sentiment.** The field names keep a legacy spelling, so describe them to users as the Score. See the band table above for the thresholds that actually mean something.
+- **`ANALYST_RATING_MEAN` is inverted.** It is the industry-standard 1-to-5 analyst scale where **1.0 is strong buy** and 5.0 is sell. Bullish is `LTE 2.5`, not `GTE`. Prefer `ANALYST_BUY_RATIO_PCT`, which runs the intuitive direction.
+- **`MA_CROSS_STATE` is ordinal, not boolean.** `1` golden cross (50-day above 200-day), `-1` death cross, `0` neither. Use `EQ`.
+- **`SENTIMENT_DIRECTION` is the sign of the 7-day Score** with a neutral band: `1` above +5, `-1` below -5, `0` in between. Despite the name it is not sentiment polarity.
+
+`ANALYST_COUNT` is the sum of the rating buckets, deliberately not the same population as the target-price panel, so the two counts disagree for most tickers. When you screen on `ANALYST_BUY_RATIO_PCT`, add an `ANALYST_COUNT >= 5` leg: coverage bottoms out at a single analyst, and a 0% buy ratio from one analyst is noise, not disagreement.
+
+### GET /api/v1/screener/screens
+The 28 curated screens shipped in the product, each with an executable plan you can run directly or use as a starting point. **API key required.** No parameters.
+
+Response: `{ screens: [{ id, name, summary, plan }] }`. The set covers both universes (the ETF ones are prefixed `etf-`). Two conventions in the names are load-bearing: `+` means both conditions hold, `vs` means the two sides disagree. Screen `id` values are stable and safe to persist; `name` and `summary` are display copy and may be revised.
+
+```bash
+curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
+  "https://app.sentisense.ai/api/v1/screener/screens"
+```
+
+CLI equivalent: `npx -y sentisense@latest screen --list --json` (run one with `screen --screen <id>`)
+
+### POST /api/v1/screener/execute
+Run a plan against the stock universe. **API key required.**
+
+| Body field | Type | Required | Default | Description |
+|------------|------|----------|---------|-------------|
+| `plan` | object | Yes | - | The plan object described above |
+| `tickers` | array | No | whole universe | Restrict the screen to a watchlist. Omit it to screen every tracked ticker (roughly 1,000) |
+| `limit` | int | No | 100 | Rows returned, capped at 500. Sits here, not inside `plan` |
+
+```bash
+curl -X POST "https://app.sentisense.ai/api/v1/screener/execute" \
+  -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "plan": {
+      "filters": [
+        { "fieldName": "SENTI_SCORE_7D", "op": "GTE", "value": 13 },
+        { "fieldName": "ANALYST_BUY_RATIO_PCT", "op": "LTE", "value": 30 },
+        { "fieldName": "ANALYST_COUNT", "op": "GTE", "value": 5 }
+      ],
+      "sort": { "fieldName": "SENTI_SCORE_7D", "dir": "DESC" }
+    },
+    "limit": 25
+  }'
+```
+
+CLI equivalent: `npx -y sentisense@latest screen --filter SENTI_SCORE_7D:GTE:13 --filter ANALYST_BUY_RATIO_PCT:LTE:30 --filter ANALYST_COUNT:GTE:5 --sort SENTI_SCORE_7D:DESC --limit 25 --json`
+
+That is the "crowd is bullish, the street is not" screen. To run the same plan over a watchlist instead, add `"tickers": ["NVDA", "AMD", "AVGO"]` next to `plan`.
+
+Response: `{ matched, limit, results: [...] }`. **`matched` is the number of rows the plan matched before `limit` was applied**, so truncation is visible: a capped list with no count is how a caller quietly concludes the universe is smaller than it is. Every row carries the full field set, not only the fields you filtered on, so you can re-sort or post-process client side without a second call; fields with no data for that ticker are `null`. Row shape: `{ ticker, sentiSenseScore7D, sentiSenseScore1M, scoreChange7D, socialDominance, marketCap, currentPrice, changePercent, analystBuyRatioPct, analystTargetUpsidePct, analystCount, pctOff200dMa, maCrossState, return1Y, volatility30D, ... }`.
+
+**Validation.** Both execute endpoints check the plan before running it: an unrecognized
+`fieldName` in `filters` or `sort` returns HTTP 400 with `{ error, field, message }`, where
+`message` names the bad field and lists the valid ones for that universe. Field names are
+case-sensitive (`SENTI_SCORE_7D`, not `senti_score_7d`); take them from
+`GET /api/v1/screener/fields` rather than guessing.
+
+### POST /api/v1/screener/etfs/execute
+Identical request and response shape, run against the ETF universe. **API key required.** Use the ETF field names from the catalog; `tickers` and `limit` behave the same way.
+
+ETFs carry two distinct Score fields and they answer different questions. `CONSTITUENTS_WEIGHTED_SENTISENSE` is the holdings-weighted Score across what the fund actually owns, and is the one you usually want. `DIRECT_SENTISENSE` is the Score from chatter about the fund's own ticker, which on a widely-traded index fund is mostly macro noise. `WEIGHT_COVERED_PCT` tells you how much of the fund's weight had constituent data behind the weighted number: a weighted Score over thin coverage is not wrong so much as under-evidenced.
+
+```bash
+curl -X POST "https://app.sentisense.ai/api/v1/screener/etfs/execute" \
+  -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "plan": {
+      "filters": [
+        { "fieldName": "CONSTITUENTS_WEIGHTED_SENTISENSE", "op": "GTE", "value": 13 },
+        { "fieldName": "WEIGHT_COVERED_PCT", "op": "GTE", "value": 80 },
+        { "fieldName": "EXPENSE_RATIO", "op": "LTE", "value": 0.002 }
+      ],
+      "sort": { "fieldName": "CONSTITUENTS_WEIGHTED_SENTISENSE", "dir": "DESC" }
+    },
+    "limit": 25
+  }'
+```
+
+CLI equivalent: `npx -y sentisense@latest screen --etf --filter CONSTITUENTS_WEIGHTED_SENTISENSE:GTE:13 --filter WEIGHT_COVERED_PCT:GTE:80 --filter EXPENSE_RATIO:LTE:0.002 --sort CONSTITUENTS_WEIGHTED_SENTISENSE:DESC --limit 25 --json`
+
+**When to use these:** call `/fields` once at startup and cache it, use `/screens` when the user asks for something a curated screen already expresses (execute its `plan` verbatim), and build a plan yourself when they want a cross the curated set does not cover. Full docs: <https://sentisense.ai/docs/api/screener>.
 
 ---
 
@@ -1261,6 +1566,8 @@ for e in cal.earnings:
     print(f"{e['earningsDate']} {e['ticker']} ({e['earningsTime']})")
 ```
 
+CLI equivalent: `npx -y sentisense@latest earnings --week next --json` (also takes `--from`, `--to`, `--confirmed`)
+
 ---
 
 ## Earnings Analysis API (`/api/v1/stocks`, `/api/v1/earnings`)
@@ -1286,6 +1593,8 @@ Response: `{ isPreview, previewReason, totalCount?, data: [...] }`, quarters new
 The FREE preview quarter is shaped, not cut: `fiscalPeriod`, `reportDate` and `headline` in full, plus `kpiHighlights` as up to two `{label, value}` cards, `kpiHighlightCount`, `summaryTopics` and `transcriptTopics` (section titles only, never body text), `hasTranscript`, `hasGuidance`, `guidanceDirection` (`RAISED`, `CUT`, `HELD`, `MIXED`, or `null`), `generatedAt` and `source`. It never carries a body, a KPI history, or a guidance figure.
 
 `guidance` is prose, not a number: PRO callers get the language and classify it themselves, and the classification must let no-guidance language win before any direction word ("no formal guidance was issued ... increasingly difficult" is not a raise). Absence is explicit rather than omitted: a quarter with no call summary sets `hasTranscript: false`, so a client can say "no call summary yet" instead of rendering nothing.
+
+CLI equivalent: `npx -y sentisense@latest earnings AAPL --limit 12 --json` (a ticker switches the command from the calendar to this report)
 
 ### GET /api/v1/earnings/recent
 The cross-ticker backward-looking feed: which covered companies reported on or after `today - days`, newest first. Drives a post-earnings sweep ("who reported this week"), then follow up per ticker with the per-quarter analysis above. **API key required**, no tier gate: every key receives the full window it asks for. Params: `days` (1 to 31, default 7; above 31 is capped, below 1 returns `400 invalid_days`), `limit` (1 to 100, default 50; above 100 is capped, below 1 returns `400 invalid_limit`).

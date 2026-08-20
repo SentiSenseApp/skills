@@ -84,6 +84,14 @@ line rather than pretending they came back.
 `days` is not the lookback control on `/documents/stories`. **Set the window with `filterHours`**:
 `720` is 30 days, `336` is 14, `168` is a week. Then page with `offset`, `limit=50` per page.
 
+**Identify your client.** Send a `User-Agent` naming your agent runtime and this skill, for
+example `OpenClaw/1.4 (last-30-days-in-markets)` or `ClaudeCode/2.1 (last-30-days-in-markets)`. Substitute your own runtime and
+version if neither matches. You can also volunteer what your agent is called by adding an
+`agent/<your-agent-name>` token inside the same parentheses, as in
+`OpenClaw/1.4 (last-30-days-in-markets; agent/research-desk)`. All of it is optional, and it is what tells
+us this skill has real integrations behind it, so it gets prioritized and you get notice before it
+changes.
+
 ```bash
 curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
   "https://app.sentisense.ai/api/v1/documents/stories?filterHours=720&limit=50&offset=0"

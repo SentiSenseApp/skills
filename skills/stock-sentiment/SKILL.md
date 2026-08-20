@@ -23,7 +23,7 @@ Reach for this skill when the question is about perception, positioning, or sign
 - "What is the pre-earnings sentiment setup on $AAPL?"
 - "What is the AI insight on $MSFT, and what are people saying in the news?"
 
-This skill complements the rest of the finance catalog rather than competing with it. The `stocks` skill covers real-time quote, search, history, and compare; `dcf-model` and `comps-analysis` cover intrinsic and relative valuation. This skill adds the sentiment, smart-money, and AI-insight dimension none of those carry. A useful pairing: value a name with `dcf-model` or `comps-analysis`, pull its quote with `stocks`, then read this skill for the sentiment and positioning context around it.
+This skill complements the rest of the SentiSense collection rather than competing with it. It owns the signal read: what the market feels and where the money is moving. `us-stocks-analysis` owns the judgment layer, so when a quick read turns thesis-shaped, hand it off there for the adversarial deep dive. `sentisense` is the full REST API reference, for any endpoint or response shape not covered below. `stock-terminal` is the one to reach for when the answer should be a terminal-style screen rather than a chat reply.
 
 Do not use it for order entry, portfolio management, or personalized advice. It has no write, trading, or wallet surface; every endpoint is a GET.
 
@@ -46,6 +46,14 @@ The free tier exercises every workflow below. Preview-gated endpoints return a t
 ## How to Run
 
 This skill is invoked through the agent's terminal or shell tool: issue HTTP GET requests to the SentiSense API and synthesize the JSON into a concise, sourced answer. The base URL is `https://app.sentisense.ai`. Authenticate every request with the `X-SentiSense-API-Key` header; keep the key in the shell environment and never place it in a query string or in user-facing output.
+
+**Identify your client.** Send a `User-Agent` naming your agent runtime and this skill, for
+example `OpenClaw/1.4 (stock-sentiment)` or `ClaudeCode/2.1 (stock-sentiment)`. Substitute your own runtime and
+version if neither matches. You can also volunteer what your agent is called by adding an
+`agent/<your-agent-name>` token inside the same parentheses, as in
+`OpenClaw/1.4 (stock-sentiment; agent/research-desk)`. All of it is optional, and it is what tells
+us this skill has real integrations behind it, so it gets prioritized and you get notice before it
+changes.
 
 ```bash
 curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
@@ -140,7 +148,7 @@ SMART MONEY  (wrapped in {isPreview, previewReason, data}; free key returns a pr
 
 AI INSIGHTS  (wrapped; batch, carry generatedAt)
   GET /api/v1/insights/stock/{T}         Per-stock signals ranked by importance; data[0].insightText is the headline. Free preview top 3.
-  GET /api/v1/insights/stock/{T}/types   Available insight types (no auth, no quota cost).
+  GET /api/v1/insights/stock/{T}/types   Available insight types for the ticker; bare string array.
   GET /api/v1/insights/market            Top market-wide signals (data[], insightText; ticker embedded in insightText).
 
 NEWS & STORIES
@@ -161,7 +169,7 @@ SUPPORTING  (price, prices, chart are 15-minute delayed; profile, popular, calen
   GET /api/v1/market-summary                                Market-wide narrative headline.
 ```
 
-Sentiment is polarity: a float in [-1, 1] where the sign is the direction (negative is bearish and meaningful, positive is bullish) and the magnitude is conviction. Represent the sign unmistakably; do not map it onto a 0-100 scale. The SentiSense Score is a separate, unbounded composite; report it as-is. Mentions and social dominance are their own metric series on the same `/metric/{metricType}` endpoint (`mentions` for talk volume, `social_dominance` for share of the conversation); all four series (`sentiment`, `sentisense`, `mentions`, `social_dominance`) are Public with no quota cost. A separate `/api/v2/metrics/entity/{T}/distribution/{metricType}` endpoint breaks a metric down by source (share of voice, a "where this signal came from" view, not per-source sentiment values).
+Sentiment is polarity: a float in [-1, 1] where the sign is the direction (negative is bearish and meaningful, positive is bullish) and the magnitude is conviction. Represent the sign unmistakably; do not map it onto a 0-100 scale. The SentiSense Score is a separate, unbounded composite; report it as-is. Mentions and social dominance are their own metric series on the same `/metric/{metricType}` endpoint (`mentions` for talk volume, `social_dominance` for share of the conversation); all four series (`sentiment`, `sentisense`, `mentions`, `social_dominance`) are available on the Free tier, and like every metrics call each request counts against your monthly quota. A separate `/api/v2/metrics/entity/{T}/distribution/{metricType}` endpoint breaks a metric down by source (share of voice, a "where this signal came from" view, not per-source sentiment values).
 
 ## Workflows
 
@@ -236,13 +244,17 @@ Frame the result as an observed divergence, not a signal to act: "Bullish diverg
 
 Confirm the skill is wired correctly before trusting a synthesis:
 
-1. **Reachability and auth.** `GET /api/v1/insights/stock/AAPL/types` needs no authentication and costs no quota; a `200` with a JSON list confirms the base URL and network. Then repeat one authenticated call, for example `curl -s -o /dev/null -w "%{http_code}" -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" "https://app.sentisense.ai/api/v2/market-mood"`; a `200` confirms the header and key. A `401 api_key_required` means the header or `SENTISENSE_API_KEY` is missing or wrong; a `429` means the per-minute rate was exceeded, so honor the `Retry-After` hint.
+1. **Reachability and auth.** Every endpoint here takes an API key, so one call checks both: `curl -s -o /dev/null -w "%{http_code}" -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" "https://app.sentisense.ai/api/v2/market-mood"`. A `200` confirms the base URL, the network, the header and the key. A `401 api_key_required` means the header or `SENTISENSE_API_KEY` is missing; a `401 invalid_api_key` means the key itself is wrong or revoked; a `429` means the per-minute rate was exceeded, so honor the `Retry-After` hint.
 2. **Sentiment parses.** Fetch `/api/v2/metrics/entity/AAPL/metric/sentiment`, confirm a non-empty array, and read `series[-1].metricValue.value.value`; it should be a float in [-1, 1]. A value outside that range means the wrong nesting was read.
 3. **Mood nests as expected.** Fetch `/api/v2/market-mood` and confirm `market.currentScore`, `market.phase`, and `market.weeklyChange` are present (not at the root), and that `sectors` is a populated dict.
 4. **Envelope check.** Confirm `institutional/quarters` parses as a bare array and `insider/cluster-buys?lookbackDays=30` parses as `{ isPreview, data }` with `data` an array (an empty array on a quiet window is a valid result, not a failure).
 5. **Freshness is surfaced.** Any batch value presented to the user carries its `generatedAt`; if a synthesis omits the age on a sentiment or insight figure, or describes a batch surface as real time, it is not verified.
 
 A run passes when every quoted number traces to a `200` response read this turn, batch and delayed-price surfaces are labeled distinctly with their own ages, and the output reads as educational context rather than a recommendation.
+
+## Use & Disclaimer
+
+This skill is an **educational data interface** to SentiSense's read-only Data API. Output is informational only. It is **not investment advice**, not a personalized recommendation, and not a solicitation to buy or sell any security. The user is responsible for their own decisions. Use of the API and this skill is subject to the [API Terms of Service](https://sentisense.ai/agreement/API-Terms-of-Service.pdf) and [Terms of Service](https://sentisense.ai/agreement/Terms-of-Service.pdf).
 
 ---
 

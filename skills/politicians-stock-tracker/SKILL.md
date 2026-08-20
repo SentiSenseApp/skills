@@ -62,11 +62,19 @@ rows = raw.get("data", []) if isinstance(raw, dict) else raw
 - **`GET /api/v1/politicians/activity`** : recent congressional trades across all members, sorted by disclosure date (most recently disclosed first). Query `lookbackDays` (1-365) to control the window. Free: top 5; PRO: full. Each trade: `politicianName`, `firstName`, `lastName`, `chamber`, `party`, `state`, `bioguideId`, `imageUrl`, `ticker`, `assetDescription`, `assetType` (`Stock`, `ETF`, or `Stock Option`), `assetMetadata` (`null`, or `{kind:"OPTION", optionType, strikePrice, expirationDate}`), `transactionType` (`PURCHASE` / `SALE` / `EXCHANGE` / `OTHER`), `transactionDate`, `disclosureDate`, `disclosureDelayDays`, `amountRange`, `amountMin`, `amountMax`, `owner`, `urlSlug`.
 - **`GET /api/v1/politicians/filings/{ticker}`** : congressional trades for one stock, most recently disclosed first. Query `lookbackDays` (1-365, default 90) to set the window. Free: top 3; PRO: full.
 - **`GET /api/v1/politicians/members`** : all tracked politicians with trading summaries, sorted by total trade count. Free: top 5; PRO: full. Use the returned `urlSlug` to drill into a member.
-- **`GET /api/v1/politicians/member/{slug}`** : one politician's profile: summary stats, recent trades, and top tickers. Free: preview-wrapped; PRO: full detail.
+- **`GET /api/v1/politicians/member/{slug}`** : one politician's profile: summary stats, recent trades, and top tickers. Free: preview-wrapped; PRO: full detail. `recentTrades` is one page, newest transaction first: query `limit` (default 200, max 500) and `offset` to walk it, and read `totalCount` for the size of the whole history. Most members fit in one page; a handful have disclosed thousands. `profile` and `topTickers` describe the whole history whatever page you request.
 
 ## Workflows
 
 **1. This week's congressional trades**
+
+**Identify your client.** Send a `User-Agent` naming your agent runtime and this skill, for
+example `OpenClaw/1.4 (politicians-stock-tracker)` or `ClaudeCode/2.1 (politicians-stock-tracker)`. Substitute your own runtime and
+version if neither matches. You can also volunteer what your agent is called by adding an
+`agent/<your-agent-name>` token inside the same parentheses, as in
+`OpenClaw/1.4 (politicians-stock-tracker; agent/research-desk)`. All of it is optional, and it is what tells
+us this skill has real integrations behind it, so it gets prioritized and you get notice before it
+changes.
 
 ```bash
 curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
