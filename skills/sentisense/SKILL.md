@@ -777,7 +777,7 @@ AI-curated news story clusters. **Public.**
 
 Response: Story objects with a top-level `id` AND `clusterId` (both equal to the cluster id -- pass either to `/documents/stories/{clusterId}`), plus `cluster.title`, `cluster.averageSentiment`, `tickers`, `displayTickers`, `impactScore` (0-10), `brokeAt` (epoch seconds, nullable), `cluster.clusteredAt` (epoch seconds). Use `tickers` (bare symbols, e.g. `["AAPL"]`) programmatically; `displayTickers` are human-formatted labels (e.g. `["Apple Inc (AAPL)"]`) for display only, do not parse symbols out of them. The `cluster.createdAt` field (epoch millis) is deprecated and will be removed on or after 2026-08-16; use `cluster.clusteredAt`.
 
-CLI equivalent: `npx -y sentisense@latest news --days 2 --limit 20 --json` (the CLI's `--days` sends `filterHours` = days x 24; needs 0.44.1 or newer)
+CLI equivalent: `npx -y sentisense@latest news --days 2 --limit 20 --json` (the CLI's `--days` sends `filterHours` = days x 24; needs 0.45.0 or newer)
 
 ### GET /api/v1/documents/stories/ticker/{ticker}
 News stories for a specific stock. **Public.** Takes `limit` only (default 5, capped at 20): there is no lookback window here, so `days` / `hours` / `filterHours` are ignored. Use `/documents/stories` with `filterHours` for a freshness window.
