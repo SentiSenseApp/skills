@@ -22,7 +22,7 @@ Reach for this skill when the question is about congressional or political tradi
 - "Which politicians trade the most?" (most active members by trade count)
 - "Did a politician disclose a buy right before the stock moved?" (disclosure-delay context)
 
-This skill pairs naturally with `institutional-13f-tracker`: cross-reference a congressional buy against institutional 13F accumulation on the same ticker. High-conviction reads come from convergence across sources, not from any one signal in isolation.
+This skill pairs naturally with `institutional-13f-tracker` and `insider-trading-tracker`: cross-reference a congressional buy against institutional 13F accumulation or insider Form 4 buying on the same ticker. High-conviction reads come from convergence across sources, not from any one signal in isolation.
 
 Do not use it for order entry, portfolio management, or personalized advice. It has no write, trading, or wallet surface; every endpoint is a GET.
 
@@ -35,7 +35,7 @@ Do not use it for order entry, portfolio management, or personalized advice. It 
 
 ## Prerequisites
 
-- A free `SENTISENSE_API_KEY`. Get one at https://app.sentisense.ai/get-api-key. The key is required on every call; anonymous requests return `401 api_key_required`.
+- A free `SENTISENSE_API_KEY`. Get one at https://app.sentisense.ai/get-api-key. Send it on every call: a request without a valid key gets at most a shaped crawler-facing preview slice, never the dataset, and that fallback is not a contract you can build on.
 - Any HTTP client. Plain `curl` works, or Python 3.8+ using only the standard library (`urllib`, `json`); no third-party packages required. On macOS python.org installs can raise `CERTIFICATE_VERIFY_FAILED` (missing CA certs): run the bundled `Install Certificates.command`, use the system `/usr/bin/python3`, or use `curl`.
 - Network access to `https://app.sentisense.ai`.
 - Read-only scope. Every endpoint here is a GET. Nothing this skill does can place a trade, move money, or modify account state.
@@ -101,7 +101,7 @@ curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
   "https://app.sentisense.ai/api/v1/politicians/member/{slug}"
 ```
 
-**4. Follow the convergence.** When a congressional buy lines up with institutional 13F accumulation (`institutional-13f-tracker`) on the same ticker, that agreement is the signal worth surfacing. Say so explicitly and cite each source.
+**4. Follow the convergence.** When a congressional buy lines up with institutional 13F accumulation (`institutional-13f-tracker`) or insider buying (`insider-trading-tracker`) on the same ticker, that agreement is the signal worth surfacing. Say so explicitly and cite each source.
 
 ## Answering well
 

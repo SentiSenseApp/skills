@@ -2,7 +2,7 @@
   "id": "stock-analysis",
   "name": "All Market Data, One API Key",
   "description": "All US stock market data for AI agents in one install: news and social sentiment, insider Form 4 trades, congressional stock trades, institutional 13F holdings, options flow, analyst ratings, the earnings calendar, SEC filing diffs, and stock prices. One free API key covers every endpoint, and new data feeds are added regularly. Use for what happened in the markets today, market news from the last 30 days, this week in stocks, stock market API, stock sentiment API, insider trading data, congress stock trades, 13F holdings, options flow, earnings calendar, stock price API, market data for AI agents. Read-only. No trading, no purchases, no write operations, no wallet access.",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "icon": "https://sentisense.ai/static/images/s_logo.png",
   "skills": [
     "./skills/0-sentisense-onboarding",
@@ -16,7 +16,9 @@
     "./skills/sentisense",
     "./skills/sentisense-cli",
     "./skills/stock-earnings-analysis",
-    "./skills/last-30-days-in-markets"
+    "./skills/last-30-days-in-markets",
+    "./skills/insider-trading-tracker",
+    "./skills/stock-screener"
   ],
   "setup": {
     "providers": [

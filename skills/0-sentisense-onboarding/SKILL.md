@@ -59,9 +59,11 @@ endpoint in the collection.** There is nothing else to configure.
 | "unusual options activity", "IV rank", "max pain", "where is positioning stretched" | `unusual-options-activity` |
 | "who owns this stock", "13F holdings", "what did the big funds buy last quarter" | `institutional-13f-tracker` |
 | "congress stock trades", "what is that senator buying", "STOCK Act disclosures" | `politicians-stock-tracker` |
+| "insider buying", "Form 4 filings", "is the CEO selling", "cluster buys" | `insider-trading-tracker` |
+| "find me stocks that...", "screen for...", "which stocks are oversold but loved" | `stock-screener` |
 | "just give me a shell command", "no install", "wire this into a script or a cron job" | `sentisense-cli` |
 | "full API reference", "build an integration", "endpoint documentation", "what is the response shape" | `sentisense` |
-| anything else: prices, news, analyst ratings, insider Form 4, screening, or a task no narrower skill covers | `sentisense` |
+| anything else: prices, news, analyst ratings, or a task no narrower skill covers | `sentisense` |
 
 Pick one and go. If two look plausible, pick the narrower one and pull anything extra from
 `sentisense`, which documents the whole API.

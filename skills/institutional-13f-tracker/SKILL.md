@@ -22,7 +22,7 @@ Reach for this skill when the question is about institutional ownership or 13F p
 - "Which activist funds took new positions this quarter?"
 - "How did 13F ownership of $COIN change quarter over quarter?"
 
-This skill pairs naturally with `politicians-stock-tracker`: line up 13F accumulation against a congressional purchase on the same ticker. Convergence across sources is the high-conviction read.
+This skill pairs naturally with `politicians-stock-tracker` and `insider-trading-tracker`: line up 13F accumulation against a congressional purchase or an insider cluster buy on the same ticker. Convergence across sources is the high-conviction read.
 
 Do not use it for order entry, portfolio management, or personalized advice. It has no write, trading, or wallet surface; every endpoint is a GET.
 
@@ -111,7 +111,7 @@ curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
   "https://app.sentisense.ai/api/v1/institutional/activist?reportDate=$Q"
 ```
 
-**5. Follow the convergence.** When institutional accumulation lines up with a congressional purchase (`politicians-stock-tracker`) on the same ticker, that agreement is the read worth surfacing. Cite each source.
+**5. Follow the convergence.** When institutional accumulation lines up with a congressional purchase (`politicians-stock-tracker`) or insider buying (`insider-trading-tracker`) on the same ticker, that agreement is the read worth surfacing. Cite each source.
 
 ## Answering well
 

@@ -33,25 +33,32 @@ Ask in plain language. The bundle routes to whichever skill fits:
 
 ## What is inside
 
-Eight skills, each also published on its own if you want just one:
+Fourteen skills, each also published on its own if you want just one:
 
 | Skill | What it covers |
 |---|---|
+| `0-sentisense-onboarding` | Read first: API key setup and which skill owns each task |
 | `stock-sentiment` | News and social sentiment per ticker, and the SentiSense Score |
+| `stock-screener` | Filter stocks and ETFs on Score, analyst, technical, and price fields, or run 28 curated screens |
 | `stock-market-dashboard` | Writes a self-contained HTML dashboard you keep |
 | `unusual-options-activity` | Options flow, unusual activity, positioning |
 | `institutional-13f-tracker` | Quarterly 13F holdings, top holders, buying and selling deltas |
 | `politicians-stock-tracker` | Congressional STOCK Act disclosures by member or ticker |
+| `insider-trading-tracker` | SEC Form 4 insider buys and sells, market-wide activity, cluster buy signals |
+| `stock-earnings-analysis` | Per-quarter earnings analysis, call summaries, and the forward calendar |
+| `last-30-days-in-markets` | One synthesized brief of the market's last 30 days |
 | `us-stocks-analysis` | Agentic research workflows for US equities |
 | `stock-terminal` | A terminal-style command set for market research |
+| `sentisense-cli` | The official CLI: quotes, sentiment, and market data as single npx commands |
 | `sentisense` | The full API reference, for anything the others do not cover |
 
-The first seven are task-shaped and cover the common questions. The last one is the complete
-endpoint reference, so an agent that hits something unusual still has somewhere to look.
+Most are task-shaped and cover the common questions. The last two are the mechanics and the
+reference: the official CLI, and the complete endpoint reference, so an agent that hits
+something unusual still has somewhere to look.
 
 ## Coverage
 
-US equities: real-time prices, news and social sentiment, insider Form 4 trades, congressional
+US equities: stock prices, news and social sentiment, insider Form 4 trades, congressional
 trades, institutional 13F holdings, options positioning, analyst ratings, the earnings calendar, and
 SEC filing diffs. Coverage is the most-watched US stocks, and new data feeds are added regularly.
 
