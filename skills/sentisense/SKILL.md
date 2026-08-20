@@ -72,7 +72,9 @@ called>`.
 
 Output is plain text when piped and formatted in a terminal; add `--json` for the exact API
 response, envelope included, so every response shape documented below applies unchanged. Exit
-codes are stable (0 ok, 2 usage, 3 auth, 4 not found, 5 rate limited, 6 network). For the full
+codes are stable (0 ok, 1 API error, 2 usage, 3 auth, 4 not found, 5 rate limited, 6 network). The
+1-versus-2 split is worth branching on: 1 means the request went out and the API rejected it (a
+validation `400`, say), while 2 means the CLI refused the input before any request was sent. For the full
 command list and deeper CLI mechanics, install the dedicated `sentisense-cli` skill or run
 `npx -y sentisense@latest --help`.
 
@@ -179,7 +181,7 @@ Which way the market's tone leans, and how widely it's shared. Daily snapshots.
 
 ### Common Mistakes
 - **Do NOT hardcode `reportDate`** for institutional endpoints. When you pass one, fetch it from `/quarters` first; quarters change as new SEC filings come in. (`/flows` does not require one: omit it for the latest quarter, or pass one for a specific quarter.)
-- **Do NOT iterate the response directly.** Unwrap `response["data"]` first. All PRO-gated endpoints use the `{isPreview, previewReason, data}` wrapper
+- **Do NOT iterate the response directly.** Unwrap `response["data"]` first. All PRO-gated endpoints use the `{isPreview, previewReason, data}` wrapper, and some Free ones do too (`/stocks/{ticker}/sentiment` wraps on every tier), so let each endpoint's own Response line decide rather than inferring the shape from the tier
 - **Do NOT use `/api/v1/entity-metrics/*`** for metrics. These are RETIRED (return 410 Gone). Use `/api/v2/metrics/` instead
 - **The `source` parameter is case-insensitive.** `news`, `NEWS`, `News` all work
 
@@ -290,9 +292,9 @@ Peer/similar stocks. **Public.**
 ### GET /api/v1/stocks/{ticker}/sentiment
 One-call sentiment picture for a stock: the SentiSense Score with its 30-day regime, where the conversation is happening by source, and what is driving it. **Free (API key required).**
 
-Returns `ticker`, `companyName`, `asOf`, then:
+Response: `{ isPreview, previewReason, data }`. Everything below lives under `data`, which carries `ticker`, `companyName`, `asOf`, then the fields in the table. This endpoint is Free but still uses the wrapper (`isPreview` is `false` and `previewReason` is `null` on every tier), so unwrap first: reading `sentisenseScore` off the root returns nothing, and the full path is `data.sentisenseScore`.
 
-| Field | Type | Description |
+| Field (under `data`) | Type | Description |
 |-------|------|-------------|
 | `sentisenseScore` | number or null | Today's Score (0-centered composite of sentiment and mentions, unbounded). Null until today's reading lands, see the note below |
 | `sentisenseScoreAvg30d` | number | 30-day average, the stable regime figure |
@@ -343,6 +345,7 @@ Response: flat object (no `{isPreview, data}` wrapper).
 | `lastUpdated` | long | Epoch milliseconds |
 | `sections` | object | Section name to `{content, directives}`. Present on both depths: `depth=basic` returns a single `Executive Summary` section, `depth=deep` returns the full set. |
 | `sectionOrder` | string[] | Ordered section keys for rendering. Present on both depths; `["Executive Summary"]` on `depth=basic`. |
+| `fromCache` | boolean | Whether this response was served from the report cache. `false` also covers a report served straight from the packaged knowledge base, so it does not mean the report was regenerated for your call: read freshness from `lastUpdated`. |
 | `moatRating` | integer or null | Proprietary moat quality score 0-10 (network effects, switching costs, intangibles, cost advantages, efficient scale). Present on `depth=deep` only. Null if not yet assessed for this ticker. |
 | `aiDisruptionRisk` | string or null | `Low`, `Medium`, `High`, or `Critical`. Measures AI revenue-displacement exposure. Present on `depth=deep` only. Null if not yet assessed. |
 
@@ -768,13 +771,13 @@ AI-curated news story clusters. **Public.**
 | Param | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `limit` | int | No | 20 | Max stories (capped at 50) |
-| `filterHours` | int | No | none | Lookback window in hours, e.g. `720` for 30 days. This is the real lookback control for this endpoint. |
-| `days` | int | No | 7 | Accepted but has no effect on the response; ignored server-side. Use `filterHours` instead. |
+| `filterHours` | int | No | none | Lookback window in hours, e.g. `720` for 30 days. This is the real lookback control for this endpoint. The window counts from when a story STARTED breaking, not from its latest article, so a running story with fresh coverage but an older start falls out of short windows (an empty short window can be correct). Setting it also switches ordering to curation score instead of the day-bucketed default. |
+| `days` | int | No | 7 | Accepted but has no effect on the response; ignored server-side. Use `filterHours` instead (the CLI's `--days` flag sends `filterHours` for you). |
 | `offset` | int | No | 0 | Pagination offset |
 
 Response: Story objects with a top-level `id` AND `clusterId` (both equal to the cluster id -- pass either to `/documents/stories/{clusterId}`), plus `cluster.title`, `cluster.averageSentiment`, `tickers`, `displayTickers`, `impactScore` (0-10), `brokeAt` (epoch seconds, nullable), `cluster.clusteredAt` (epoch seconds). Use `tickers` (bare symbols, e.g. `["AAPL"]`) programmatically; `displayTickers` are human-formatted labels (e.g. `["Apple Inc (AAPL)"]`) for display only, do not parse symbols out of them. The `cluster.createdAt` field (epoch millis) is deprecated and will be removed on or after 2026-08-16; use `cluster.clusteredAt`.
 
-CLI equivalent: `npx -y sentisense@latest news --limit 20 --json` (the CLI does not expose `filterHours`)
+CLI equivalent: `npx -y sentisense@latest news --days 2 --limit 20 --json` (the CLI's `--days` sends `filterHours` = days x 24; needs 0.44.1 or newer)
 
 ### GET /api/v1/documents/stories/ticker/{ticker}
 News stories for a specific stock. **Public.** Takes `limit` only (default 5, capped at 20): there is no lookback window here, so `days` / `hours` / `filterHours` are ignored. Use `/documents/stories` with `filterHours` for a freshness window.
@@ -899,7 +902,7 @@ Insider transactions for a specific stock, newest first. **Public (preview)** --
 | `ticker` | path | Yes | - | Stock ticker (e.g., `AAPL`) |
 | `lookbackDays` | int | No | 90 | Days to look back (1-365) |
 
-Response: `{ isPreview: bool, previewReason: string|null, data: [...] }`. Free: top 5 trades, PRO: full list. Each trade: `insiderName`, `insiderTitle`, `insiderRelation`, `officer`, `director`, `tenPctOwner`, `transactionDate`, `filedDate`, `transactionCode`, `transactionType`, `securityTitle`, `sharesTransacted`, `pricePerShare`, `totalValue`, `sharesOwnedAfter`, `directOwnership`, `rule10b51`.
+Response: `{ isPreview: bool, previewReason: string|null, data: [...] }`. Free: top 5 trades, PRO: full list. Each trade: `ticker`, `companyName`, `insiderName`, `insiderTitle`, `insiderRelation`, `officer`, `director`, `tenPctOwner`, `transactionDate`, `filedDate`, `transactionCode`, `transactionType`, `securityTitle`, `sharesTransacted`, `pricePerShare`, `totalValue`, `sharesOwnedAfter`, `directOwnership`, `rule10b51`.
 
 ```python
 client = SentiSenseClient(api_key=os.environ["SENTISENSE_API_KEY"])
@@ -940,7 +943,7 @@ Recent congressional trades across all politicians, paged, sorted by disclosure 
 | `limit` | int | No | 200 | Rows per page. Above 500 is clamped, not rejected. Returns `400 invalid_limit` below 1 |
 | `offset` | int | No | 0 | Rows to skip, for paging |
 
-Response: `{ isPreview, previewReason, totalCount, data: [...] }`. `totalCount` is the size of the whole window, not the page, so `offset + data.length < totalCount` means there is another page. Each trade: `politicianName`, `firstName`, `lastName`, `chamber`, `party`, `state`, `bioguideId`, `imageUrl`, `ticker`, `assetDescription`, `assetType` (`Stock`, `ETF`, or `Stock Option`), `assetMetadata` (object: `null`, or `{kind:"OPTION", optionType, strikePrice, expirationDate}` for options), `transactionType`, `transactionDate`, `disclosureDate`, `disclosureDelayDays`, `amountRange`, `amountMin`, `amountMax`, `owner`, `urlSlug`.
+Response: `{ isPreview, previewReason, totalCount, data: [...] }`. `totalCount` is the size of the whole window, not the page, so `offset + data.length < totalCount` means there is another page. Each trade: `politicianName`, `firstName`, `lastName`, `chamber`, `party`, `state`, `bioguideId`, `imageUrl`, `ticker`, `assetDescription`, `assetType` (`Stock`, `ETF`, or `Stock Option`), `assetMetadata` (object: `null`, or `{kind:"OPTION", optionType, strikePrice, expirationDate}` for options), `transactionType`, `transactionDate`, `disclosureDate`, `disclosureDelayDays`, `amountRange`, `amountMin`, `amountMax`, `owner`, `urlSlug`, `sentiSenseScore`. That last field is reserved: it is present on every row and currently `null` on all of them, so read the ticker's Score from `/stocks/{ticker}/sentiment` rather than building on it here.
 
 ```python
 client = SentiSenseClient(api_key=os.environ["SENTISENSE_API_KEY"])

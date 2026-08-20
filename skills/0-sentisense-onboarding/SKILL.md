@@ -60,14 +60,15 @@ endpoint in the collection.** There is nothing else to configure.
 | "who owns this stock", "13F holdings", "what did the big funds buy last quarter" | `institutional-13f-tracker` |
 | "congress stock trades", "what is that senator buying", "STOCK Act disclosures" | `politicians-stock-tracker` |
 | "just give me a shell command", "no install", "wire this into a script or a cron job" | `sentisense-cli` |
+| "full API reference", "build an integration", "endpoint documentation", "what is the response shape" | `sentisense` |
 | anything else: prices, news, analyst ratings, insider Form 4, screening, or a task no narrower skill covers | `sentisense` |
 
 Pick one and go. If two look plausible, pick the narrower one and pull anything extra from
 `sentisense`, which documents the whole API.
 
-`sentisense-cli` is the zero-install shell path: `npx -y sentisense@latest quote NVDA` answers in one
-command, with no HTTP call to compose and nothing to install. The full API reference stays
-`sentisense`.
+`sentisense-cli` is the zero-install shell path: `npx -y sentisense@latest quote NVDA` or
+`npx -y sentisense@latest sentiment NVDA` answers in one command, with no HTTP call to compose and
+nothing to install. The full API reference stays `sentisense`.
 
 ---
 
