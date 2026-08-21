@@ -1,6 +1,6 @@
 ---
 name: last-30-days-in-markets
-description: "What happened in the stock market over the last 30 days, as one synthesized brief: the day-by-day arc of a fear-to-greed market mood index, the month's biggest AI-clustered story themes ranked by impact, which tickers and sectors dominated the news, the sentiment and smart-money signals that accumulated, where the market stands today, and the earnings ahead. Built for deep research rather than a fast summary: every claim traces to a fetched response and carries its date and its real coverage window, so the reader can check it instead of trusting a generated answer. Use for \"last 30 days in markets\", \"what happened in the market this month\", \"what did I miss in the market\", \"monthly market recap\", \"market summary last 30 days\", \"deep research on the stock market\", \"catch me up on stocks\". Read-only. No trading, no purchases, no write operations, no wallet access."
+description: "What happened in the stock market over the last 30 days, as one synthesized brief: the day-by-day arc of a fear-to-greed market mood index, the month's biggest AI-clustered story themes ranked by impact, which tickers and sectors dominated the news, the sentiment and smart-money signals that accumulated, where the market stands today, and the earnings ahead. Built for deep research rather than a fast summary: every claim traces to a fetched response and carries its date and its real coverage window, so the reader can check it instead of trusting a generated answer. Works for one stock too: the month's feed filtered to a ticker plus its stock insights. Use for \"last 30 days in markets\", \"what happened in the market this month\", \"what did I miss in the market\", \"monthly market recap\", \"market summary last 30 days\", \"deep research on the stock market\", \"catch me up on stocks\", \"catch me up on NVDA\". Read-only. No trading, no purchases, no write operations, no wallet access."
 license: MIT
 metadata:
   homepage: https://sentisense.ai
@@ -201,6 +201,13 @@ covers 22 is only dishonest if it fails to say so.
 `insights/latest` have no history parameter. They are the current read. Never write a dated,
 past-tense claim out of them ("on the 14th the market was worried about..."). Only the mood and
 index history series and the story cluster timestamps may carry a date claim.
+
+**Different snapshots regenerate on different schedules, so same-day values can disagree.** The
+mood endpoint's current score and a mood figure quoted inside `market-summary` prose are computed
+at different moments; on a moving day they can differ by several points without either being
+wrong. When two surfaces disagree, compare their `generatedAt` / `lastUpdated` timestamps, prefer
+the newer value, and show each figure with its age rather than presenting one coherent
+"right now" that the data does not support.
 
 **Every event line carries its date.** A month-long brief whose events are undated is a pile,
 not a timeline. Date, cluster title, impact, tickers. In that order, every time.

@@ -288,3 +288,16 @@ same file rather than splitting into multiple pages.
 
 **Keep it one file.** The moment it needs a bundler it stops being the thing that makes this
 useful, which is that anyone can generate one, email it, and have it open on the other end.
+
+## Delivering the file
+
+The file lands on the machine the agent runs on, which is not always the machine the user is
+looking at. Before presenting a path as if it were clickable, say where the file lives and how to
+open it: on a local desktop surface, the absolute path plus "open it in your browser" is enough;
+on a hosted or chat surface (a web chat talking to a remote host), a bare local path is not
+retrievable by the user, so offer a real delivery route instead: the host's file/attachment
+mechanism if it has one, serving the file briefly over a local port you name explicitly (state
+which machine "localhost" refers to), or pasting the HTML for the user to save. If the host
+offers a render surface for HTML documents (for example an OpenClaw canvas node, a render-only
+panel), presenting the dashboard there is a good fit, because this file is a self-contained
+static snapshot by design; check that the capability is actually connected before promising it.

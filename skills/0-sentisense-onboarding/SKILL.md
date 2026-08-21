@@ -44,6 +44,14 @@ export SENTISENSE_API_KEY="your-key-here"
 Calls authenticate with the `X-SentiSense-API-Key` header. **One key covers every skill and every
 endpoint in the collection.** There is nothing else to configure.
 
+Hosts store that one key differently, and the value never needs to be re-entered per skill. On
+OpenClaw, a key configured for any SentiSense skill (it lands under
+`skills.entries.<skill-name>.apiKey`) is the same credential every sibling skill needs: reference
+the same environment-backed secret rather than creating a second entry, and verify with a cheap
+call (`health` via the CLI, or any GET) instead of printing the value. If a shell reports
+`SENTISENSE_API_KEY` unset while a skill shows Ready, the key lives in the host's config store,
+not the environment; both work, they are just different homes for the same secret.
+
 ---
 
 ## Which skill owns the task
