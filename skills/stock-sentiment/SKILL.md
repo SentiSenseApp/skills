@@ -133,7 +133,8 @@ SENTIMENT & MOOD
 
 SMART MONEY  (wrapped in {isPreview, previewReason, data}; free key returns a preview slice)
   GET /api/v1/insider/cluster-buys?lookbackDays=N         Tickers with multiple insider buys.
-  GET /api/v1/insider/trades/{T}?lookbackDays=N           Form 4 rows; transactionType BUY|SELL.
+  GET /api/v1/insider/trades/{T}?lookbackDays=N           Form 4 rows; transactionType BUY|SELL,
+                                                          raw SEC letter in transactionCode.
   GET /api/v1/politicians/activity?lookbackDays=N         Congressional trades; PURCHASE|SALE.
   GET /api/v1/politicians/filings/{T}?lookbackDays=N      Per-ticker congressional filings.
   GET /api/v1/politicians/member/{slug}                   Member profile (data.recentTrades[]).
@@ -210,7 +211,7 @@ Read the sentiment and positioning into an earnings print.
 
 1. `GET /api/v1/calendar/earnings?ticker={T}` for the next report date and consensus (`data.earnings[0].earningsDate`, `confirmed`); an empty response means the name is outside the forward window, so ask the user for the date instead of guessing.
 2. `GET /api/v2/metrics/entity/{T}/metric/sentiment?startTime={now-30d}&endTime={now}` (epoch milliseconds) for the 30-day sentiment trend.
-3. `GET /api/v1/insider/trades/{T}?lookbackDays=60` for recent insider activity (`transactionType` BUY or SELL).
+3. `GET /api/v1/insider/trades/{T}?lookbackDays=60` for recent insider activity (`transactionType` BUY or SELL), dropping `transactionCode == "F"` rows before you call anything selling (see the code-F note below).
 4. `GET /api/v1/analyst/{T}/estimates` for the EPS band and `surprises[]` beat/miss history.
 5. `GET /api/v1/analyst/{T}/actions?lookbackDays=30` for recent rating changes.
 6. `GET /api/v1/insights/stock/{T}` for the current AI read.
@@ -235,6 +236,7 @@ Frame the result as an observed divergence, not a signal to act: "Bullish diverg
 - **Wrap versus flat differs by endpoint.** Reading `.data` on a flat endpoint (or the reverse) yields nothing. Flat: `stocks/price`, `stocks/prices`, `stocks/chart`, `stocks/popular`, `stocks/{T}/profile`, `market-mood`, the `sentiment`, `sentisense`, `mentions`, and `social_dominance` series, and `institutional/quarters`. Wrapped under `.data`: `insider/*`, `politicians/*`, `institutional/holders`, `analyst/*`, `insights/*`, and `calendar/earnings`. When unsure, accept both.
 - **The sentiment scalar is nested.** The series is a bare array and the float lives at `series[i].metricValue.value.value`; `series[i].metricValue.value` is itself a dict, so there is no top-level `series[i].value` shortcut.
 - **Congress and insider use different verbs.** Insider rows carry `transactionType` BUY or SELL; congressional rows carry PURCHASE or SALE. Filter each with its own vocabulary.
+- **Not every insider SELL is a sale.** `transactionType` is a simplified rollup of the SEC's one-letter codes, and code `F` lands on `SELL`: those are shares the company withheld to cover the insider's taxes when a grant vested. Nobody chose to sell and no shares reached the market. On companies that grant heavily this is the majority of the reported "sold" dollars, so a bearish read built on a raw `SELL` filter is describing a vesting schedule. Read `transactionCode` and drop `F` before you tally selling. The market-wide `/insider/activity` rollup already excludes it for you; `/insider/trades/{T}` returns every filed row, so there you filter yourself.
 - **Always fetch quarters first.** Call `institutional/quarters` and pass the `reportDate` of the first quarter whose `pending` is not true to `institutional/holders`; skip any `pending:true` entry (within ~45 days of a quarter close the most-recent quarter is still filing and holds almost no holders), and fall back to `[0]` only if every entry is `pending:true`. Never hardcode a quarter.
 - **Documents carry no article title.** The document feed returns URLs, `source`, `published` (epoch seconds), and `averageSentiment`, not the publisher's headline. Pre-clustered story titles (`cluster.title`) are SentiSense-authored and safe to display verbatim; prefer stories when a readable title is needed.
 - **No invented endpoints.** There is no real-time options order flow and no dark pool (options exist, but only as end-of-day analytics at `/api/v1/options/overview` and `/api/v1/stocks/{ticker}/options/summary`), and no `/congress` (congressional data lives under `/politicians`). The earnings calendar is `/api/v1/calendar/earnings`.
