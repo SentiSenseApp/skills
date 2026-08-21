@@ -68,8 +68,8 @@ endpoint in the collection.** There is nothing else to configure.
 Pick one and go. If two look plausible, pick the narrower one and pull anything extra from
 `sentisense`, which documents the whole API.
 
-`sentisense-cli` is the zero-install shell path: `npx -y sentisense@0.45.0 quote NVDA` or
-`npx -y sentisense@0.45.0 sentiment NVDA` answers in one command, with no HTTP call to compose and
+`sentisense-cli` is the zero-install shell path: `npx -y sentisense@0.46.0 quote NVDA` or
+`npx -y sentisense@0.46.0 sentiment NVDA` answers in one command, with no HTTP call to compose and
 nothing to install. The full API reference stays `sentisense`.
 
 ---

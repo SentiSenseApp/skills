@@ -27,7 +27,7 @@ Not this skill: single-ticker deep dives (`stock-sentiment`, `us-stocks-analysis
 ## Prerequisites
 
 - A free `SENTISENSE_API_KEY`. Get one at https://app.sentisense.ai/get-api-key. The key is required on every call; anonymous requests return `401 api_key_required`.
-- Any HTTP client, or no install at all via the official CLI (`npx -y sentisense@0.45.0`).
+- Any HTTP client, or no install at all via the official CLI (`npx -y sentisense@0.46.0`).
 - Read-only scope: everything here is a `GET` or a filter-only `POST`. Nothing this skill does can place a trade, move money, or modify account state.
 
 | Tier | Quota | Rate |
@@ -44,14 +44,14 @@ A screen is a single request no matter how many rows it returns, so prefer one b
 The CLI is the fastest path:
 
 ```bash
-npx -y sentisense@0.45.0 screen --list                # the 28 curated screens
-npx -y sentisense@0.45.0 screen --fields              # every filterable field, with operators
-npx -y sentisense@0.45.0 screen --screen crowd-vs-street
-npx -y sentisense@0.45.0 screen --filter SENTI_SCORE_7D:GTE:13 --filter ANALYST_COUNT:GTE:5 --sort SENTI_SCORE_7D:DESC --limit 25
-npx -y sentisense@0.45.0 screen --etf --filter ISSUER:IN:Vanguard,iShares
+npx -y sentisense@0.46.0 screen --list                # the 28 curated screens
+npx -y sentisense@0.46.0 screen --fields              # every filterable field, with operators
+npx -y sentisense@0.46.0 screen --screen crowd-vs-street
+npx -y sentisense@0.46.0 screen --filter SENTI_SCORE_7D:GTE:13 --filter ANALYST_COUNT:GTE:5 --sort SENTI_SCORE_7D:DESC --limit 25
+npx -y sentisense@0.46.0 screen --etf --filter ISSUER:IN:Vanguard,iShares
 ```
 
-Filters are `FIELD:OP:VALUE` and are ANDed; operators are `GTE`, `LTE`, `GT`, `LT`, `EQ`, `NEQ`, `IN`, `NOT_IN`. Add `--json` for the exact API response, and `--tickers NVDA,AMD,AVGO` to screen a watchlist instead of the universe. Auth: `SENTISENSE_API_KEY` in the environment, or store it once with `npx -y sentisense@0.45.0 auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file mode 600, local to your machine, removable with `auth --remove`). The version is pinned deliberately: a pinned version runs reviewed, immutable code.
+Filters are `FIELD:OP:VALUE` and are ANDed; operators are `GTE`, `LTE`, `GT`, `LT`, `EQ`, `NEQ`, `IN`, `NOT_IN`. Add `--json` for the exact API response, and `--tickers NVDA,AMD,AVGO` to screen a watchlist instead of the universe. Auth: `SENTISENSE_API_KEY` in the environment, or store it once with `npx -y sentisense@0.46.0 auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file mode 600, local to your machine, removable with `auth --remove`). The version is pinned deliberately: a pinned version runs reviewed, immutable code.
 
 REST equivalent, same plan shape the CLI builds:
 

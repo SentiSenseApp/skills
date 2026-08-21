@@ -60,8 +60,8 @@ ships inside the `sentisense` npm package, so there is nothing to install and `n
 demand. Use version 0.44.0 or newer. It stamps both identity variables for you.
 
 ```bash
-npx -y sentisense@0.45.0 health              # reachability, key validity, latency, one call
-npx -y sentisense@0.45.0 quote NVDA --json
+npx -y sentisense@0.46.0 health              # reachability, key validity, latency, one call
+npx -y sentisense@0.46.0 quote NVDA --json
 ```
 
 `--json` returns the exact API response, envelope and all, nothing renamed, so every field path
@@ -114,18 +114,18 @@ Each is a natural-language intent, an ordered set of calls, and a synthesis shap
 
 ### Quick Read 1: "Brief me on $TICKER"
 
-1. `npx -y sentisense@0.45.0 quote {T} --json` for price + day change (`currentPrice`, `changePercent`). REST: `GET /api/v1/stocks/price?ticker={T}`
+1. `npx -y sentisense@0.46.0 quote {T} --json` for price + day change (`currentPrice`, `changePercent`). REST: `GET /api/v1/stocks/price?ticker={T}`
 2. `GET /api/v2/metrics/entity/{T}/metric/sentiment` for the 7-day sentiment trend (no CLI command: the CLI's `sentiment` returns the Score, not this polarity series)
-3. `npx -y sentisense@0.45.0 insiders {T} --days 90 --json` for insider activity (`.data[]`). REST: `GET /api/v1/insider/trades/{T}?lookbackDays=90`
-4. `npx -y sentisense@0.45.0 analysts {T} --json` for the target band (`.consensus.data`). REST: `GET /api/v1/analyst/{T}/consensus`
-5. `npx -y sentisense@0.45.0 insights {T} --json` for AI insights (`.data[]`; take the first item for the headline, check its `generatedAt` and flag age). REST: `GET /api/v1/insights/stock/{T}`
+3. `npx -y sentisense@0.46.0 insiders {T} --days 90 --json` for insider activity (`.data[]`). REST: `GET /api/v1/insider/trades/{T}?lookbackDays=90`
+4. `npx -y sentisense@0.46.0 analysts {T} --json` for the target band (`.consensus.data`). REST: `GET /api/v1/analyst/{T}/consensus`
+5. `npx -y sentisense@0.46.0 insights {T} --json` for AI insights (`.data[]`; take the first item for the headline, check its `generatedAt` and flag age). REST: `GET /api/v1/insights/stock/{T}`
 
 **Synthesize as:** "AAPL $190.20 (+1.2%). Sentiment +0.34 and rising (+0.06 over 7d). 3 insider buys in 90d, no sells. Analyst band $180-$250 (mean $210, 33 analysts, Buy). Latest insight: 'Margin guide raised, services beating consensus.'" Five signals, one tight brief, done.
 
 ### Quick Read 2: "What's the smart money doing this week?"
 
 1. `GET /api/v1/insider/cluster-buys?lookbackDays=7` (no CLI command)
-2. `npx -y sentisense@0.45.0 congress --days 7 --limit 50 --json` (`.data[]`, filter to PURCHASE). REST: `GET /api/v1/politicians/activity?lookbackDays=7`
+2. `npx -y sentisense@0.46.0 congress --days 7 --limit 50 --json` (`.data[]`, filter to PURCHASE). REST: `GET /api/v1/politicians/activity?lookbackDays=7`
 3. `GET /api/v1/analyst/activity?lookbackDays=7&actionTypes=UPGRADE` (no CLI command; server-side filter, CSV of UPGRADE/DOWNGRADE/INITIATE/REITERATE/OTHER)
 
 Intersect the three ticker lists; report names in 2+ buckets with a one-liner each ("NVDA: 4 insiders bought ($2.1M), 1 senator purchased $50k-$100k, 2 upgrades"). Convergence is the signal. **Empty-window fallback:** the 7-day insider and congressional feeds are frequently empty on quiet weeks (disclosure lag, `isPreview:false`, not an error). Widen the empty bucket to 30 days (`--days 30`, or `lookbackDays=30` over REST), say so in the header, and if the intersection is still empty report the strongest single-bucket names as runners-up rather than forcing convergence or returning a blank. Cite the trade date (`transactionDate`), not the 7-day disclosure window: STOCK Act filings lag weeks to months, so a name surfacing this week may reflect a much older trade (see the Committee disclosure rule).
@@ -146,15 +146,15 @@ REST only, all three steps: the CLI exposes no popular list, no price chart, and
 1. `GET /api/v1/calendar/earnings?ticker={T}` for the next report date (`data.earnings[0].earningsDate` + `confirmed`); empty means outside the forward window: fall back to `periodLabel` from step 5 for timing framing. No CLI command: the CLI's `earnings` calendar mode takes `--week`, `--from`, `--to`, never a ticker
 2. `GET /api/v1/stocks/{T}/profile` for sector context (no CLI command)
 3. `GET /api/v2/metrics/entity/{T}/metric/sentiment?startTime={now-30d epoch ms}&endTime={now epoch ms}` for the 30-day trend (no CLI command)
-4. `npx -y sentisense@0.45.0 insiders {T} --days 60 --json` (`.data[]`). REST: `GET /api/v1/insider/trades/{T}?lookbackDays=60`. Filter before tallying: only `transactionCode` P and S are directional, and codes A, G, M and F (awards, gifts, exercises, tax withholding) are not, so an all-award window is zero insider activity, not a wave of it
+4. `npx -y sentisense@0.46.0 insiders {T} --days 60 --json` (`.data[]`). REST: `GET /api/v1/insider/trades/{T}?lookbackDays=60`. Filter before tallying: only `transactionCode` P and S are directional, and codes A, G, M and F (awards, gifts, exercises, tax withholding) are not, so an all-award window is zero insider activity, not a wave of it
 5. `GET /api/v1/analyst/{T}/estimates` for the EPS band (`data.estimates[0]`, plus `data.surprises[]` history; no revenue figure, no revision history). No CLI command
-6. `npx -y sentisense@0.45.0 analysts {T} --days 30 --json` for rating changes (`.actions.data[]`; the same call also carries `.consensus.data`, so it covers the analyst band for free). REST: `GET /api/v1/analyst/{T}/actions?lookbackDays=30`
+6. `npx -y sentisense@0.46.0 analysts {T} --days 30 --json` for rating changes (`.actions.data[]`; the same call also carries `.consensus.data`, so it covers the analyst band for free). REST: `GET /api/v1/analyst/{T}/actions?lookbackDays=30`
 
 **Synthesize as:** "AAPL ER in 5d. Sentiment +0.22 over 30d, trending up. Insiders: 2 sells, 0 buys (neutral-to-bearish). EPS consensus $1.52 (range $1.48-$1.55, 28 analysts); beat 3 of last 4. 3 upgrades in 30d. Setup: mixed-bullish."
 
 ### Quick Read 5: "Sector rotation today"
 
-1. `npx -y sentisense@0.45.0 mood --json`, REST: `GET /api/v2/market-mood`. Either way the composite is nested under `market` (`market.currentScore`, `market.phase`, `market.weeklyChange`), NOT at the root. `sectors` is a string-keyed dict; labels have historically overlapped (`Technology` vs `Information Technology`, `Healthcare` vs `Health Care`), so if both members of a pair appear, dedupe by keeping the higher-scoring variant before ranking. A clean 11-key response is the common case.
+1. `npx -y sentisense@0.46.0 mood --json`, REST: `GET /api/v2/market-mood`. Either way the composite is nested under `market` (`market.currentScore`, `market.phase`, `market.weeklyChange`), NOT at the root. `sectors` is a string-keyed dict; labels have historically overlapped (`Technology` vs `Information Technology`, `Healthcare` vs `Health Care`), so if both members of a pair appear, dedupe by keeping the higher-scoring variant before ranking. A clean 11-key response is the common case.
 2. For sectors with `weeklyChange > +5` or `< -5`: `GET /api/v1/insights/market` (no CLI command; the CLI's `insights` is per-ticker), client-side filter `data[]` to insights mentioning tickers in that sector (use `/stocks/{T}/profile` `sector`, which is reliable; `descriptions` often omits `sector`, skip rather than guess).
 3. Report top 2 and bottom 2 movers with one driver insight each.
 
@@ -214,14 +214,14 @@ One block fills every SentiSense row. `--json` is the exact API response, so the
 below are the ones the ledger rules refer to.
 
 ```bash
-npx -y sentisense@0.45.0 quote {T} --json              # E1  price, day change
-npx -y sentisense@0.45.0 sentiment {T} --json          # E11 .sentiment.data.sentisenseScore
-npx -y sentisense@0.45.0 insiders {T} --days 90 --json # E12 .data[]
-npx -y sentisense@0.45.0 congress {T} --days 90 --json # E13 .data[]
-npx -y sentisense@0.45.0 flows {T} --json              # E14 .data.holders[], quarter resolved
-npx -y sentisense@0.45.0 analysts {T} --json           # E15 .consensus.data
-npx -y sentisense@0.45.0 mood --json                   # E17 .market
-npx -y sentisense@0.45.0 options {T} --json            # E19 .data, optional
+npx -y sentisense@0.46.0 quote {T} --json              # E1  price, day change
+npx -y sentisense@0.46.0 sentiment {T} --json          # E11 .sentiment.data.sentisenseScore
+npx -y sentisense@0.46.0 insiders {T} --days 90 --json # E12 .data[]
+npx -y sentisense@0.46.0 congress {T} --days 90 --json # E13 .data[]
+npx -y sentisense@0.46.0 flows {T} --json              # E14 .data.holders[], quarter resolved
+npx -y sentisense@0.46.0 analysts {T} --json           # E15 .consensus.data
+npx -y sentisense@0.46.0 mood --json                   # E17 .market
+npx -y sentisense@0.46.0 options {T} --json            # E19 .data, optional
 ```
 
 `sentisenseScore` is null until the day's batch lands, so fall back to
@@ -268,7 +268,7 @@ Rules under the table, non-negotiable:
 - **New facts found mid-debate get appended as E20, E21, ...** before anyone may cite them. No row, no citation, no claim.
 - **13F: quarters first.** The CLI does this for you: `flows {T}` reads the newest quarter whose filing window has closed, and reports it back as `.data.reportDate`. Over REST, call `GET /api/v1/institutional/quarters`, take the `reportDate` of the first entry whose `pending` is not true, then `GET /api/v1/institutional/holders/{T}?reportDate={Q}`. Never hardcode a quarter; never take a `pending:true` one.
 - **Insider tallies exclude non-signals.** Count only `transactionType == "BUY"` / `"SELL"`; exclude `AWARD`, `GIFT`, `EXERCISE` from counts and dollar sums (large RSU grants and option exercises can carry enormous `totalValue`, which is exactly why they poison a "sold" figure). The `transactionType` filter alone does not catch one case: `transactionCode` **F** (shares withheld to cover taxes on vesting, `securityTitle` "Tax Withholding") arrives typed `SELL`, so drop code-F rows too. It is mechanical withholding, not a decision to sell.
-- **Sample size matters on sentiment rows.** A reading built on a handful of mentions is noise, not signal. Get the day's directional mention count with the thin-sample guard in Quick Read 3 and apply it to E10 and E11; `npx -y sentisense@0.45.0 sentiment {T} --json` also carries the day's total at `.sentiment.data.mentions` as a coarse cross-check. Note thin samples in the Value cell ("+0.41 on 5 mentions, thin") and expect them to be attacked in R2.
+- **Sample size matters on sentiment rows.** A reading built on a handful of mentions is noise, not signal. Get the day's directional mention count with the thin-sample guard in Quick Read 3 and apply it to E10 and E11; `npx -y sentisense@0.46.0 sentiment {T} --json` also carries the day's total at `.sentiment.data.mentions` as a coarse cross-check. Note thin samples in the Value cell ("+0.41 on 5 mentions, thin") and expect them to be attacked in R2.
 - **Congressional windows filter on disclosure date, not trade date.** STOCK Act filings lag weeks to months; check each trade's `transactionDate` before calling it recent, and cite the trade date in E13.
 
 ### Filling Tier P: EDGAR recipes (when the host can fetch)
@@ -763,7 +763,7 @@ Parameters and full schemas: the `sentisense` skill, or https://sentisense.ai/sk
 `--json` output carries the exact response of the endpoint beside it, unrenamed, so the two
 paths are interchangeable; the two commands that read two endpoints wrap both, see Agent Tips.
 
-Commands take the prefix `npx -y sentisense@0.45.0`, then:
+Commands take the prefix `npx -y sentisense@0.46.0`, then:
 
 ```
 quote {T} [{T2} ...]      GET /api/v1/stocks/{T}/quote  (lighter: GET /api/v1/stocks/price?ticker={T})
@@ -816,7 +816,7 @@ PRIMARY (no key; see Fetch safety)
 - **Insider field is `transactionType` (`BUY`/`SELL`)**, congress uses `PURCHASE`/`SALE`. Exclude `AWARD`/`GIFT`/`EXERCISE` from tallies (grants and exercises can carry very large `totalValue`), and drop `transactionCode` `F` (tax withholding on vesting) even though it arrives typed `SELL`.
 - **`market-mood` nests the composite under `market`**; `sectors` is a dict whose GICS labels have historically overlapped, so dedupe defensively if a pair appears.
 - **Options are end-of-day chain aggregates, not order flow.** `/options/*` gives put/call volume and OI, an ATM IV term structure, 25-delta skew, OI walls with max pain, and unusual contracts, each ranked as a percentile of that ticker's OWN trailing history (`ivRank1y`, `pcVolPctl1y`, `skewPctl1y`), `asOf` the prior session. Read it as positioning context, never as live sweeps or dealer books. The `/options/overview` board is stocks-only; ETFs (`SPY`, `QQQ`, `TLT`, sector `XL*`) are covered but reachable only via `/stocks/{T}/options/summary`.
-- **Don't hallucinate endpoints, or CLI commands.** No real-time options order flow or sweeps feed (the `/options/*` endpoints above are end-of-day), no dark pool, no `/congress` (it's `/politicians`), no financial-statements endpoint on SentiSense (fundamentals come from EDGAR). The Fetch Reference above is the whole command list; `npx -y sentisense@0.45.0 --help` confirms it at runtime.
+- **Don't hallucinate endpoints, or CLI commands.** No real-time options order flow or sweeps feed (the `/options/*` endpoints above are end-of-day), no dark pool, no `/congress` (it's `/politicians`), no financial-statements endpoint on SentiSense (fundamentals come from EDGAR). The Fetch Reference above is the whole command list; `npx -y sentisense@0.46.0 --help` confirms it at runtime.
 - **Batch vs delayed.** Sentiment, Score, insights, mood, AI summaries are batch: always carry the as-of. Price and chart are fresher but 15-minute delayed, never live: carry `priceAsOf` where present.
 - **The analyst consensus carries its own price, and it can be days old.** `/analyst/{T}/consensus` (CLI `analysts {T}`) returns a `currentPrice` stamped with its own `updatedAt`, independent of the quote endpoint: on 2026-08-20 the AAPL consensus read $305.93 as of 2026-08-16 while `quote` read $316.83. Present `currentPrice` and `upsidePercent` as of that `updatedAt`, and use `quote` whenever the answer needs a current price.
 - **Freshness fields don't share units.** `/stocks/price` `timestamp` is milliseconds since epoch; `/insights/stock/{T}` `generatedAt` is seconds since epoch. Both are the freshness field this skill tells you to check, so naive age math across the two (e.g. subtracting one from the other, or comparing both to `Date.now()` the same way) is off by 1000x. Convert to a common unit before comparing.
