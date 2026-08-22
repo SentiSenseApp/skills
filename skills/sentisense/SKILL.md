@@ -246,7 +246,8 @@ only, so the two bases differ on the same historical date by roughly the dividen
 
 `10Y` and `MAX` may answer `202 Accepted` with an empty array and a `Retry-After` header, meaning
 that stock's deep history is still being assembled; retry and you get the full series. A `200`
-always carries the range you asked for, never a silently shortened one.
+always carries the range you asked for, never a silently shortened one. An unrecognized
+`timeframe` value answers `400` with an `invalid_timeframe` error naming the valid values.
 
 Each bar includes `timestamp` (Unix ms), `date`, `open`, `high`, `low`, `close`, `volume`, and `session`. The `session` field is `pre` (04:00 to 09:30 ET), `regular` (09:30 to 16:00 ET), or `post` (16:00 to 20:00 ET) for intraday timeframes (`1D`, `5D`, `1W`, `1M`); it is `null` for daily, weekly, and monthly bars (`3M` and longer) that span whole sessions. The `1M` timeframe is filtered to `regular`-session bars only.
 

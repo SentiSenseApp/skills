@@ -298,6 +298,9 @@ on a hosted or chat surface (a web chat talking to a remote host), a bare local 
 retrievable by the user, so offer a real delivery route instead: the host's file/attachment
 mechanism if it has one, serving the file briefly over a local port you name explicitly (state
 which machine "localhost" refers to), or pasting the HTML for the user to save. If the host
-offers a render surface for HTML documents (for example an OpenClaw canvas node, a render-only
-panel), presenting the dashboard there is a good fit, because this file is a self-contained
-static snapshot by design; check that the capability is actually connected before promising it.
+offers a render surface for HTML documents (a canvas or render-only preview panel), presenting
+the dashboard there is a good fit, because this file is a self-contained static snapshot by
+design; check that the capability is actually connected before promising it. Treat such a
+surface as display, not interaction: a panel that renders HTML may not run scripts or accept
+input, and this dashboard is built to be read either way.
+

@@ -1,0 +1,233 @@
+#!/usr/bin/env node
+//
+// prepare_data.mjs: fetch everything the expected-move template needs, in one command.
+//
+//   SENTISENSE_API_KEY=... node scripts/prepare_data.mjs NVDA
+//
+// Emits one JSON object on stdout, shaped exactly for the template's data slot. Nothing is
+// derived here that the template also derives: the expected-move math lives in the template,
+// written once and reviewed once, so a chart cannot disagree with itself across runs.
+//
+// Zero dependencies on purpose. Plain fetch, Node 18+, no install step, nothing to audit but
+// this file.
+
+const BASE = process.env.SENTISENSE_BASE_URL || "https://app.sentisense.ai";
+const KEY = process.env.SENTISENSE_API_KEY;
+
+const SKILL_SLUG = "expected-move-visualizer";
+const MAX_IDENTITY = 32;
+
+/**
+ * Reduce a volunteered name to a single safe token, matching the official CLI's rule so the
+ * same agent identifies the same way whichever path it takes.
+ *
+ * Order matters. Whitespace collapses to hyphens BEFORE the strip, so "research desk" stays
+ * "research-desk" instead of becoming "researchdesk"; the length cap is applied BEFORE the
+ * edge trim, so a truncation that lands on a hyphen does not leave one dangling. The strip is
+ * a positive allowlist, which is what stops anything user-supplied from reshaping the header:
+ * a value carrying a newline, a quote, a semicolon or a parenthesis cannot close the comment
+ * or start a second header line, because none of those characters survive.
+ */
+function sanitizeIdentity(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^A-Za-z0-9._-]/g, "")
+    .replace(/-{2,}/g, "-")
+    .slice(0, MAX_IDENTITY)
+    .replace(/^-+|-+$/g, "");
+}
+
+// The skill slug leads as a bare token, and a volunteered agent name follows it inside the
+// same parenthesized comment, exactly as the CLI composes it. Both are optional to the server
+// and nothing is inferred when the name is absent, so with no SENTISENSE_AGENT_NAME set the
+// comment carries the slug alone rather than an empty agent token.
+const AGENT_NAME = sanitizeIdentity(process.env.SENTISENSE_AGENT_NAME);
+const UA = "node/prepare_data (" + SKILL_SLUG + (AGENT_NAME ? "; agent/" + AGENT_NAME : "") + ")";
+
+// Sessions per year for annualizing a realized-volatility figure computed from daily closes.
+// Calendar days (365) are the right denominator for the implied cone, which spans wall-clock
+// time to an expiry; trading days are the right one here, because the sample is one return
+// per session. Mixing the two is the classic way to publish a realized number that looks
+// 25% too low next to the implied one it is drawn against.
+const SESSIONS_PER_YEAR = 252;
+// Short and medium windows, plus the whole sample as a third. A fixed 252 is NOT a usable
+// third window: the one-year chart returns about 251 daily bars, which is 251 closes and
+// therefore 250 returns, so a 252-session window silently never computes. The full-sample
+// entry reports the session count it actually used instead of implying a year it did not get.
+const RV_WINDOWS = [20, 60];
+
+function die(message, hint) {
+  process.stderr.write(`prepare_data: ${message}\n`);
+  if (hint) process.stderr.write(`  ${hint}\n`);
+  process.exit(1);
+}
+
+async function get(path, { allowNullData = false } = {}) {
+  let response;
+  try {
+    response = await fetch(`${BASE}${path}`, {
+      headers: { "X-SentiSense-API-Key": KEY, Accept: "application/json", "User-Agent": UA },
+    });
+  } catch (cause) {
+    die(`network error calling ${path}`, String(cause && cause.message ? cause.message : cause));
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    die(
+      "the API rejected the key",
+      "Check SENTISENSE_API_KEY. A free key comes from https://app.sentisense.ai/get-api-key",
+    );
+  }
+  if (response.status === 429) {
+    const wait = response.headers.get("Retry-After");
+    die("rate limited", wait ? `Retry after ${wait}s.` : "Wait a minute and retry.");
+  }
+  if (!response.ok) {
+    die(`${path} answered HTTP ${response.status}`);
+  }
+
+  const body = await response.json();
+  // The preview envelope wraps some endpoints and not others. Unwrap when it is there, so the
+  // rest of this script reads one shape.
+  const enveloped = body && typeof body === "object" && "isPreview" in body && "data" in body;
+  const data = enveloped ? body.data : body;
+  if (!allowNullData && (data === null || data === undefined)) {
+    die(`${path} returned no data`);
+  }
+  return { data, isPreview: enveloped ? body.isPreview === true : false };
+}
+
+/** Annualized standard deviation of daily log returns over the last `n` sessions. */
+function realizedVol(closes, n) {
+  if (closes.length < n + 1) return null;
+  const window = closes.slice(-(n + 1));
+  const returns = [];
+  for (let i = 1; i < window.length; i++) {
+    // A zero or missing close would make the log blow up; skip the pair rather than emit NaN.
+    if (!(window[i] > 0) || !(window[i - 1] > 0)) continue;
+    returns.push(Math.log(window[i] / window[i - 1]));
+  }
+  if (returns.length < 2) return null;
+  const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+  const variance = returns.reduce((a, b) => a + (b - mean) ** 2, 0) / (returns.length - 1);
+  return Math.sqrt(variance) * Math.sqrt(SESSIONS_PER_YEAR);
+}
+
+async function main() {
+  const ticker = (process.argv[2] || "").trim().toUpperCase();
+  if (!ticker) {
+    die("no ticker given", "Usage: node scripts/prepare_data.mjs NVDA");
+  }
+  if (!/^[A-Z][A-Z0-9.\-]{0,9}$/.test(ticker)) {
+    die(`"${ticker}" does not look like a ticker`, "Use a symbol such as NVDA, SPY or BRK.B");
+  }
+  if (!KEY) {
+    die(
+      "SENTISENSE_API_KEY is not set",
+      "Get a free key at https://app.sentisense.ai/get-api-key, then export SENTISENSE_API_KEY",
+    );
+  }
+
+  // The options dossier is the one call that can legitimately answer "no coverage", and it is
+  // also the only source of the implied volatility the whole chart rests on. Check it first so
+  // an uncovered ticker fails in one call instead of four.
+  const options = await get(`/api/v1/stocks/${encodeURIComponent(ticker)}/options/summary`, {
+    allowNullData: true,
+  });
+  if (!options.data) {
+    die(
+      `${ticker} has no options coverage`,
+      "Coverage is the most actively optioned US names plus the tracked ETFs. Try a larger name.",
+    );
+  }
+  const latest = options.data.latest || {};
+  const context = options.data.context || {};
+  if (typeof latest.atmIv !== "number") {
+    die(
+      `${ticker} has no at-the-money implied volatility in its latest session`,
+      "Without it there is no cone to draw. This is usually a still-building baseline.",
+    );
+  }
+
+  const quote = (await get(`/api/v1/stocks/${encodeURIComponent(ticker)}/quote`)).data;
+  const spot = quote.currentPrice;
+  if (typeof spot !== "number" || !(spot > 0)) {
+    die(`${ticker} has no usable current price`);
+  }
+
+  // Chart and calendar are context, not load-bearing: a missing realized series or an
+  // unscheduled next report should soften the artifact, never fail the run.
+  let closes = [];
+  try {
+    const bars = (await get(`/api/v1/stocks/chart?ticker=${encodeURIComponent(ticker)}&timeframe=1Y`))
+      .data;
+    if (Array.isArray(bars)) closes = bars.map((b) => b.close).filter((c) => typeof c === "number");
+  } catch {
+    closes = [];
+  }
+
+  let nextEarnings = null;
+  try {
+    const cal = (await get(`/api/v1/calendar/earnings?ticker=${encodeURIComponent(ticker)}`)).data;
+    const event = cal && Array.isArray(cal.earnings) ? cal.earnings[0] : null;
+    if (event && event.earningsDate) {
+      nextEarnings = {
+        date: event.earningsDate,
+        // `earningsTime` is always one of before_open, after_close, during_market or unknown.
+        // "unknown" is a real reading (timing not published, or a weekend release that has no
+        // session to sit against), so it is passed through rather than smoothed to null.
+        timing: event.earningsTime || "unknown",
+        confirmed: event.confirmed === true,
+        estimatedEps: typeof event.estimatedEps === "number" ? event.estimatedEps : null,
+      };
+    }
+  } catch {
+    nextEarnings = null;
+  }
+
+  // One entry per window that actually computed, each carrying the session count behind it so
+  // the artifact can label a bar with the sample it used rather than the sample it wanted.
+  const realizedVolatility = [];
+  for (const n of RV_WINDOWS) {
+    const value = realizedVol(closes, n);
+    if (value !== null) realizedVolatility.push({ sessions: n, value: Number(value.toFixed(4)) });
+  }
+  const fullSessions = Math.max(0, closes.length - 1);
+  if (fullSessions > 60) {
+    const value = realizedVol(closes, fullSessions);
+    if (value !== null) {
+      realizedVolatility.push({ sessions: fullSessions, value: Number(value.toFixed(4)) });
+    }
+  }
+
+  const payload = {
+    ticker,
+    asOf: options.data.asOf || null,
+    generatedAt: new Date().toISOString(),
+    spot,
+    // Every IV here is annualized and expressed as a fraction, so 0.4051 is 40.51%.
+    iv: {
+      atm30: latest.atmIv,
+      atm60: typeof latest.atmIv60 === "number" ? latest.atmIv60 : null,
+      atm90: typeof latest.atmIv90 === "number" ? latest.atmIv90 : null,
+      // The 25-delta legs are what let the cone tilt. skew25d == iv25p - iv25c, so a positive
+      // skew means puts are bid richer than calls and the downside half of the cone is wider.
+      call25: typeof latest.iv25c === "number" ? latest.iv25c : null,
+      put25: typeof latest.iv25p === "number" ? latest.iv25p : null,
+      skew25d: typeof latest.skew25d === "number" ? latest.skew25d : null,
+      rank1y: typeof context.ivRank1y === "number" ? context.ivRank1y : null,
+    },
+    realizedVolatility,
+    realizedSessions: closes.length,
+    nextEarnings,
+    // Present and empty in this version. The template renders a realized-volatility comparison
+    // when there is nothing here, and a past-earnings-reaction comparison when there is.
+    reactions: [],
+    isPreview: options.isPreview,
+  };
+
+  process.stdout.write(JSON.stringify(payload, null, 2) + "\n");
+}
+
+main();

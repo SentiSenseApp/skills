@@ -44,13 +44,14 @@ export SENTISENSE_API_KEY="your-key-here"
 Calls authenticate with the `X-SentiSense-API-Key` header. **One key covers every skill and every
 endpoint in the collection.** There is nothing else to configure.
 
-Hosts store that one key differently, and the value never needs to be re-entered per skill. On
-OpenClaw, a key configured for any SentiSense skill (it lands under
-`skills.entries.<skill-name>.apiKey`) is the same credential every sibling skill needs: reference
-the same environment-backed secret rather than creating a second entry, and verify with a cheap
-call (`health` via the CLI, or any GET) instead of printing the value. If a shell reports
-`SENTISENSE_API_KEY` unset while a skill shows Ready, the key lives in the host's config store,
-not the environment; both work, they are just different homes for the same secret.
+Hosts store that one key differently, and the value never needs to be re-entered per skill. A key
+configured for any one SentiSense skill in the host's credential store is the same credential
+every sibling skill needs: reference the same environment-backed secret rather than creating a
+second entry, and verify with a cheap call (`health` via the CLI, or any GET) instead of printing
+the value. If a shell reports `SENTISENSE_API_KEY` unset while a skill shows Ready, the key lives
+in the host's config store, not the environment; both work, they are just different homes for the
+same secret.
+
 
 ---
 
@@ -65,6 +66,7 @@ not the environment; both work, they are just different homes for the same secre
 | "open NVDA", "daily brief", "what is hot today", "one command and give me everything" | `stock-terminal` |
 | "build me a market dashboard", "a morning briefing I can open in a browser" | `stock-market-dashboard` |
 | "unusual options activity", "IV rank", "max pain", "where is positioning stretched" | `unusual-options-activity` |
+| "how much is this stock expected to move", "expected move", "draw me the volatility cone" | `expected-move-visualizer` |
 | "who owns this stock", "13F holdings", "what did the big funds buy last quarter" | `institutional-13f-tracker` |
 | "congress stock trades", "what is that senator buying", "STOCK Act disclosures" | `politicians-stock-tracker` |
 | "insider buying", "Form 4 filings", "is the CEO selling", "cluster buys" | `insider-trading-tracker` |
