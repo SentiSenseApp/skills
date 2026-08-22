@@ -56,6 +56,9 @@ const SESSIONS_PER_YEAR = 252;
 // therefore 250 returns, so a 252-session window silently never computes. The full-sample
 // entry reports the session count it actually used instead of implying a year it did not get.
 const RV_WINDOWS = [20, 60];
+// The reactions panel is the last eight reported quarters. The endpoint serves up to twelve
+// and carries no limit parameter, so the slice happens here.
+const MAX_REACTIONS = 8;
 
 function die(message, hint) {
   process.stderr.write(`prepare_data: ${message}\n`);
@@ -63,7 +66,7 @@ function die(message, hint) {
   process.exit(1);
 }
 
-async function get(path, { allowNullData = false } = {}) {
+async function get(path, { allowNullData = false, tolerate400 = false } = {}) {
   let response;
   try {
     response = await fetch(`${BASE}${path}`, {
@@ -82,6 +85,14 @@ async function get(path, { allowNullData = false } = {}) {
   if (response.status === 429) {
     const wait = response.headers.get("Retry-After");
     die("rate limited", wait ? `Retry after ${wait}s.` : "Wait a minute and retry.");
+  }
+  // A 400 is sometimes routing advice rather than a failure: the quote endpoints are split by
+  // instrument type and the stock one names the ETF path in its error. Hand the body back so the
+  // caller can act on it instead of dying on a recoverable answer.
+  if (response.status === 400 && tolerate400) {
+    let err = {};
+    try { err = await response.json(); } catch { /* not JSON, treat as opaque */ }
+    return { data: null, isPreview: false, error: err };
   }
   if (!response.ok) {
     die(`${path} answered HTTP ${response.status}`);
@@ -150,8 +161,21 @@ async function main() {
     );
   }
 
-  const quote = (await get(`/api/v1/stocks/${encodeURIComponent(ticker)}/quote`)).data;
-  const spot = quote.currentPrice;
+  // Quotes are split by instrument type. The stock endpoint answers 400 `ticker_is_etf` for a
+  // fund and names the ETF path in the message, so an ETF is one redirect away rather than a
+  // failure: both return the same `currentPrice`, and options coverage includes the tracked ETFs.
+  let quote = await get(`/api/v1/stocks/${encodeURIComponent(ticker)}/quote`, { tolerate400: true });
+  if (!quote.data) {
+    if (quote.error && quote.error.error === "ticker_is_etf") {
+      quote = await get(`/api/v1/etfs/${encodeURIComponent(ticker)}/quote`);
+    } else {
+      die(
+        `${ticker} has no quote`,
+        quote.error && quote.error.message ? String(quote.error.message) : undefined,
+      );
+    }
+  }
+  const spot = quote.data.currentPrice;
   if (typeof spot !== "number" || !(spot > 0)) {
     die(`${ticker} has no usable current price`);
   }
@@ -188,6 +212,34 @@ async function main() {
 
   // One entry per window that actually computed, each carrying the session count behind it so
   // the artifact can label a bar with the sample it used rather than the sample it wanted.
+  // Past earnings reactions. Context, not load-bearing: when this is unavailable the template
+  // falls back to the realized-volatility panel, so nothing here may fail the run. An uncovered
+  // ticker and a fund that never reports both answer 200 with an empty list rather than 404,
+  // which lands in the same empty-array result as a genuine error.
+  let reactions = [];
+  try {
+    const react = (await get(`/api/v1/stocks/${encodeURIComponent(ticker)}/earnings/reactions`)).data;
+    if (react && Array.isArray(react.reactions)) {
+      reactions = react.reactions
+        .filter((r) => r && typeof r.movePct === "number" && r.reportDate)
+        // Already newest first on the wire; sorted here anyway so the panel's "last 8" is the
+        // most recent 8 even if that ordering ever changes.
+        .sort((a, b) => String(b.reportDate).localeCompare(String(a.reportDate)))
+        .slice(0, MAX_REACTIONS)
+        .map((r) => ({
+          reportDate: r.reportDate,
+          // Null is a real reading: the session was inferred rather than observed. Passed
+          // through as null rather than filled in with a guess.
+          timing: r.timing == null ? null : String(r.timing),
+          priorClose: typeof r.priorClose === "number" ? r.priorClose : null,
+          nextClose: typeof r.nextClose === "number" ? r.nextClose : null,
+          movePct: r.movePct,
+        }));
+    }
+  } catch {
+    reactions = [];
+  }
+
   const realizedVolatility = [];
   for (const n of RV_WINDOWS) {
     const value = realizedVol(closes, n);
@@ -221,9 +273,9 @@ async function main() {
     realizedVolatility,
     realizedSessions: closes.length,
     nextEarnings,
-    // Present and empty in this version. The template renders a realized-volatility comparison
-    // when there is nothing here, and a past-earnings-reaction comparison when there is.
-    reactions: [],
+    // The template renders a past-earnings-reaction comparison when this has rows, and falls
+    // back to the realized-volatility comparison when it is empty.
+    reactions,
     isPreview: options.isPreview,
   };
 
