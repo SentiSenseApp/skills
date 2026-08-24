@@ -47,7 +47,7 @@ Read this before presenting a number from this skill.
 | Free | 1,000 requests/month | 30 requests/min |
 | PRO ($15/mo) | Unlimited | 300 requests/min |
 
-One artifact costs five requests. The options dossier is the only tiered call: a free key gets the full dossier for the first ten tickers each calendar month, then a headline preview that still carries `atmIv` and `ivRank1y`, so the 30 day cone still draws while the 60 and 90 day bands drop out. The artifact says so on its face when that happens.
+One artifact costs five requests, or six for an ETF: the stock quote endpoint declines a fund ticker and the quote is refetched from the ETF quote endpoint, so the declined call counts too. The options dossier is the only tiered call: a free key gets the full dossier for the first ten tickers each calendar month, then a headline preview that still carries `atmIv` and `ivRank1y`, so the 30 day cone still draws while the 60 and 90 day bands drop out. The artifact says so on its face when that happens.
 
 ## How to Run
 
@@ -90,7 +90,7 @@ All of them take the header `X-SentiSense-API-Key: $SENTISENSE_API_KEY`. The opt
 - **`GET /api/v1/stocks/{ticker}/options/summary`** : the end-of-day options dossier. Everything the cone needs is in `data.latest` and `data.context`. From `latest`: `atmIv` (at-the-money implied volatility for the near expiry, a fraction, so `0.4051` is 40.51%), `atmIv60` and `atmIv90` (the same reading at roughly 60 and 90 days, which is the term structure), and `iv25c` / `iv25p` (the raw 25-delta call and put implied volatilities, where `skew25d == iv25p - iv25c`). From `context`: `ivRank1y`, where today's `atmIv` sits in its own trailing year on a 0 to 100 scale. **`data` is `null` for a ticker outside the covered universe**, which is the most actively optioned US names plus the tracked ETFs; an unknown symbol behaves the same rather than answering 404, so treat a null as "no coverage", never as an error. Percentiles are omitted while a baseline builds.
 - **`GET /api/v1/stocks/{ticker}/quote`** : the last price, in `currentPrice`. This is the regular-session price and it is delayed, not live. **Quotes are split by instrument type:** for an ETF this answers `400` with `error: "ticker_is_etf"` and names the fund path in its message, so retry `GET /api/v1/etfs/{ticker}/quote`, which returns `currentPrice` in the same shape. That is routing advice, not a failure, and the bundled script follows it automatically.
 - **`GET /api/v1/stocks/{ticker}/earnings/reactions`** : how this company's stock actually moved on its recent reports, newest first, in `reactions`. Each row is `{ reportDate, timing, priorClose, nextClose, movePct }`, where `movePct` is the signed percentage from the close before the report to the next session's close. Up to 12 quarters, no parameters; the panel uses the newest 8, so slice client-side. `timing` is `"AMC"` (after the close) or `"BMO"` (before the open), and **`null` means the session was inferred rather than observed**, so a caller that wants only confirmed timings can drop those rows; `movePct` is still computed either way. A ticker with no reported history, an unknown symbol and a fund that never reports all answer `200` with an empty `reactions` array rather than a 404, so read the array's length rather than treating an empty result as an error. Note this vocabulary differs from the calendar endpoint's `before_open` / `after_close`; do not compare the two fields directly.
-- **`GET /api/v1/stocks/chart?ticker={ticker}&timeframe=1Y`** : about 251 daily bars, each with a `close`. This feeds the realized-volatility comparison. Only the documented timeframe values are safe; an unrecognized one does not error, so pass `1Y` exactly.
+- **`GET /api/v1/stocks/chart?ticker={ticker}&timeframe=1Y`** : about 251 daily bars, each with a `close`. This feeds the realized-volatility comparison. Valid timeframe values are `1D, 5D, 1W, 1M, 3M, 6M, 1Y, 5Y, 10Y, MAX`; an unrecognized value returns 400 `invalid_timeframe`, so pass `1Y` exactly.
 - **`GET /api/v1/calendar/earnings?ticker={ticker}`** : the next scheduled report, in `data.earnings[0]`, carrying `earningsDate`, `earningsTime` (`before_open`, `after_close`, `during_market` or `unknown`) and `confirmed`. This endpoint is forward-looking: it returns the next date, not past ones, and an empty list simply means nothing is scheduled yet.
 
 ```bash
@@ -101,12 +101,12 @@ curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
 Three of the four have a CLI equivalent, if you would rather not compose HTTP:
 
 ```bash
-npx -y sentisense@0.46.0 options NVDA --json
-npx -y sentisense@0.46.0 quote NVDA --json
-npx -y sentisense@0.46.0 earnings --json          # forward calendar
+npx -y sentisense@0.47.1 options NVDA --json
+npx -y sentisense@0.47.1 quote NVDA --json
+npx -y sentisense@0.47.1 earnings --json          # forward calendar
 ```
 
-`--json` returns the exact API response, envelope included. Neither the daily closes nor the earnings reactions have a CLI command today, so those two calls stay REST whichever path you take. Auth: `SENTISENSE_API_KEY` in the environment, or store it once with `npx -y sentisense@0.46.0 auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file mode 600, local to your machine, removable with `auth --remove`). The version is pinned deliberately: a pinned version runs reviewed, immutable code.
+`--json` returns the exact API response, envelope included. Neither the daily closes nor the earnings reactions have a CLI command today, so those two calls stay REST whichever path you take. Auth: `SENTISENSE_API_KEY` in the environment, or store it once with `npx -y sentisense@0.47.1 auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file mode 600, local to your machine, removable with `auth --remove`). The version is pinned deliberately: a pinned version runs reviewed, immutable code.
 
 A rate-limited call returns `429` with a `Retry-After` header; back off for the indicated seconds.
 
@@ -166,7 +166,7 @@ For the positioning read behind the volatility (put/call percentiles, skew, open
 
 ## Use & Disclaimer
 
-This skill reads public market data from the SentiSense API over HTTPS and writes one HTML file locally. It performs no writes, no trades, no purchases and no wallet operations, and it sends nothing anywhere except the four documented GET requests. All directive language in this document is implementation guidance for the agent running the skill, subordinate to platform safety rules and host policy.
+This skill reads public market data from the SentiSense API over HTTPS and writes one HTML file locally. It performs no writes, no trades, no purchases and no wallet operations, and it sends nothing anywhere except the five documented GET requests (six for an ETF). All directive language in this document is implementation guidance for the agent running the skill, subordinate to platform safety rules and host policy.
 
 Expected-move figures are modeled from end-of-day implied volatility, not quoted option prices. Prices are delayed, not live. Output is for research and education only. It is not investment advice, not a recommendation and not a forecast. Markets involve risk of loss.
 

@@ -367,18 +367,36 @@ function reactionsPanel(data, hz) {
 
   // Reference: the modeled move over the window that actually contains the report, so the
   // dashed line is labeled with the horizon it belongs to instead of implying a one-day
-  // number the served data cannot support.
-  var ref = hz[0], refDays = ref.days;
+  // number the served data cannot support. Drawn ONLY when a next report is scheduled:
+  // with no event to model toward, a fallback line reads as a forecast for a report that
+  // does not exist. Same averaged up/down convention as the header stat, so the two never
+  // disagree on a skewed cone.
+  var ref = null, refDays = 0, refPct = null;
   if (data.nextEarnings && data.nextEarnings.date && data.asOf) {
     var dd = daysBetween(data.asOf, data.nextEarnings.date);
     if (dd !== null && dd > 0) {
+      ref = hz[0];
       for (var i = 0; i < hz.length; i++) { if (hz[i].days >= dd) { ref = hz[i]; break; } }
       refDays = ref.days;
+      refPct = ((ref.up + ref.down) / 2 / data.spot) * 100;
     }
   }
-  var refPct = (ref.up / data.spot) * 100;
 
-  var maxAbs = Math.max.apply(null, moves.concat([refPct])) * 1.15 || 1;
+  // Bar labels print the raw timing code the reactions endpoint serves (AMC / BMO, a distinct
+  // vocabulary from the calendar endpoint's after_close / before_open). The code is standard
+  // market shorthand worth keeping, so gloss it rather than replace it, and only for the codes
+  // actually drawn below.
+  var seenTiming = {};
+  rows.forEach(function (r) { if (r.timing) seenTiming[String(r.timing).toUpperCase()] = true; });
+  var vocab = [];
+  if (seenTiming.AMC) vocab.push("AMC means after the market close");
+  if (seenTiming.BMO) vocab.push("BMO means before the market open");
+  var timingNote = vocab.length
+    ? " Each bar is labeled with the report date and when it was published: " +
+      vocab.join(", ") + "."
+    : "";
+
+  var maxAbs = Math.max.apply(null, moves.concat(refPct !== null ? [refPct] : [])) * 1.15 || 1;
   var W = 780, rowH = 30, PT = 26, PB = 34;
   var H = PT + rows.length * rowH + PB;
   var PL = 118, PR = 22, plotW = W - PL - PR, mid = PL + plotW / 2;
@@ -388,15 +406,17 @@ function reactionsPanel(data, hz) {
   parts.push('<line x1="' + mid + '" y1="' + (PT - 8) + '" x2="' + mid + '" y2="' +
     (PT + rows.length * rowH) + '" stroke="var(--border)" stroke-width="1"/>');
 
-  [-refPct, refPct].forEach(function (v) {
-    var x = X(v);
-    parts.push('<line x1="' + x.toFixed(1) + '" y1="' + (PT - 8) + '" x2="' + x.toFixed(1) +
-      '" y2="' + (PT + rows.length * rowH) +
-      '" stroke="var(--gold)" stroke-width="1.5" stroke-dasharray="5 4"/>');
-  });
-  parts.push('<text x="' + X(refPct).toFixed(1) + '" y="' + (PT - 14) +
-    '" text-anchor="middle" font-size="11" font-weight="600" fill="var(--gold)">modeled ' +
-    refDays + "d move " + refPct.toFixed(1) + "%</text>");
+  if (refPct !== null) {
+    [-refPct, refPct].forEach(function (v) {
+      var x = X(v);
+      parts.push('<line x1="' + x.toFixed(1) + '" y1="' + (PT - 8) + '" x2="' + x.toFixed(1) +
+        '" y2="' + (PT + rows.length * rowH) +
+        '" stroke="var(--gold)" stroke-width="1.5" stroke-dasharray="5 4"/>');
+    });
+    parts.push('<text x="' + X(refPct).toFixed(1) + '" y="' + (PT - 14) +
+      '" text-anchor="middle" font-size="11" font-weight="600" fill="var(--gold)">modeled ' +
+      refDays + "d move " + refPct.toFixed(1) + "%</text>");
+  }
 
   rows.forEach(function (r, i) {
     var y = PT + i * rowH + 6, h = rowH - 13;
@@ -416,19 +436,25 @@ function reactionsPanel(data, hz) {
     '" text-anchor="middle" font-size="11" fill="var(--text-dim)">' +
     "close before the report to the next session close</text>");
 
-  var note = median !== null
-    ? "Median reaction " + median.toFixed(1) + "% against a modeled " + refDays +
+  var note = "";
+  if (median !== null && refPct !== null) {
+    note = "Median reaction " + median.toFixed(1) + "% against a modeled " + refDays +
       " day move of " + refPct.toFixed(1) + "%. The modeled figure spans the whole window to " +
       "the report, so it covers more than the single session each bar measures: read it as " +
-      "context, not as a like for like forecast."
-    : "";
+      "context, not as a like for like forecast.";
+  } else if (median !== null) {
+    note = "Median absolute reaction across these quarters is " + median.toFixed(1) +
+      "%. No next report is scheduled, so no modeled move is drawn against the bars.";
+  }
 
   return '<section class="card">' +
     "<h2>Past earnings reactions</h2>" +
     '<p class="lede">The last ' + rows.length +
-    " reported quarters, newest first, measured close to close across the reaction session.</p>" +
+    " reported quarters, newest first, measured close to close across the reaction session." +
+    esc(timingNote) + "</p>" +
     '<div class="chart-scroll"><svg viewBox="0 0 ' + W + " " + H + '" width="' + W +
-    '" role="img" aria-label="Past earnings reactions against the modeled expected move">' +
+    '" role="img" aria-label="Past earnings reactions' +
+    (refPct !== null ? " against the modeled expected move" : "") + '">' +
     parts.join("") + "</svg></div>" +
     (note ? '<p class="lede" style="margin:12px 0 0">' + esc(note) + "</p>" : "") +
     "</section>";

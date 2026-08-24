@@ -23,7 +23,7 @@ Reach for this skill when the question is about perception, positioning, or sign
 - "What is the pre-earnings sentiment setup on $AAPL?"
 - "What is the AI insight on $MSFT, and what are people saying in the news?"
 
-This skill complements the rest of the SentiSense collection rather than competing with it. It owns the signal read: what the market feels and where the money is moving. `us-stocks-analysis` owns the judgment layer, so when a quick read turns thesis-shaped, hand it off there for the adversarial deep dive. `sentisense` is the full REST API reference, for any endpoint or response shape not covered below. `stock-terminal` is the one to reach for when the answer should be a terminal-style screen rather than a chat reply. Each of those is a separate skill: install any of them from ClawHub under the same publisher, or get the whole collection at once with `npx skills add https://sentisense.ai`.
+This skill complements the rest of the SentiSense collection rather than competing with it. It owns the signal read: what the market feels and where the money is moving. `stocks-analysis` (published on ClawHub as `us-stocks-analysis`) owns the judgment layer, so when a quick read turns thesis-shaped, hand it off there for the adversarial deep dive. `sentisense` is the full REST API reference, for any endpoint or response shape not covered below. `stock-terminal` is the one to reach for when the answer should be a terminal-style screen rather than a chat reply. Each of those is a separate skill: install any of them from ClawHub under the same publisher, or get the whole collection at once with `npx skills add https://sentisense.ai`.
 
 Do not use it for order entry, portfolio management, or personalized advice. It has no write, trading, or wallet surface; every endpoint is a GET.
 
@@ -164,7 +164,7 @@ SUPPORTING  (price, prices, chart are 15-minute delayed; profile, popular, calen
   GET /api/v1/stocks/price?ticker={T}                       Flat (no wrapper): currentPrice, changePercent at root.
   GET /api/v1/stocks/prices?tickers=A,B,C                   Batch quotes.
   GET /api/v1/stocks/{T}/profile                            name, sector, industry (flat at root; no profile key).
-  GET /api/v1/stocks/chart?ticker={T}&timeframe=1D|5D|1W|1M|3M|6M|1Y|ALL   Bars; read each point's timestamp (Unix ms).
+  GET /api/v1/stocks/chart?ticker={T}&timeframe=1D|5D|1W|1M|3M|6M|1Y|5Y|10Y|MAX   Bars; read each point's timestamp (Unix ms). Invalid timeframe returns 400.
   GET /api/v1/stocks/popular                                Bare array of ~75 ticker strings (screen universe).
   GET /api/v1/calendar/earnings?ticker={T}                  data.earnings[]; next date + consensus EPS + confirmed.
   GET /api/v1/market-summary                                Market-wide narrative headline.

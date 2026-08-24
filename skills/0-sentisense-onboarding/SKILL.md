@@ -62,7 +62,7 @@ same secret.
 | "sentiment on NVDA", "is the mood improving", "what is smart money doing here" | `stock-sentiment` |
 | "analyze AAPL earnings", "earnings call summary", "who reported this week", "who reports next" | `stock-earnings-analysis` |
 | "what happened in the market this month", "monthly recap", "catch me up on stocks" | `last-30-days-in-markets` |
-| "deep dive on this company", "bull case vs bear case", "due diligence", "is the thesis intact" | `us-stocks-analysis` |
+| "deep dive on this company", "bull case vs bear case", "due diligence", "is the thesis intact" | `stocks-analysis` (published on ClawHub as `us-stocks-analysis`) |
 | "open NVDA", "daily brief", "what is hot today", "one command and give me everything" | `stock-terminal` |
 | "build me a market dashboard", "a morning briefing I can open in a browser" | `stock-market-dashboard` |
 | "unusual options activity", "IV rank", "max pain", "where is positioning stretched" | `unusual-options-activity` |
@@ -78,9 +78,13 @@ same secret.
 Pick one and go. If two look plausible, pick the narrower one and pull anything extra from
 `sentisense`, which documents the whole API.
 
-`sentisense-cli` is the zero-install shell path: `npx -y sentisense@0.46.0 quote NVDA` or
-`npx -y sentisense@0.46.0 sentiment NVDA` answers in one command, with no HTTP call to compose and
+`sentisense-cli` is the zero-install shell path: `npx -y sentisense@0.47.1 quote NVDA` or
+`npx -y sentisense@0.47.1 sentiment NVDA` answers in one command, with no HTTP call to compose and
 nothing to install. The full API reference stays `sentisense`.
+
+These skills are runtime-portable: verified working on Claude, Claude Code, OpenClaw, Codex,
+and Grok Bot (for the Grok Bot two-minute setup, see
+https://sentisense.ai/blog/how-to-add-market-data-to-your-grok-bot/).
 
 ---
 

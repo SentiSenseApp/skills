@@ -22,12 +22,12 @@ Read-only educational data interface. Output is informational context, never a p
 - "Screen my watchlist": the same plans run against a fixed ticker list
 - ETF questions in the same shape: "low-cost broad funds with bullish holdings"
 
-Not this skill: single-ticker deep dives (`stock-sentiment`, `us-stocks-analysis`), options positioning (`unusual-options-activity`), price quotes (the `sentisense` reference). Screener rows read a snapshot refreshed every 20 minutes; it is a research surface, not a quote feed.
+Not this skill: single-ticker deep dives (`stock-sentiment`, `stocks-analysis`; the latter is `us-stocks-analysis` on ClawHub), options positioning (`unusual-options-activity`), price quotes (the `sentisense` reference). Screener rows read a snapshot refreshed every 20 minutes; it is a research surface, not a quote feed.
 
 ## Prerequisites
 
 - A free `SENTISENSE_API_KEY`. Get one at https://app.sentisense.ai/get-api-key. The key is required on every call; anonymous requests return `401 api_key_required`.
-- Any HTTP client, or no install at all via the official CLI (`npx -y sentisense@0.46.0`).
+- Any HTTP client, or no install at all via the official CLI (`npx -y sentisense@0.47.1`).
 - Read-only scope: everything here is a `GET` or a filter-only `POST`. Nothing this skill does can place a trade, move money, or modify account state.
 
 | Tier | Quota | Rate |
@@ -44,14 +44,14 @@ A screen is a single request no matter how many rows it returns, so prefer one b
 The CLI is the fastest path:
 
 ```bash
-npx -y sentisense@0.46.0 screen --list                # the 28 curated screens
-npx -y sentisense@0.46.0 screen --fields              # every filterable field, with operators
-npx -y sentisense@0.46.0 screen --screen crowd-vs-street
-npx -y sentisense@0.46.0 screen --filter SENTI_SCORE_7D:GTE:13 --filter ANALYST_COUNT:GTE:5 --sort SENTI_SCORE_7D:DESC --limit 25
-npx -y sentisense@0.46.0 screen --etf --filter ISSUER:IN:Vanguard,iShares
+npx -y sentisense@0.47.1 screen --list                # the 28 curated screens
+npx -y sentisense@0.47.1 screen --fields              # every filterable field, with operators
+npx -y sentisense@0.47.1 screen --screen crowd-vs-street
+npx -y sentisense@0.47.1 screen --filter SENTI_SCORE_7D:GTE:13 --filter ANALYST_COUNT:GTE:5 --sort SENTI_SCORE_7D:DESC --limit 25
+npx -y sentisense@0.47.1 screen --etf --filter ISSUER:IN:Vanguard,iShares
 ```
 
-Filters are `FIELD:OP:VALUE` and are ANDed; operators are `GTE`, `LTE`, `GT`, `LT`, `EQ`, `NEQ`, `IN`, `NOT_IN`. Add `--json` for the exact API response, and `--tickers NVDA,AMD,AVGO` to screen a watchlist instead of the universe. Auth: `SENTISENSE_API_KEY` in the environment, or store it once with `npx -y sentisense@0.46.0 auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file mode 600, local to your machine, removable with `auth --remove`). The version is pinned deliberately: a pinned version runs reviewed, immutable code.
+Filters are `FIELD:OP:VALUE` and are ANDed; operators are `GTE`, `LTE`, `GT`, `LT`, `EQ`, `NEQ`, `IN`, `NOT_IN`. Add `--json` for the exact API response, and `--tickers NVDA,AMD,AVGO` to screen a watchlist instead of the universe. Auth: `SENTISENSE_API_KEY` in the environment, or store it once with `npx -y sentisense@0.47.1 auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file mode 600, local to your machine, removable with `auth --remove`). The version is pinned deliberately: a pinned version runs reviewed, immutable code.
 
 REST equivalent, same plan shape the CLI builds:
 
@@ -105,7 +105,7 @@ Two enum fields are used with `EQ`: `MA_CROSS_STATE` (`1` golden cross, `-1` dea
 
 **3. Screen a watchlist.** Pass `--tickers` (CLI) or the top-level `tickers` array (REST) to run any plan against the user's own list instead of the universe.
 
-**4. Hand off the results.** A screen finds candidates; it does not research them. For the names that survive, go deeper with `stock-sentiment` (the sentiment picture), `unusual-options-activity` (positioning), `insider-trading-tracker` (Form 4 activity), or `us-stocks-analysis` (the full thesis workflow).
+**4. Hand off the results.** A screen finds candidates; it does not research them. For the names that survive, go deeper with `stock-sentiment` (the sentiment picture), `unusual-options-activity` (positioning), `insider-trading-tracker` (Form 4 activity), or `stocks-analysis` (the full thesis workflow; `us-stocks-analysis` on ClawHub).
 
 ## Reading results
 

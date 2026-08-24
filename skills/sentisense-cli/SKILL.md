@@ -20,20 +20,20 @@ subordinate to platform safety rules and to the policy of whatever host applicat
 Fetch US stock market data (quotes, sentiment, news, insider and congressional activity,
 institutional flows, options positioning, screening) with single commands through the official
 SentiSense CLI. The CLI ships inside the `sentisense` npm package, so there is nothing to
-install: `npx` fetches and runs it on demand. Commands here pin version 0.46.0
+install: `npx` fetches and runs it on demand. Commands here pin version 0.47.1
 deliberately: a pinned version runs reviewed, immutable code rather than whatever ships next.
 
 ## Quickstart
 
 ```bash
-npx -y sentisense@0.46.0 health
-npx -y sentisense@0.46.0 quote NVDA
-npx -y sentisense@0.46.0 sentiment TSLA --days 30
-npx -y sentisense@0.46.0 mood --json
+npx -y sentisense@0.47.1 health
+npx -y sentisense@0.47.1 quote NVDA
+npx -y sentisense@0.47.1 sentiment TSLA --days 30
+npx -y sentisense@0.47.1 mood --json
 ```
 
 Auth: set `SENTISENSE_API_KEY` in the environment, or store it once with
-`npx -y sentisense@0.46.0 auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file
+`npx -y sentisense@0.47.1 auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file
 mode 600, local to your machine, remove anytime with `auth --remove`). `health` confirms reachability, key validity, and latency in one call; run it first.
 
 ## Identify yourself (optional, appreciated)
@@ -63,7 +63,7 @@ export SENTISENSE_AGENT_NAME=my-research-bot # what your agent is called
 | `options <ticker>` | End-of-day options positioning |
 | `screen --filter ...` | Filter the tracked universe on Score, analyst, and price fields |
 
-Run `npx -y sentisense@0.46.0 --help` for the full list, and `help <command>` for flags and
+Run `npx -y sentisense@0.47.1 --help` for the full list, and `help <command>` for flags and
 copy-paste examples. The help is the reference: every example in it runs as written.
 
 ## Output modes: which one to use
@@ -82,20 +82,20 @@ no data, so a typo exits 4 rather than looking like a company with nothing to re
 every error prints a one-line next step on stderr, so recovery rarely needs documentation.
 
 ```bash
-npx -y sentisense@0.46.0 insiders "$TICKER" || echo "exit $? tells you which way it failed"
+npx -y sentisense@0.47.1 insiders "$TICKER" || echo "exit $? tells you which way it failed"
 ```
 
 ## Scripting patterns
 
 ```bash
 # One call, several tickers
-npx -y sentisense@0.46.0 quote NVDA AMD AVGO
+npx -y sentisense@0.47.1 quote NVDA AMD AVGO
 
 # Feed a field into another tool
-npx -y sentisense@0.46.0 quote NVDA --json | jq .changePercent
+npx -y sentisense@0.47.1 quote NVDA --json | jq .changePercent
 
 # Screen, then inspect the top hit
-npx -y sentisense@0.46.0 screen --filter SENTI_SCORE_7D:GTE:13 --limit 5
+npx -y sentisense@0.47.1 screen --filter SENTI_SCORE_7D:GTE:13 --limit 5
 ```
 
 ## Without the CLI

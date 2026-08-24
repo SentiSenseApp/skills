@@ -84,6 +84,21 @@ API key required on every endpoint. Free tier covers light terminal use; PRO ($1
 
 Anonymous calls return `401 api_key_required`.
 
+### CLI quickstart (optional)
+
+If your runtime can run a shell, the official CLI ships inside the `sentisense` npm package, so there is nothing to install and no client to write:
+
+```bash
+npx -y sentisense@0.47.1 quote NVDA
+npx -y sentisense@0.47.1 sentiment TSLA --days 30
+npx -y sentisense@0.47.1 insiders NVDA --days 90 --json
+npx -y sentisense@0.47.1 mood --json
+```
+
+Add `--json` for the exact API response, envelope included, so every response shape this skill maps onto a screen applies unchanged. Auth: `SENTISENSE_API_KEY` in the environment, or store it once with `npx -y sentisense@0.47.1 auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file mode 600, local to your machine, removable with `auth --remove`). Set `SENTISENSE_SKILL=stock-terminal` and the CLI stamps the identity above for you. The version is pinned deliberately: a pinned version runs reviewed, immutable code.
+
+The CLI is a convenience for an agent answering a turn, never a dependency. A host application standing up the harness calls the REST endpoints directly, and every command in this skill documents the REST calls it fans out to. For the full command list, install the `sentisense-cli` skill or run `npx -y sentisense@0.47.1 --help`.
+
 ---
 
 ## The Two-Shape Rule
@@ -834,6 +849,8 @@ SECTORS (top 3 / bottom 3)
 
 Sort the `sectors` dict by `currentScore` descending; `{sectorName1..3}` are the top 3 (left column), `{sectorName4..6}` are the bottom 3 (right column, still highest-to-lowest of that group). The response returns 11 GICS level-1 sectors with full names (e.g. `Information Technology`, `Communication Services`, `Consumer Discretionary`); if a full name doesn't fit the grid, abbreviate consistently and say in the output that names are abbreviated, rather than guessing a fixed shorthand per sector.
 
+`Options Flow` in that grid is the composite's own signal name, exactly as the API returns it (`key: options_flow`), so print the label as spelled. Describe it accurately if the user asks what it reads: it is the net breadth of end-of-day options positioning across the covered universe, smoothed and ranked against its own history. It is not a live order tape, and neither is the `options` command below.
+
 ---
 
 ### `flow <TICKER>`: Smart-money flow on one ticker
@@ -1208,7 +1225,7 @@ The values are share-of-voice percentages summing to roughly 100, **not** per-so
 
 **Story detail (`documents/stories/:id`) is a flat `PublicStoryDetailDto`**, not the nested `{ cluster, entities, documents }` you might expect. Inside `aspectPerspectives[i]`, the fields `bullishView` and `bearishView` are *structured objects* (`hook`, `risksOrCatalysts: string[]`, `conclusion`, `confidence`), not markdown strings. The top-level `bullishView` / `bearishView` ARE markdown strings. Same field names, different shapes. Type-check before calling string methods.
 
-**Chart timeframes accepted by `stocks/chart`:** `1D / 5D / 1W / 1M / 3M / 6M / 1Y / ALL`. Anything else falls back to `1M` and logs a warning.
+**Chart timeframes accepted by `stocks/chart`:** `1D / 5D / 1W / 1M / 3M / 6M / 1Y / 5Y / 10Y / MAX`. Anything else returns 400 `invalid_timeframe` naming the valid values; there is no silent fallback.
 
 **`institutional/quarters` is a bare array** `[{ value, label, reportDate, pending }]` (not wrapped in `data`). Take the `reportDate` of the FIRST quarter whose `pending` is not true (skip any `pending:true` entry); only if every entry is `pending:true`, fall back to `[0]`. Do NOT blindly take `[0].reportDate`: within ~45 days of a quarter close, `[0]` is a still-filing `pending:true` quarter with almost no holders. Pass the resolved `reportDate` to `institutional/holders`.
 
