@@ -8,7 +8,7 @@ metadata:
 ---
 # Stock Screener (SentiSense)
 
-Filter the tracked US stock and ETF universe in one query. This is the only surface where SentiSense's own signals, the SentiSense Score and social attention, sit in the same `WHERE` clause as analyst consensus, technicals, momentum, and price. A screen on analyst ratings alone is something a dozen free tools already do; a screen on *analyst ratings where the Score disagrees* is not. Twenty-eight curated screens ship ready to run, and every field is available for custom plans.
+Filter the tracked US stock and ETF universe in one query. This is the only surface where SentiSense's own signals, the SentiSense Score and social attention, sit in the same `WHERE` clause as analyst consensus, technicals, momentum, and price. A screen on analyst ratings alone is something a dozen free tools already do; a screen on *analyst ratings where the Score disagrees* is not. 28 curated screens ship ready to run, and all 48 screenable fields are available for custom plans; both are enumerated in the appendix at the end of this skill.
 
 This skill's job is translation: turning what the user actually asked ("find me oversold stocks people are turning bullish on") into a valid, honest screen plan, running it, and presenting the results with the plan visible so the user can tighten or loosen it.
 
@@ -77,7 +77,7 @@ The CLI builds this for you (`--filter ISSUER:IN:Vanguard,iShares`). The live st
 Most screening requests arrive fuzzy. Translate them honestly:
 
 1. **Check the curated screens first** (`--list`). If one matches the intent, run it and say which one you used; the curated plans are also worked examples of the plan shape, so quote the plan when adapting one. In the names, `+` means both conditions hold and `vs` means the two sides disagree.
-2. **Get the field catalog** (`--fields`) rather than guessing names. The catalog carries units, operators, and descriptions, and grows without notice; a guessed field name is a 400, never a silent wrong answer.
+2. **Get the field catalog** (`--fields`) rather than guessing names. The catalog carries units, operators, and descriptions, and grows without notice; a guessed field name is a 400, never a silent wrong answer. The appendix below is a per-release snapshot of the same catalog, good for planning without a call; the live catalog can be ahead of it.
 3. **Map intent words to field groups.** "Loved / bullish / mood improving" is the Score group; "everyone is talking about it" is popularity (`SOCIAL_DOMINANCE`, `MENTION_VELOCITY`); "cheap lately / beaten down" is `PCT_OFF_52W_HIGH` or the moving-average distances; "analysts like it" is the analyst group; "big / liquid" is `MARKET_CAP` and `VOLUME`.
 4. **Add a coverage guard when a ratio can be thin.** `ANALYST_BUY_RATIO_PCT` from one analyst is noise: pair it with `ANALYST_COUNT GTE 5`. If a screen returns fewer rows than expected, check field coverage before loosening thresholds.
 5. **Show the plan with the results.** The user can only correct a translation they can see. State filters, sort, and `matched` count; `matched` is the pre-limit total, so truncation is visible. Say it as three numbers when they differ: "56 matched, showing 50, more exist" (more exist whenever `matched` is greater than the rows returned).
@@ -99,7 +99,7 @@ Two enum fields are used with `EQ`: `MA_CROSS_STATE` (`1` golden cross, `-1` dea
 
 ## Workflows
 
-**1. Run a curated screen.** `--list`, pick by intent, `--screen <id>`. Seventeen stock screens (`winners`, `momentum`, `high-sentiment`, `crowd-vs-street`, `oversold-with-positive-sentiment`, `golden-cross-bullish`, `small-cap-buzz`, ...) and eleven ETF screens (`etf-low-cost-core`, `etf-sentiment-leaders`, `etf-dip-bullish`, ...). Screen ids are stable and never reused, but a screen can be retired, so handle a missing id gracefully.
+**1. Run a curated screen.** `--list`, pick by intent, `--screen <id>`. 17 stock screens and 11 ETF screens, all listed with what each finds in the appendix. Screen ids are stable and never reused, but a screen can be retired, so handle a missing id gracefully.
 
 **2. Translate a fuzzy ask.** "Beaten-down names the crowd is warming to" becomes: `PCT_OFF_52W_HIGH:LTE:-30`, `SCORE_CHANGE_7D:GTE:5`, sort by `SCORE_CHANGE_7D:DESC`, with the plan shown alongside the results. Compare with the curated `oversold-with-positive-sentiment` and say if you diverged and why.
 
@@ -110,6 +110,110 @@ Two enum fields are used with `EQ`: `MA_CROSS_STATE` (`1` golden cross, `-1` dea
 ## Reading results
 
 Every row carries the full field set (nulls where uncovered) plus render-ready extras: `week52High`/`week52Low`, `lastUpdated` (epoch seconds), and three small series per ticker (`sentisenseScoreBars7D`, `sentisenseScoreBars30D`, `priceSparkline30D`), so results are chartable without a second call. Prices in rows come from the 20-minute snapshot: fine for screening, not for quoting; say "as of the latest screener snapshot" rather than presenting them as live.
+
+<!-- screener-appendix:start -->
+## Appendix: every field and every curated screen (snapshot)
+
+Generated from the same catalog the API serves, refreshed with every release of this skill. The live `--fields` and `--list` output is authoritative and can be ahead of this table; use this appendix to plan, and the live catalog to execute. Field names are case-sensitive and go into plans verbatim. Numeric fields take GTE/GT/LTE/LT and are sortable; nulls never match a filter and always sort last.
+
+### Stock fields (32)
+
+| Field | Group | Type | Meaning |
+|---|---|---|---|
+| `SENTI_SCORE_7D` | Sentiment | number, Score | 7-day SentiSense score. Above +5 is bullish, +13 strongly so; below -5 is bearish. |
+| `SENTI_SCORE_1M` | Sentiment | number, Score | 1-month SentiSense score. Above +5 is bullish, +13 strongly so; below -5 is bearish. |
+| `SCORE_CHANGE_7D` | Sentiment | number, Score | 7-day SentiSense Score minus the 1-month baseline. Positive means the score is strengthening versus the longer window. |
+| `SENTIMENT_DIRECTION` | Sentiment | enum, EQ only | Which side of the neutral band the 7-day SentiSense Score sits on. Bullish is above +5, bearish below -5, and anything between reads Neutral. Values: 1 = Bullish, 0 = Neutral, -1 = Bearish. |
+| `SENTI_SCORE_TREND_7D` | Sentiment | number, Score | Slope of the daily SentiSense score over the last 7 days, in score points per day. Positive means the score is climbing. Blank when the week is too sparse to call. |
+| `SENTI_SCORE_TREND_30D` | Sentiment | number, Score | Slope of the SentiSense score over the last 30 days, in score points per bucket (each bucket is about 4 days). Positive means the score is climbing. |
+| `SENTI_SCORE_RISING_STREAK_30D` | Sentiment | number, count | How many buckets in a row the SentiSense score has risen, ending with the most recent (each bucket is about 4 days, so 3 is roughly two weeks). Unlike the trend slope, this cannot be satisfied by an old climb that has since stalled. |
+| `SOCIAL_DOMINANCE` | Popularity | number, share of 1 | Share of social chatter across all tracked stocks. |
+| `MENTION_SHARE` | Popularity | number, share of 1 | Share of total mentions across all tracked stocks. |
+| `MENTION_VELOCITY` | Popularity | number, % | Change in mentions, last 3 days versus the prior 3 days, in percent. +100 means mentions doubled. |
+| `DOMINANCE_CHANGE` | Popularity | number, share of 1 | Change in social dominance versus last week (share of voice). |
+| `MARKET_CAP` | Price and size | number, USD (10B, 1.2T) | Company market capitalization. Accepts 500M, 10B, 1.2T. |
+| `PRICE` | Price and size | number, USD | Latest share price in dollars. |
+| `CHANGE_PERCENT` | Price and size | number, % | Price change today, in percent. |
+| `CHANGE` | Price and size | number, USD | Price change today, in dollars. |
+| `VOLUME` | Price and size | number, count | Shares traded today. Accepts 500K, 10M, 1B. |
+| `PCT_OFF_52W_HIGH` | Price and size | number, % | Distance from the 52-week high. Negative below the high, e.g. -20 is 20% below. |
+| `PCT_OFF_52W_LOW` | Price and size | number, % | Distance above the 52-week low. Positive above the low, e.g. 15 is 15% above. |
+| `PRICE_TREND_30D` | Price and size | number, % | Slope of the price over the last 30 days, in percent per trading day. Near zero means a flat chart. Use with Score Trend to find stocks where attention is moving before the price is. |
+| `ANALYST_BUY_RATIO_PCT` | Analyst | number, % | Percent of rating analysts saying buy or strong buy. Analysts skew bullish, so the average stock sits near 60: use 80 or more for a genuinely strong consensus. |
+| `ANALYST_TARGET_UPSIDE_PCT` | Analyst | number, % | Percent from the current price to the mean analyst price target. Negative means the stock trades above the target. |
+| `ANALYST_COUNT` | Analyst | number, count | How many analysts rate the stock. Pair this with a consensus filter: some stocks are covered by a single analyst, and one opinion is not a consensus. |
+| `ANALYST_RATING_MOMENTUM_30D` | Analyst | number, count | Upgrades minus downgrades over the last 30 days. Moves in small numbers: across the whole universe only about 80 stocks reach +1 in a typical month, so 1 is already a meaningful threshold and 3 is rare. |
+| `PCT_OFF_200D_MA` | Technical | number, % | Percent above or below the 200-day moving average. Negative means trading under it. Blank for stocks with under 200 trading days of history. |
+| `PCT_OFF_50D_MA` | Technical | number, % | Percent above or below the 50-day moving average. |
+| `MA_CROSS_STATE` | Technical | enum, EQ only | Whether the 50-day average sits above or below the 200-day. Values: 1 = Golden cross, 0 = Neither, -1 = Death cross. |
+| `RETURN_1M` | Technical | number, % | Percent price return over roughly the last month of trading. |
+| `RETURN_3M` | Technical | number, % | Percent price return over roughly the last three months of trading. |
+| `RETURN_6M` | Technical | number, % | Percent price return over roughly the last six months of trading. |
+| `RETURN_1Y` | Technical | number, % | Percent price return over roughly the last year of trading. Blank for stocks with under a year of history. |
+| `VOLATILITY_30D` | Technical | number, % | Annualized volatility from the last 30 sessions, in percent. The typical tracked stock sits near 50; under 25 is calm and over 80 is turbulent. |
+| `ANALYST_RATING_MEAN` | Analyst | number, Score | Broker consensus rating on the standard 1 to 5 scale. THIS SCALE IS INVERTED: 1 is strong buy and 5 is strong sell, so bullish means a LOW value. Analyst Buy Ratio is the easier field for most filters. |
+
+### ETF fields (16)
+
+| Field | Group | Type | Meaning |
+|---|---|---|---|
+| `CONSTITUENTS_WEIGHTED_SENTISENSE` | Sentiment | number, Score | Holdings-weighted SentiSense score across the fund's constituents. Above +5 is bullish. |
+| `DIRECT_SENTISENSE` | Sentiment | number, Score | SentiSense score from chatter about the fund itself. Above +5 is bullish. |
+| `WEIGHTED_ANALYST_UPSIDE` | Analyst | number, % | Holdings-weighted analyst price-target upside, in percent. |
+| `MARKET_CAP` | Price and size | number, USD (10B, 1.2T) | Assets under management. Accepts 500M, 10B, 1.2T. |
+| `EXPENSE_RATIO` | Price and size | number, % | Annual expense ratio in percent, e.g. 0.09 for SPY. Screen <= to find cheap funds. |
+| `CURRENT_PRICE` | Price and size | number, USD | Latest fund price in dollars. |
+| `CHANGE_PERCENT` | Price and size | number, % | Price change today, in percent. |
+| `PRICE_CHANGE` | Price and size | number, USD | Price change today, in dollars. |
+| `VOLUME` | Price and size | number, count | Shares traded today. Accepts 500K, 10M, 1B. |
+| `PCT_OFF_52W_HIGH` | Price and size | number, % | Distance from the 52-week high. Negative below the high, e.g. -20 is 20% below. |
+| `PCT_OFF_52W_LOW` | Price and size | number, % | Distance above the 52-week low. Positive above the low, e.g. 15 is 15% above. |
+| `WEIGHT_COVERED_PCT` | Coverage | number, % | Percent of fund weight covered by SentiSense constituent data. |
+| `HOLDINGS_COUNT` | Coverage | number, count | Number of holdings in the fund. |
+| `ISSUER` | Fund profile | text, IN/NOT_IN | Fund issuer, e.g. Vanguard or iShares. Pick one or more. Live values come from the fields catalog. |
+| `ASSET_CLASS` | Fund profile | text, IN/NOT_IN | Broad asset class: Equity, Bond, Commodity. Live values come from the fields catalog. |
+| `TRACKED_INDEX` | Fund profile | text, IN/NOT_IN | The index the fund tracks. Live values come from the fields catalog. |
+
+### Curated stock screens (17)
+
+Run with `--screen <id>` or `GET /api/v1/screener/screens` for the full plans.
+
+| Id | Name | What it finds |
+|---|---|---|
+| `winners` | Winners | Stocks up today |
+| `losers` | Losers | Stocks down today |
+| `high-sentiment` | High Sentiment | 7-day SentiSense Score of +13 or higher, our strongly bullish band |
+| `sentiment-divergence` | Sentiment Divergence | 7-day SentiSense Score has jumped 8 or more points above a 1-month baseline that is still neutral |
+| `rising-share-of-voice` | Rising Share of Voice | Largest share of social conversation across the tracked universe |
+| `mag-7` | Mag 7 | Mega-cap tech leaders |
+| `large-caps-positive` | Large Caps Positive | $10B+ market cap with a bullish 7-day SentiSense Score |
+| `high-volume` | High Volume | Stocks trading the most shares today |
+| `small-cap-buzz` | Small-Cap Buzz | Under $2B market cap with a bullish 7-day SentiSense Score |
+| `oversold-with-positive-sentiment` | Oversold + Bullish | Down more than 2% today while the 7-day SentiSense Score stays bullish |
+| `momentum` | Momentum | 7-day SentiSense Score is 8 or more points above its own 1-month baseline |
+| `sentisense-score-vs-price` | Score vs Price | SentiSense Score trending up over 30 days while price is flat or down |
+| `crowd-vs-street` | Crowd vs Street | Bullish 7-day SentiSense Score where 30% or fewer analysts rate it a buy |
+| `analyst-buys-quiet` | Analyst Buys + Quiet | 90% or more analyst buy ratings but almost no social conversation |
+| `upgrades-rising` | Upgrades + Rising Score | More analyst upgrades than downgrades in 30 days, with the SentiSense Score rising |
+| `below-200d-rising` | Below SMA 200 | Trading below its 200-day moving average while its SentiSense Score is rising |
+| `golden-cross-bullish` | Golden Cross + Bullish | 50-day average above the 200-day, with a bullish 7-day SentiSense Score |
+
+### Curated ETF screens (11)
+
+| Id | Name | What it finds |
+|---|---|---|
+| `etf-winners` | Winners | ETFs up today |
+| `etf-losers` | Losers | ETFs down today |
+| `etf-sentiment-leaders` | Sentiment Leaders | Highest holdings-weighted SentiSense Score across fund constituents |
+| `etf-analyst-upside` | High Analyst Upside | Holdings-weighted analyst upside of 15% or more |
+| `etf-mega-funds` | Mega Funds | $100B+ in assets under management |
+| `etf-high-volume` | High Volume | ETFs trading the most shares today |
+| `etf-near-52w-high` | Near 52w High | Within 5% of the 52-week high |
+| `etf-dip-bullish` | Dip + Bullish | Down today while the holdings-weighted SentiSense Score stays bullish |
+| `etf-broad-funds` | Broad Funds | Diversified funds with 500+ holdings |
+| `etf-low-cost-core` | Low-Cost Core | Expense ratio 0.15% or less with $10B+ in assets |
+| `etf-direct-sentiment` | Direct Sentiment | Positive SentiSense Score from chatter about the fund itself, not its holdings |
+<!-- screener-appendix:end -->
 
 ## Going further
 

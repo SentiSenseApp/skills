@@ -83,7 +83,7 @@ curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
 **1. Who owns this stock?**
 
 ```bash
-Q=2025-12-31  # first pending:false reportDate from /quarters
+Q=2026-06-30  # first pending:false reportDate from /quarters
 curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
   "https://app.sentisense.ai/api/v1/institutional/holders/NVDA?reportDate=$Q&limit=25"
 ```
@@ -100,6 +100,7 @@ Summarize new positions, adds, trims, and exits by `changeType`, and the biggest
 **3. Aggregate accumulation vs distribution**
 
 ```bash
+Q=2026-06-30  # first pending:false reportDate from /quarters
 curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
   "https://app.sentisense.ai/api/v1/institutional/flows?reportDate=$Q"
 ```
@@ -107,6 +108,7 @@ curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
 **4. Activist watch**
 
 ```bash
+Q=2026-06-30  # first pending:false reportDate from /quarters
 curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
   "https://app.sentisense.ai/api/v1/institutional/activist?reportDate=$Q"
 ```

@@ -189,7 +189,7 @@ Which way the market's tone leans, and how widely it's shared. Daily snapshots.
 ### Endpoints That Do NOT Exist
 Do not hallucinate these. They are not part of the SentiSense API:
 - `/api/v1/options/flow` or `/api/v1/dark-pool`: these exact paths do not exist. For end-of-day options analytics (IV rank, put/call percentile, 25-delta skew, open-interest walls, max pain, unusual-by-volume contracts) use the Options Intelligence endpoints instead: `/api/v1/options/overview` and `/api/v1/stocks/{ticker}/options/summary`. We do not attribute tick-level order flow (no buy/sell aggressor tagging) and we have no dark-pool data
-- `/api/v1/earnings` as a root: the only path under it is `/api/v1/earnings/recent` (which covered companies already reported in a recent window). For the forward calendar use `/api/v1/calendar/earnings`; for a company's per-quarter earnings analysis report use `/api/v1/stocks/{ticker}/earnings-summaries`; for reported financials use `/api/v1/stocks/fundamentals` (single period) or `/api/v1/stocks/fundamentals/history` (multi-period trend, up to 40 quarters or 20 years)
+- `/api/v1/earnings` as a root: the only paths under it are `/api/v1/earnings/recent` (which covered companies already reported in a recent window) and `/api/v1/earnings/statistics` (market-wide beat rate joined to what the market did next). For the forward calendar use `/api/v1/calendar/earnings`; for a company's per-quarter earnings analysis report use `/api/v1/stocks/{ticker}/earnings-summaries`; for reported financials use `/api/v1/stocks/fundamentals` (single period) or `/api/v1/stocks/fundamentals/history` (multi-period trend, up to 40 quarters or 20 years)
 - `/api/v1/alerts` or `/api/v1/notifications`: alerts are user-facing only, not available via API
 - `/api/v1/chat` or `/api/v1/ask`: the AI chat is not accessible via API
 - `/api/v2/sentiment`: the correct path is `/api/v2/metrics/entity/{id}/metric/sentiment`
@@ -1097,6 +1097,10 @@ Aggregate Wall Street consensus: price target band, number of covering analysts,
 
 Response: `{ isPreview, previewReason, data: { ticker, currentPrice, targetLow, targetMean, targetHigh, targetMedian, numberOfAnalysts, upsidePercent, consensusLabel, recommendationMean, strongBuy, buy, hold, sell, strongSell, updatedAt } }`. The five `*Buy/*Sell/hold` count fields are zero in the free preview. Returns 404 when no analyst coverage exists for the ticker.
 
+**`recommendationMean` runs 1.0 to 5.0 and is INVERTED: lower is more bullish** (1 = Strong Buy, 2 = Buy, 3 = Hold, 4 = Sell, 5 = Strong Sell). Flip the comparison when you screen or rank on it (the options put/call and skew fields run inverted too, higher = more bearish; most other fields run the intuitive direction). The mean is aggregated from a different analyst set than the five rating counts, so it will not reconcile as their weighted average. `consensusLabel` is derived from it at these cutoffs: `<=1.5` STRONG_BUY, `<=2.5` BUY, `<=3.5` HOLD, `<=4.5` SELL, else STRONG_SELL. **`numberOfAnalysts` belongs to the price target, not the ratings.** The five rating fields sum to a separate count (not every analyst publishes both, and the rating total is usually the larger). For percent-of-analysts math, divide by the sum of the five rating fields; dividing by `numberOfAnalysts` mixes the two groups and returns above 100% on many tickers.
+
+**Analyst data refreshes as one sweep over the whole covered universe, approximately daily and anchored in the US pre-market (around 8 to 9am ET)**, so every ticker's `updatedAt` moves together and a rating change can be up to ~24h old before it appears in `/actions` or `/activity`. Read `updatedAt` rather than assuming a schedule.
+
 **`currentPrice` on this endpoint is not the live quote.** It is the reference price captured when the analyst snapshot was written, dated by `updatedAt`, and `upsidePercent` is computed against that same reference so the band and the upside stay internally consistent. Expect it to drift from the traded price between snapshots (a few percent is normal). When you need the current regular-session price, read `currentPrice` from `/api/v1/stocks/price` or `/api/v1/stocks/{ticker}/quote` instead, where the field tracks the session and carries the standard 15-minute delay rather than a snapshot's age.
 
 CLI equivalent: `npx -y sentisense@0.47.1 analysts AAPL --json` (this response is under `.consensus`)
@@ -1646,7 +1650,20 @@ The cross-ticker backward-looking feed: which covered companies reported on or a
 
 Response: `{ isPreview: false, previewReason: null, data: [...] }`. Each row: `{ ticker, fiscalPeriod, reportDate, headline, hasTranscriptSummary, generatedAt }`. The window is bounded by `reportDate`, so a quarter reported inside it appears even when its call summary lands later. An empty `data` array means nobody in the covered set reported in that window, not an error. This is the only backward-looking earnings feed; the Calendar API is forward-looking and covers scheduled dates, not results.
 
-Reported by the earnings family alongside the three endpoints above:
+### GET /api/v1/earnings/statistics
+The only endpoint here that describes the market rather than one company: of everyone who reported in a window, how many cleared the estimate, and how the market actually traded them. **API key required**, no tier gate. One param, `window`: `last_completed_week` (default), `week_to_date`, `trailing_52w`, `all_time`. Anything else returns `400 invalid_window`. Weeks are ISO weeks evaluated in America/New_York; the default is the last finished week because a mid-week figure gets revised underneath you, and `week_to_date` marks itself partial in its window key.
+
+Response: `{ isPreview: false, previewReason: null, data: {...} }`. `data` carries `calculationVersion`, `asOf`, a `window` object (`key`, `kind`, `startDate`, `endDate`), the counts (`eventsInWindow`, `classifiedEvents`, `unclassifiedEvents`, `distinctTickers`, `completedReactions`, `pendingReactions`), `coverageRatio`, `sufficientData` with `insufficientDataReason`, one identically-shaped block per outcome (`beat`, `miss`, `inline`, each with `count`, `rate`, `withReaction`, `fell`, `rose`, `flat`, `fellRate`, `averageMovePct`), `averageMovePct`, and, on the two weekly windows, a `baseline` and a `deviation`. `thresholds` is always present.
+
+Four things to get right before you quote a number from this:
+- **Units are in the field names.** `Rate` and `Ratio` are fractions in `[0,1]`; `Pct` is a signed percent. A rate with a zero denominator is `null`, never `0`.
+- **There are two denominators and they are never equal.** `classifiedEvents` is quarters with both EPS figures and is what `rate` divides by. `withReaction` is the subset whose trading session has closed and is what `fellRate` divides by. A company reporting after the close has a known surprise hours before the session that trades it, so dividing a reaction statistic by `classifiedEvents` understates it.
+- **Check `sufficientData` first.** A thin or still-settling window returns real counts anyway, because that beats an error, but the flag means the figure is not fit to publish. `thresholds` tells you which bar it missed so you can apply your own.
+- **The baseline excludes the window it judges** (52 ISO weeks ending the day before it starts), and `deviation.beatRateIsMaterial` is the same gate our own narrative layer uses.
+
+Beat, miss and inline come from reported EPS against the estimate directly, never from a rounded surprise percentage. These are realized historical statistics, not forecasts.
+
+Reported by the earnings family alongside the four endpoints above:
 - **Calendar** -- `GET /api/v1/calendar/earnings?week=next` (who reports next week) or `?ticker={ticker}` (a single name's next date + consensus EPS). See the Calendar API section.
 - **Fundamentals + KPIs** -- `GET /api/v1/stocks/fundamentals` for statements; `GET /api/v1/stocks/{ticker}/kpis` for curated GAAP and non-GAAP metrics (PRO preview). See the Stocks API section.
 - **Analyst estimates** -- `GET /api/v1/analyst/{ticker}/estimates` for forward EPS and beat/miss history. See the Analyst Ratings API section.

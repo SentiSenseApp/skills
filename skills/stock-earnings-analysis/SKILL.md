@@ -145,10 +145,12 @@ Coverage is roughly 500 large-cap US companies. A ticker outside it returns `200
 
 ### Which signals count as earnings signals
 
-Exactly two insight types: **`earnings_pulse`** (a short AI takeaway on a quarter already reported)
-and **`earnings_upcoming`** (a signal ahead of a scheduled report). The insights feed carries thirty
-or more types covering insider, institutional, sentiment and volume patterns; none of the others
-belongs in an earnings readout, however tempting the ticker match.
+Exactly three insight types: **`earnings_pulse`** (a short AI takeaway on a quarter already
+reported), **`earnings_upcoming`** (a signal ahead of a scheduled report), and
+**`stock_earnings_reaction_pattern`** (a data-backed read on how a stock's price has historically
+reacted to its own reports, generated when the pattern is statistically notable). The insights feed
+carries thirty or more types covering insider, institutional, sentiment and volume patterns; none
+of the others belongs in an earnings readout, however tempting the ticker match.
 
 Filter at the API: `GET /api/v1/insights/stock/{ticker}?insightType=earnings_pulse`. Discover what
 a ticker actually has with `GET /api/v1/insights/stock/{ticker}/types` before assuming. Every type

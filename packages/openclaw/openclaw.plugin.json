@@ -19,7 +19,9 @@
     "./skills/last-30-days-in-markets",
     "./skills/insider-trading-tracker",
     "./skills/stock-screener",
-    "./skills/expected-move-visualizer"
+    "./skills/expected-move-visualizer",
+    "./skills/options-payoff-calculator",
+    "./skills/position-size-calculator"
   ],
   "setup": {
     "providers": [
