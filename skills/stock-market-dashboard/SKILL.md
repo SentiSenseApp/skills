@@ -85,7 +85,18 @@ drop it:**
   `weeklyChange: null` and a `null` `change` on every one of the six signals, so the trend arrows
   the layout depends on all disappear.
 - **`actionTypes` on analyst activity.** The bare call is mostly reiterations, which are not rating
-  changes. Without the filter the "Street moves" section is padding.
+  changes. Without the filter the "Street moves" section is padding. Size the panel for what the
+  filter actually leaves: about 83% of all actions are reiterations, so of the roughly 70 to 110
+  actions on an active market day, only **about 10 to 15 market-wide are real rating changes**.
+  A "Street moves" panel built to hold twenty rows will look empty most days and that is the data,
+  not a broken call. Ask for a multi-day window (`lookbackDays=3` or more) if you want the panel
+  full, and label the window you used.
+- **Drop rating-change rows whose grades did not move.** `actionType` comes from the research
+  provider and is not cross-checked against `fromGrade` and `toGrade`, so a few rows a week arrive
+  as an `UPGRADE` with identical grades, or an `INITIATE` that still carries a `fromGrade`. In a
+  dense dashboard row that renders as "UPGRADE Buy to Buy", which reads as a bug in your dashboard.
+  Filter to rows where `fromGrade != toGrade` before rendering the transition, and keep the
+  unfiltered count if you also show a total.
 
 Several v1 endpoints wrap the payload as `{ isPreview, previewReason, data }`; read `data`. The
 movers, options, insider, politicians, flows, analyst and earnings calls all do. Market mood,

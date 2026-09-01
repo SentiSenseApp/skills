@@ -60,14 +60,23 @@ function die(message, hint) {
   process.exit(1);
 }
 
-async function get(path, { allowNullData = false, tolerate400 = false } = {}) {
+async function get(path, { allowNullData = false, tolerate400 = false, optional = false } = {}) {
+  // A load-bearing call exits the process with a message. An optional context call THROWS
+  // instead, so the caller's try/catch can soften the artifact rather than losing it: dying
+  // inside a try block that exists to degrade gracefully would make the catch unreachable.
+  // Auth failures always exit, optional or not, because a rejected key dooms every call and
+  // the fix lives outside this script.
+  const fail = (msg, hint) => {
+    if (optional) throw new Error(hint ? `${msg} (${hint})` : msg);
+    die(msg, hint);
+  };
   let response;
   try {
     response = await fetch(`${BASE}${path}`, {
       headers: { "X-SentiSense-API-Key": KEY, Accept: "application/json", "User-Agent": UA },
     });
   } catch (cause) {
-    die(`network error calling ${path}`, String(cause && cause.message ? cause.message : cause));
+    fail(`network error calling ${path}`, String(cause && cause.message ? cause.message : cause));
   }
 
   if (response.status === 401 || response.status === 403) {
@@ -78,7 +87,7 @@ async function get(path, { allowNullData = false, tolerate400 = false } = {}) {
   }
   if (response.status === 429) {
     const wait = response.headers.get("Retry-After");
-    die("rate limited", wait ? `Retry after ${wait}s.` : "Wait a minute and retry.");
+    fail("rate limited", wait ? `Retry after ${wait}s.` : "Wait a minute and retry.");
   }
   // A 400 is sometimes routing advice rather than a failure: the quote endpoints are split by
   // instrument type and the stock one names the ETF path in its error. Hand the body back so the
@@ -89,7 +98,7 @@ async function get(path, { allowNullData = false, tolerate400 = false } = {}) {
     return { data: null, isPreview: false, error: err };
   }
   if (!response.ok) {
-    die(`${path} answered HTTP ${response.status}`);
+    fail(`${path} answered HTTP ${response.status}`);
   }
 
   const body = await response.json();
@@ -98,7 +107,7 @@ async function get(path, { allowNullData = false, tolerate400 = false } = {}) {
   const enveloped = body && typeof body === "object" && "isPreview" in body && "data" in body;
   const data = enveloped ? body.data : body;
   if (!allowNullData && (data === null || data === undefined)) {
-    die(`${path} returned no data`);
+    fail(`${path} returned no data`);
   }
   return { data, isPreview: enveloped ? body.isPreview === true : false };
 }
@@ -202,7 +211,9 @@ async function main() {
   // artifact (no event marker, no "the tenor you picked spans a report" warning), never fail it.
   let nextEarnings = null;
   try {
-    const cal = (await get(`/api/v1/calendar/earnings?ticker=${encodeURIComponent(ticker)}`)).data;
+    const cal = (await get(`/api/v1/calendar/earnings?ticker=${encodeURIComponent(ticker)}`, {
+      optional: true,
+    })).data;
     const event = cal && Array.isArray(cal.earnings) ? cal.earnings[0] : null;
     if (event && event.earningsDate) {
       nextEarnings = {

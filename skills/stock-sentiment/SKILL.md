@@ -199,11 +199,13 @@ The response is flat, but the composite is nested under `market`, not the root: 
 
 Find tickers where insider buying, congressional purchases, and analyst upgrades line up in the same window; convergence is the signal a quote feed cannot produce.
 
-1. `GET /api/v1/insider/cluster-buys?lookbackDays=7`.
-2. `GET /api/v1/politicians/activity?lookbackDays=7`, keeping rows with `transactionType == "PURCHASE"`.
-3. `GET /api/v1/analyst/activity?lookbackDays=7&actionTypes=UPGRADE` (server-side filter; also accepts a CSV like `UPGRADE,DOWNGRADE,INITIATE`).
+1. `GET /api/v1/insider/cluster-buys?lookbackDays=30`.
+2. `GET /api/v1/politicians/activity?lookbackDays=30`, keeping rows with `transactionType == "PURCHASE"`.
+3. `GET /api/v1/analyst/activity?lookbackDays=30&actionTypes=UPGRADE` (server-side filter; also accepts a CSV like `UPGRADE,DOWNGRADE,INITIATE`).
 
-All three are wrapped: read `.data`. Intersect the three ticker lists and report names appearing in two or more buckets, ranked by total signal count, with a one-liner each: "$NVDA: 4 insiders bought, 1 congressional purchase, 2 analyst upgrades (7d)." If a 7-day bucket returns an empty array (common on quiet weeks; `isPreview:false`, disclosure lag, not an error), widen that specific call to `lookbackDays=30` and note the wider window rather than showing a blank result. For one ticker's full flow, run `insider/trades/{T}`, `politicians/filings/{T}`, `institutional/quarters` then `institutional/holders/{T}?reportDate={Q}`, and `analyst/{T}/actions`. Present as observed positioning, never as advice.
+All three are wrapped: read `.data`. Intersect the three ticker lists and report names appearing in two or more buckets, ranked by total signal count, with a one-liner each: "$NVDA: 4 insiders bought, 1 congressional purchase, 2 analyst upgrades (30d)."
+
+**Start this one at `lookbackDays=30`, not 7.** A 7-day window is too narrow for three slow feeds to overlap: on a representative run it returned 1 cluster-buy ticker, 1 congressional purchase ticker and 21 upgraded tickers, which intersected to **zero** names in two or more buckets. The same three calls at 30 days returned 8, 65 and 45 tickers and produced 7 convergent names. The trap is that no individual bucket was empty at 7 days, so an "is this bucket empty" check passes on all three and you still report nothing found. **Widen when the INTERSECTION is thin, not when a bucket is empty**, and say which window you used. Also expect the three-way overlap to be empty even at 30 days: two-of-three is the working bar for this screen, and requiring all three will show a blank almost every time. A genuinely empty bucket (quiet week, disclosure lag) is `isPreview:false` and not an error either way. For one ticker's full flow, run `insider/trades/{T}`, `politicians/filings/{T}`, `institutional/quarters` then `institutional/holders/{T}?reportDate={Q}`, and `analyst/{T}/actions`. Present as observed positioning, never as advice.
 
 ### 4. Pre-earnings sentiment check
 

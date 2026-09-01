@@ -756,6 +756,12 @@ function update() {
     notes.push("No 25 delta legs are bound, so every strike prices off the same at the money " +
       "volatility and the skew is flat.");
   }
+  if (DATA.isPreview) {
+    notes.push("This snapshot is the free tier's preview dossier: the month's full dossier " +
+      "allowance is spent, so only the near expiry carries a volatility reading and further " +
+      "tenors are not offered. The full dossier returns with a new calendar month, or on any " +
+      "ticker with a PRO key.");
+  }
   document.getElementById("notes").innerHTML = notes.map(function (n) {
     return '<p class="lede" style="margin:0 0 8px">' + esc(n) + "</p>";
   }).join("");
@@ -768,7 +774,7 @@ function shell() {
   out.push('<header class="card"><div class="title-row">' +
     '<h1>Options payoff <span class="ticker">' + esc(DATA.ticker || "") + "</span></h1>" +
     '<span class="badge accent">modeled premiums</span>' +
-    (DATA.isPreview ? '<span class="badge">preview slice</span>' : "") +
+    (DATA.isPreview ? '<span class="badge">free tier preview</span>' : "") +
     "</div>" +
     '<p class="subtitle">' + esc(META.subtitle ||
       "Profit and loss at expiry, priced from end of day implied volatility rather than " +
@@ -816,7 +822,8 @@ function shell() {
   out.push('<section class="card"><h2>Profit and loss at expiry</h2>' +
     '<p class="lede">The curve is the position value at expiry against the underlying price. ' +
     "The shaded column behind it is the one standard deviation move the options market is " +
-    "pricing over the same window, so the payoff is read against what is actually expected.</p>" +
+    "pricing over the same window, so the payoff is read against the move that volatility " +
+    "implies.</p>" +
     '<div class="chart-scroll" id="chart"></div>' +
     '<div class="legend">' +
     '<span><i class="swatch" style="background:var(--up-fill)"></i>profit</span>' +

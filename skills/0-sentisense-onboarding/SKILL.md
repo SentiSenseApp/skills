@@ -67,6 +67,8 @@ same secret.
 | "build me a market dashboard", "a morning briefing I can open in a browser" | `stock-market-dashboard` |
 | "unusual options activity", "IV rank", "max pain", "where is positioning stretched" | `unusual-options-activity` |
 | "how much is this stock expected to move", "expected move", "draw me the volatility cone" | `expected-move-visualizer` |
+| "options payoff diagram", "what does this covered call look like", "breakeven on a spread", "iron condor P/L" | `options-payoff-calculator` |
+| "how many shares should I buy", "position size", "risk per trade", "where does my stop go", "the 1% rule" | `position-size-calculator` |
 | "who owns this stock", "13F holdings", "what did the big funds buy last quarter" | `institutional-13f-tracker` |
 | "congress stock trades", "what is that senator buying", "STOCK Act disclosures" | `politicians-stock-tracker` |
 | "insider buying", "Form 4 filings", "is the CEO selling", "cluster buys" | `insider-trading-tracker` |

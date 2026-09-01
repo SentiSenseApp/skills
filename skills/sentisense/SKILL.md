@@ -284,6 +284,8 @@ Company profile (CEO, sector, industry). **Public.**
 
 Also carries `listingStatus`, `delistedDate` and `delistingReason` when the symbol is delisted or pending delisting. All three are absent for a normally listed symbol. Values match `/price` above: `listingStatus` is `"DELISTED"` or `"PENDING_DELISTING"`, `delistedDate` is the ISO date trading stopped, `delistingReason` is one of `acquired`, `take_private`, `bankruptcy`, `exchange_rule`, `merged`.
 
+For a tracked ETF ticker, the profile may also carry `imageUrl`, a square presentation image for the fund. It is the issuer's mark rather than the individual fund's, so every fund in a family shares one image, and it matches the `imageUrl` returned by the `/etfs` endpoints. It is square like `logoUrl` and `iconUrl`, so the same avatar slot renders a stock and an ETF, but it is a first-party asset rather than a vendor branding mark and is returned as a direct URL. It is absent for issuers we hold no image for.
+
 ### GET /api/v1/stocks/{ticker}/similar
 Peer/similar stocks. **Public.**
 
@@ -1086,7 +1088,7 @@ Response: string array, e.g. `["insider_buy_signal", "institutional_position_cha
 
 ## Analyst Ratings API (`/api/v1/analyst`)
 
-Wall Street analyst coverage: aggregate price target band, buy/hold/sell distribution, recent upgrade/downgrade actions, and forward EPS estimates with earnings surprise history. This is one of the most free-tier-generous surfaces in the API: free users get the price target band (`targetLow`, `targetMean`, `targetHigh`, `numberOfAnalysts`, `consensusLabel`) in full -- it powers the public projection cone -- and the entire first page (50 rows) of market-wide `/activity`. The buy/hold/sell distribution counts, full per-ticker action/estimate history, and deep `/activity` paging are PRO.
+Wall Street analyst coverage: aggregate price target band, buy/hold/sell distribution, recent upgrade/downgrade actions, forward EPS estimates with earnings surprise history, and the individual analysts behind the calls -- who covers a stock, and everything one analyst has published. This is one of the most free-tier-generous surfaces in the API: free users get the price target band (`targetLow`, `targetMean`, `targetHigh`, `numberOfAnalysts`, `consensusLabel`) in full -- it powers the public projection cone -- and the entire first page (50 rows) of market-wide `/activity`. The buy/hold/sell distribution counts, full per-ticker action/estimate history, and deep `/activity` paging are PRO.
 
 ### GET /api/v1/analyst/{ticker}/consensus
 Aggregate Wall Street consensus: price target band, number of covering analysts, upside-to-current, recommendation distribution. **PRO (preview)** -- Free: full price band, no buy/hold/sell counts. PRO: full distribution.
@@ -1099,7 +1101,9 @@ Response: `{ isPreview, previewReason, data: { ticker, currentPrice, targetLow, 
 
 **`recommendationMean` runs 1.0 to 5.0 and is INVERTED: lower is more bullish** (1 = Strong Buy, 2 = Buy, 3 = Hold, 4 = Sell, 5 = Strong Sell). Flip the comparison when you screen or rank on it (the options put/call and skew fields run inverted too, higher = more bearish; most other fields run the intuitive direction). The mean is aggregated from a different analyst set than the five rating counts, so it will not reconcile as their weighted average. `consensusLabel` is derived from it at these cutoffs: `<=1.5` STRONG_BUY, `<=2.5` BUY, `<=3.5` HOLD, `<=4.5` SELL, else STRONG_SELL. **`numberOfAnalysts` belongs to the price target, not the ratings.** The five rating fields sum to a separate count (not every analyst publishes both, and the rating total is usually the larger). For percent-of-analysts math, divide by the sum of the five rating fields; dividing by `numberOfAnalysts` mixes the two groups and returns above 100% on many tickers.
 
-**Analyst data refreshes as one sweep over the whole covered universe, approximately daily and anchored in the US pre-market (around 8 to 9am ET)**, so every ticker's `updatedAt` moves together and a rating change can be up to ~24h old before it appears in `/actions` or `/activity`. Read `updatedAt` rather than assuming a schedule.
+**Analyst data refreshes as one sweep over the whole covered universe, roughly once a day, but the wall-clock time it lands drifts and is NOT anchored to the US pre-market.** The sweep is attempted several times a day and skips unless enough hours have passed since the last successful one, so the hour it completes moves from day to day. `updatedAt` is stamped when the sweep *finishes* writing, not when it started, and the sweep takes hours to walk the universe: a run that began late morning ET can carry an early-evening `updatedAt`. Two consequences worth coding for: a rating change can be up to ~24h old before it appears in `/actions` or `/activity`, and `updatedAt` advances on every sweep even when nothing about the ticker changed, so it tells you when the row was last written, never that the content is new. Read `updatedAt` rather than assuming a schedule, and diff the payload if you need to detect an actual change.
+
+Most tickers in one sweep share an `updatedAt` to the second, so it is a good cache key for the batch. The exception: stocks that reported earnings in the last day or two get topped up on their own pass and will carry a newer `updatedAt` than the rest of the universe. Do not assume a single global timestamp covers every ticker you asked for.
 
 **`currentPrice` on this endpoint is not the live quote.** It is the reference price captured when the analyst snapshot was written, dated by `updatedAt`, and `upsidePercent` is computed against that same reference so the band and the upside stay internally consistent. Expect it to drift from the traded price between snapshots (a few percent is normal). When you need the current regular-session price, read `currentPrice` from `/api/v1/stocks/price` or `/api/v1/stocks/{ticker}/quote` instead, where the field tracks the session and carries the standard 15-minute delay rather than a snapshot's age.
 
@@ -1114,6 +1118,8 @@ Recent analyst upgrade/downgrade actions for a ticker, newest first. **PRO (prev
 | `lookbackDays` | int | No | 90 | Days of history to return |
 
 Action object: `{ ticker, actionDate, firm, actionType (UPGRADE/DOWNGRADE/INITIATE/REITERATE/OTHER), fromGrade, toGrade }`.
+
+**`actionType` is the research provider's own label, and it is not cross-checked against `fromGrade` and `toGrade`.** We pass it through rather than re-deriving it, so a small share of rows are internally inconsistent: an `INITIATE` that still carries a `fromGrade`, or an `UPGRADE` whose two grades are identical. Measured over a recent trailing week, about 3% of actions disagree with their own grade pair, but they arrive in bursts (one bank initiating coverage across a dozen names in a morning), so a single 50-row page can run several times that. Pick one interpretation and stay with it: **filter on `actionType`** (what the provider says the analyst did, the right choice for counting upgrades and downgrades) **or compare the grades yourself** (the right choice when you are rendering the transition to a user). Do not mix them in the same view, or you will print a row that reads "UPGRADE: Buy to Buy". If you display grades, drop the ones where `fromGrade == toGrade` rather than relabeling them.
 
 CLI equivalent: `npx -y sentisense@0.47.1 analysts AAPL --days 90 --json` (this response is under `.actions`)
 
@@ -1138,9 +1144,69 @@ Market-wide recent analyst actions across all covered tickers, paged. Ordered by
 
 Response: `{ isPreview, previewReason, totalCount, data: [...] }`. `totalCount` is the number of actions in the whole `lookbackDays` window **after the `actionTypes` filter**, not the page size, so `offset + data.length < totalCount` means another page is available.
 
-Around 200 rating actions land on a single active market day, and roughly 83% of all actions are `REITERATE` (an analyst confirming an unchanged rating). For actual rating changes, pass `actionTypes=UPGRADE,DOWNGRADE,INITIATE` -- otherwise the newest-first page is mostly reiterations. Since rows come back newest first, the default 50-row page is typically filled by the newest day alone, and raising `lookbackDays` by itself returns nothing new. Raise `limit` for a wider slice, or walk the window with `offset`.
+Roughly 70 to 110 rating actions land on a single active market day (measured across a recent trailing week; a heavy day runs a little over 100, not several hundred), and roughly 83% of all actions are `REITERATE` (an analyst confirming an unchanged rating). Weekend and holiday dates carry a handful of stragglers at most, so a 7-day window is about 500 rows, not 1,400. For actual rating changes, pass `actionTypes=UPGRADE,DOWNGRADE,INITIATE` -- otherwise the newest-first page is mostly reiterations. Since rows come back newest first, the default 50-row page is typically filled by the newest day alone, and raising `lookbackDays` by itself returns nothing new. Raise `limit` for a wider slice, or walk the window with `offset`.
 
 Same per-action shape as `/api/v1/analyst/{ticker}/actions`.
+
+### GET /api/v1/analyst/{ticker}/coverage
+Who covers this stock and what they most recently said, grouped by firm, most recently active firm first. The one-call answer to "who covers AMD and what do they say". **PRO (preview)** -- Free: the 5 most recently active firms with every response-level count intact. PRO: all firms.
+
+| Param | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `ticker` | path | Yes | - | Stock ticker (e.g. `AMD`) |
+| `lookbackDays` | int | No | 365 | Coverage window, capped at 1825. Returns `400 invalid_lookbackDays` below 1 |
+
+Response: `{ isPreview, previewReason, data: { ticker, windowDays, asOf, firmCount, namedAnalystCount, noteCount, attributedNoteCount, unattributedNoteCount, attributionNote, coverage: [...] } }`. `windowDays` echoes the window actually applied after clamping, so a request for 99999 comes back saying 1825. A truncated FREE response adds a top-level `totalCount` carrying the full number of covering firms; the untruncated response omits it, because nothing was withheld to count. Read `data.firmCount` when you want that number on every tier.
+
+Firm row: `{ firm, analysts: [{ slug, name, noteCount, firstNote, lastNote, latestPriceTarget }], noteCount, attributedNoteCount, unattributedNoteCount, firstNote, lastNote, latestNote: { publishedDate, analyst, priceTarget, adjPriceTarget, priceWhenPosted, newsTitle, newsUrl, newsPublisher }, firmRating: { rating, priorRating, actionType, date } }`. `latestNote.analyst` is an object `{ slug, name }`, not a string, and it is null when the report named nobody. `firmRating` is null for a firm that published a price target in the window without a rating action behind it, which is common: 5 of AMD's 27 covering firms on a 180-day window.
+
+**A large share of price target notes name no individual analyst, and those notes are still here.** Whether a note carries a byline is a property of the PUBLISHER that reported it, not of the note, which is what the `attributionNote` field on every response says in plain language. The share is high and it varies enormously by ticker: across a 16-ticker large-cap sample on a 365-day window, 52% of notes named nobody, ranging from 11% on `CRM` to 64% on `BA`. Do not hardcode a rate. Filtering unnamed notes out would report a firm as absent from a stock it demonstrably published on, unevenly by publisher, so a firm can legitimately appear with an empty `analysts` array and a non-zero `noteCount`. Read the `attributedNoteCount` and `unattributedNoteCount` on the response you actually received before concluding a desk went quiet.
+
+**`firmRating` belongs to the firm, never to the person named beside it.** Rating actions are published at firm level: the upstream feed carries the firm, the grade and the date, with no individual attached. Do not render a firm rating as a named analyst's rating.
+
+`analysts[].slug` addresses `/api/v1/analyst/people/{slug}`, so this endpoint is how you get a valid slug. A named analyst whose name resolves to no profile, or ambiguously to two, comes back with a `name` and a `null` slug rather than being dropped or linked to a guess, so handle a null slug before you build a link. For an ETF, which has no analyst desk, this returns a pointer to the surfaces that do answer for ETFs.
+
+### GET /api/v1/analyst/people/{slug}
+One analyst: the firms they have published under, the window of notes we hold at each, and the tickers they cover. **PRO (preview)** -- Free: the profile with the coverage book truncated to the 5 most recently covered tickers. PRO: the whole book.
+
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `slug` | path | Yes | Analyst slug, e.g. `dan-ives`. Get one from `/{ticker}/coverage` |
+
+Response: `{ isPreview, previewReason, data: { slug, name, role, mostRecentFirm, firms: [{ firm, firstSeen, lastSeen, mostRecent }], firstSeen, lastSeen, noteCount, tickerCount, coverage: [{ ticker, noteCount, firstNote, lastNote, latestPriceTarget, latestFirm }] } }`. `role` is `sell_side_equity`. As on `/coverage`, a truncated FREE response adds a top-level `totalCount` with the full number of covered tickers and the untruncated response omits it; `data.tickerCount` carries that number on every tier. Returns 404 when the slug matches no analyst.
+
+**`firstSeen` and `lastSeen` are observation windows, not employment dates.** They are the dates of the first and last note we hold from that analyst at that firm. `mostRecentFirm` says where they last published, not where they work today. Do not render either as a hire or departure date. Analysts do move: `firms[]` runs to three entries for plenty of the roster.
+
+**There is no accuracy score, hit rate or ranking on this endpoint, by design.** This is attributed call history: who said what, when, and where it was reported. SentiSense does not publish a rating of an individual analyst, and nothing here should be presented to a user as one.
+
+### GET /api/v1/analyst/people/{slug}/calls
+One analyst's price target notes, newest first, paged. Ordered by published date descending with the row id as the final tie-break, a total order, so walking the history with `offset` never drops or repeats a row. **Free: the first 25 rows** of the history are complete data on every tier (`isPreview: false`); `limit` above 25 or an `offset` past row 25 serves FREE keys their in-allowance slice as a preview. PRO pages the whole history.
+
+| Param | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `slug` | path | Yes | - | Analyst slug, e.g. `dan-ives` |
+| `limit` | int | No | 25 | Page size, capped at 200 rather than rejected. Returns `400 invalid_limit` below 1 |
+| `offset` | int | No | 0 | Rows to skip. Returns `400 invalid_offset` when negative |
+
+Call object: `{ publishedDate, ticker, firm, priceTarget, adjPriceTarget, priceWhenPosted, newsTitle, newsUrl, newsPublisher }`. `newsUrl` is the report that carried the note, so every call cites its source.
+
+Response: `{ isPreview, previewReason, totalCount, data: [...] }`. Unlike the two endpoints above, `totalCount` is always present here, and it is the analyst's whole attributed history rather than the page size, so `offset + data.length < totalCount` means another page is available. Returns 404 for an unknown slug rather than an empty page, so "published nothing we hold" and "does not exist" stay distinguishable.
+
+`publishedDate` is day granularity on purpose. Publisher timestamps are not comparable across sources: a note filed after the US close is dated the next day by some publishers while the matching rating action keeps the session date. A time of day would advertise precision the data does not have.
+
+**Worked example -- who covers AMD, then read one of them:**
+
+```bash
+# 1. who covers it, and what they most recently said
+curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
+  "https://app.sentisense.ai/api/v1/analyst/AMD/coverage?lookbackDays=180" \
+| jq -r '.data.coverage[] | "\(.firm): \(.analysts[0].name // "not named") target \(.latestNote.priceTarget // "n/a") rating \(.firmRating.rating // "n/a")"'
+
+# 2. take a slug from that response and read that analyst's own history
+curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
+  "https://app.sentisense.ai/api/v1/analyst/people/stacy-rasgon/calls?limit=10" \
+| jq -r '.data[] | "\(.publishedDate) \(.ticker) target \(.priceTarget // "n/a")"'
+```
 
 ---
 
@@ -1153,7 +1219,7 @@ ETF discovery, composition (holdings), and holdings-weighted aggregate views. Fu
 ### GET /api/v1/etfs
 List every ETF SentiSense tracks. Sorted by ticker. **Discovery (no quota cost)** -- API key required, but the call does not consume your monthly quota. No parameters. This exemption applies to this list endpoint only; the per-ticker ETF endpoints below (holdings, quote, aggregates) count against monthly quota as usual.
 
-Response: `Array<{ ticker, name, kbEntityId, urlSlug, issuer, trackedIndex, assetClass }>`.
+Response: `Array<{ ticker, name, kbEntityId, urlSlug, issuer, trackedIndex, assetClass, imageUrl }>` where `imageUrl` is a square presentation image keyed to the fund's `issuer`, so funds from the same family share one, or `null` for an issuer we hold no image for.
 
 ### GET /api/v1/etfs/{ticker}/holdings
 Full composition of an ETF: per-holding weights, freshness timestamps, partial-coverage signal. **Free tier** (API key required).
@@ -1693,7 +1759,7 @@ Nine data tools, plus one utility tool:
 | `get_market_mood` | The 0 to 100 fear-to-greed composite for the US market, its phase, and signal components |
 | `get_stock_snapshot` | Price plus SentiSense sentiment, the SentiSense Score, and key stats for one ticker |
 | `get_news` | Recent sentiment-tagged market-moving news for a ticker |
-| `get_analyst_ratings` | Buy/hold/sell consensus and price targets for a ticker, plus market-wide rating changes (`view=activity`: upgrades/downgrades/initiations, reiteration noise filtered out, tunable `days`/`limit`/`action`) |
+| `get_analyst_ratings` | Buy/hold/sell consensus and price targets for a ticker, who covers it and what they said (`view=coverage`), one analyst's profile and recent calls (`view=analyst`, pass their name or slug), plus market-wide rating changes (`view=activity`: upgrades/downgrades/initiations, reiteration noise filtered out, tunable `days`/`limit`/`action`) |
 | `get_smart_money` | Institutional 13F holdings and flows |
 | `get_options` | Options intelligence for a ticker or the market-wide radar |
 | `get_earnings_calendar` | Upcoming earnings dates, per ticker or the week's schedule |

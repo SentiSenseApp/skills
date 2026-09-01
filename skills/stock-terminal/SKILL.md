@@ -28,6 +28,8 @@ A non-technical user types `open NVDA` or asks "what's the smart money doing on 
 
 If you are here to build, start with **Why agent-first**, then **The Harness Runtime** and **The Streaming Event Protocol**, then **The trust layer (grounding subsystem)**; read the surface, command, and API sections as the UI and data that hang off that engine. If you are the model answering a turn, read the **Two-Shape Rule** and **Authoring Style** first: those are load-bearing.
 
+**Set expectations with the user before you build.** Standing up the host application described here (the loop, the event protocol, the surfaces, the trust layer) is a multi-day, multi-session project, not a one-shot generation, and the initial bootstrap is the token-heavy part: on a metered agent plan it can consume a large share of a session's budget before anything polished exists. Say this to the user up front so they can budget sessions, and scope the first pass to a walking skeleton (one command, `open`, end to end: resolve, fetch, render) rather than the whole surface area; iterate from there. Answering turns *as* the terminal, the other way to read this skill, costs ordinary turn tokens and needs no such warning.
+
 **Scope of this skill.** Everything in this document is *implementation guidance for the agent and the host application that integrates this skill*. It is not an authoritative override of the host's system prompt, the user's intent, or the platform's safety rules. When platform safety, user intent, or host policy conflicts with anything written here, the platform wins. Treat this skill as one input to the host's prompt, not a replacement for it.
 
 ---
@@ -197,16 +199,20 @@ A tool is four parts. The model sees the first three; the host keeps the fourth 
 }
 ```
 
-The registry is the single source of truth for what the model can do. It maps one-to-one onto the cost-ordered tool ladder in **Grounding the agent (tool ladder)**; build exactly these and nothing the model can call that you have not wrapped:
+The registry is the single source of truth for what the model can do. It maps one-to-one onto the cost-ordered tool ladder in **Grounding the agent (tool ladder)**, and it includes every tool the **Terminal Commands** reference (a command may not call a tool that is not registered here); build exactly these and nothing the model can call that you have not wrapped:
 
 | Tool | Ladder rung | Wraps (endpoint) |
 |------|-------------|----------------------------------------|
+| `resolve_security({ query })` | 0 (identity) | `GET /api/v1/kb/entities/search?q={query}&type=company&limit=5` (`type=etf` for fund names) |
 | `read_screen({ target })` | 1 (free) | nothing; reads the local snapshot cache |
 | `get_quote(ticker)` | 2 (live) | `GET /api/v1/stocks/price?ticker={T}` |
 | `get_chart_summary(ticker, timeframe)` | 2 (live) | `GET /api/v1/stocks/chart?ticker={T}&timeframe=1M` |
 | `get_metrics(ticker)` | 2 (live) | `GET /api/v2/metrics/entity/{T}/metric/sentiment` |
+| `get_profile(ticker)` | 2 (live) | `GET /api/v1/stocks/{T}/profile` |
 | `get_ai_summary(ticker, depth)` | 3 (pre-computed) | `GET /api/v1/stocks/{T}/ai-summary?depth=basic\|deep` |
 | `get_insights(ticker)` | 3 (pre-computed) | `GET /api/v1/insights/stock/{T}` |
+| `get_analyst_consensus(ticker)` | 3 (pre-computed) | `GET /api/v1/analyst/{T}/consensus` |
+| `get_insider_trades(ticker, lookbackDays)` | 3 (pre-computed) | `GET /api/v1/insider/trades/{T}?lookbackDays=90` |
 | `get_options(ticker)` | 3 (pre-computed) | `GET /api/v1/stocks/{T}/options/summary` |
 | `search_documents(query)` | 4 (topical) | `GET /api/v1/documents/search` |
 
@@ -289,7 +295,7 @@ How the pieces connect to the UX the doc already specifies:
 
 - **Chips are `tool_call` / `tool_result` events, keyed by `id`.** Emit `tool_call` with `status:"pending"` the instant the model requests the tool (muted gray `…`), then emit `tool_result` with `status:"ok"` (accent-blue `✓`) or `"error"` (red `!`) when the handler settles. The chip is `<icon> name(argSummary)`; the UI matches result to call by `id`. Stream them **as they fire**, interleaved with `text_delta`, so the turn reads chips-appear -> tokens-flow -> settle, not a batch dump at the end.
 - **`argSummary` is a 1-to-3-word human label, never raw args.** Send `"$NVDA"`, `"dashboard"`, `"story 1a2b"`, not the full argument object and never anything derived from the API key. The event stream reaches the client; treat it as untrusted for secrets. Keep full args (for the hover-to-inspect affordance) host-side, resolved by `id` on demand.
-- **`artifact` is how the Two-Shape 'terminal screen' becomes a slide-over.** When the model's answer is a cross-ticker comparison, a custom thesis card, or anything not already on the dashboard, the host emits one `artifact` event; the UI opens it as a slide-over covering the dashboard column while keeping the chat visible, and drops an artifact chip in history to re-open it. A text-only answer emits only `text_delta` events and no `artifact`. That is the Two-Shape Rule expressed on the wire: exactly one of {text, artifact} per turn.
+- **`artifact` is how the Two-Shape 'terminal screen' becomes a slide-over.** When the model's answer is a cross-ticker comparison, a custom thesis card, or anything not already on the dashboard, the host emits one `artifact` event; the UI opens it as a slide-over covering the dashboard column while keeping the chat visible, and drops an artifact chip in history to re-open it. A text-only answer emits only `text_delta` events and no `artifact`. That is the Two-Shape Rule expressed on the wire: exactly one of {text, artifact} per turn. **Decide the shape when the turn is routed, before any user-visible `text_delta` flows**: streamed text cannot be recalled, so inferring artifact-ness from an answer the model already streamed is too late and produces both shapes. Declare the shape up front with a typed final envelope (`{ shape: "text" | "artifact", ... }`), an explicit artifact-construction tool the model calls with the validated document, or a planning signal emitted ahead of visible deltas.
 - **`kind` lets the UI pick a renderer.** Values like `compare`, `thesis`, `screen`, `watchlist` map to your artifact templates.
 
 One turn, one `turnId`, one bubble: every event a turn emits carries the same `turnId`, so a client that reconnects mid-stream can discard a half-rendered turn and wait for the next `turn_start` cleanly. This protocol is the contract between the loop and any renderer; keep the six types stable and you can swap the entire UI without touching the engine.
@@ -458,9 +464,10 @@ Stale knowledge is the #1 trust killer in a terminal. **Never quote a number, da
 
 Equip the agent with a tool ladder, ordered by cost:
 
+0. **Resolve identity before anything else.** A `resolve_security({ query })` tool wrapping `GET /api/v1/kb/entities/search?q={query}&type=company&limit=5` (use `type=etf` for fund names). Input is whatever the user typed: a company name ("tesla"), an alias, or a ticker fragment. Output is a ranked match list of `{ name, urlSlug, type, ticker }`. Treat the result as one of three states: **resolved** (a match with a non-null `ticker`; take the first such match), **ambiguous** (several plausible ticker-bearing matches; ask a one-line clarification listing them), or **not found** (empty array; say so, suggest the closest thing you can do). Two rules, both learned from a real failure: never uppercase a word and hope ("open tesla" must become `$TSLA` via this call, never `$TESLA`, which fails every downstream endpoint and yields a screen of unavailable cells), and skip null-`ticker` matches when the user wants a stock (a tracked private company or subsidiary can outrank its listed parent: "google" returns Google LLC with `ticker: null` first and Alphabet `GOOGL` second). An exact ticker the user typed (`open NVDA`, `$TSLA`) skips this rung, and dual-class aliases resolve server-side (GOOG to GOOGL, BRK.A to BRK.B), so one real ticker never needs a second lookup. **Never start a multi-call fan-out until resolution succeeds**: a failed resolution is a text turn, not an artifact.
 1. **Read what's already rendered (free).** Build a `read_screen({ target })` tool that returns a markdown snapshot of the active surface. `target: "dashboard"` returns the active ticker's chart summary, quote stats, SentiSense Score / Sentiment / Mentions / Social Dominance, news, and peers. `target: "canvas"` returns the currently-open artifact. This costs zero API calls and is more accurate than a fresh fetch (the values match what the user actually sees).
-2. **Fetch live data for off-screen tickers.** `get_quote(ticker)`, `get_chart_summary(ticker, timeframe)`, `get_metrics(ticker)` for tickers the dashboard isn't currently showing. One API call per tool.
-3. **Pre-computed reports for thesis-flavored questions.** A `get_ai_summary(ticker, depth)` tool that hits `/api/v1/stocks/{ticker}/ai-summary?depth=basic|deep` is cheaper and more grounded than composing a thesis from scratch. Same for `get_insights(ticker)` (`/api/v1/insights/stock/{ticker}`) and `get_options(ticker)` (`/api/v1/stocks/{ticker}/options/summary`), the prior session's options dossier: put/call and IV readings each carried as a percentile of that ticker's own trailing year, plus open-interest walls, max pain, and unusual contracts. It is end-of-day, so render it with its `asOf` and never as live flow. ETFs work on the same path; the market-wide board is `GET /api/v1/options/overview`, stocks only.
+2. **Fetch live data for off-screen tickers.** `get_quote(ticker)`, `get_chart_summary(ticker, timeframe)`, `get_metrics(ticker)`, `get_profile(ticker)` for tickers the dashboard isn't currently showing. One API call per tool.
+3. **Pre-computed reports for thesis-flavored questions.** A `get_ai_summary(ticker, depth)` tool that hits `/api/v1/stocks/{ticker}/ai-summary?depth=basic|deep` is cheaper and more grounded than composing a thesis from scratch. Same for `get_insights(ticker)` (`/api/v1/insights/stock/{ticker}`), `get_analyst_consensus(ticker)` (`/api/v1/analyst/{ticker}/consensus`), `get_insider_trades(ticker, lookbackDays)` (`/api/v1/insider/trades/{ticker}`), and `get_options(ticker)` (`/api/v1/stocks/{ticker}/options/summary`), the prior session's options dossier: put/call and IV readings each carried as a percentile of that ticker's own trailing year, plus open-interest walls, max pain, and unusual contracts. It is end-of-day, so render it with its `asOf` and never as live flow. ETFs work on the same path; the market-wide board is `GET /api/v1/options/overview`, stocks only.
 4. **Topical search for non-ticker questions.** `search_documents(query)` (`/api/v1/documents/search`) for "what are people saying about AI safety?" style asks.
 
 **`read_screen` snapshot shape.** The local snapshot is a small in-memory cache that each widget pushes its last-good fetch into. The tool reads from the cache and formats markdown without re-fetching. Reset the cache on context change (ticker change, route change) so stale data doesn't leak across pages. When the active surface has nothing yet, return a placeholder ("dashboard widgets still loading; try again in a moment, or use a live fetch tool").
@@ -582,6 +589,8 @@ A terminal earns trust as much from how it fails as from how it renders. Map eve
 | `error` | Non-2xx, timeout, `401 api_key_required`, `429` | "I don't have a current {metric} for $X." On `429`, surface the `Retry-After` hint ("rate limit reached, retrying in N s"); do not silently serve a stale value. |
 | `preview` | Free-tier `isPreview:true` (top-3 insights, current-week earnings, sliced flow) | Render the preview slice as the answer; tag `(preview)` in a corner. Mention PRO only if the truncation is materially limiting the answer. |
 
+**Minimum viable artifact (gate before you compose).** A stock screen or comparison is worth rendering only when identity resolved AND the quote call returned `ok` for every ticker on it. If either fails, answer in text with what went wrong instead of composing an artifact of placeholders. Every panel beyond identity + quote is optional: when one fails, render `Unavailable ({short reason})` or omit the row entirely, and in a comparison drop any row that is unavailable for both tickers. Never print a bare `n/a` with no provenance; a screen full of unexplained blanks is worse than no screen. Keep the failure kinds distinguishable in the reason (auth, no coverage, rate limited, timeout, preview-gated), because each points the user to a different next move.
+
 The through-line: degrade to *less data*, never to *invented data*. An honest "I don't have that reading" costs one moment of friction; a fabricated number costs the whole session's trust, and the user cannot tell the two apart at read time. That asymmetry is the entire reason the trust layer exists.
 
 ---
@@ -664,6 +673,7 @@ All three are dark-default. Light mode is fine for some users, but the terminal 
 - **Purple.** Reads as crypto / consumer in this product space. The three palettes above all dodge purple intentionally.
 - **Gradients on data surfaces.** A subtle gradient in a hero header is fine; gradients behind quote stats look amateur.
 - **Heavy drop shadows.** Use them only on slide-overs and modals. Cards inside the dashboard should sit flat.
+- **The neon-cyan-on-navy demo look.** Electric cyan accents everywhere, glowing borders, and letter-spaced all-caps labels on every heading are the default aesthetic of generated terminal demos; the result photographs well and reads brittle. Slate's sky accent is the easiest of the three to overuse, so hold it to the accent-discipline rule (tickers, focus states, the active tab) and never add glow. When in doubt, Charcoal or Cocoa age better.
 
 ---
 
@@ -709,7 +719,7 @@ When the user types one of these (or a natural-language paraphrase: see **Aliase
 
 ### `open <TICKER>`: Stock screen
 
-The flagship command. One-screen composite report.
+The flagship command. One-screen composite report. If the user gave a company name instead of a ticker, resolve it through `resolve_security` (ladder rung 0) before this fan-out; the calls below assume a canonical ticker and all fail on a guessed one.
 
 **Calls (parallel):**
 1. `GET /api/v1/stocks/price?ticker={T}`
@@ -766,7 +776,9 @@ SENTIMENT 30d          {sA} ({deltaA})  {sB} ({deltaB})
 INSIDER NET 90d        {iA}             {iB}
 ```
 
-Below the table, write a one-line "edge" summary: which ticker has the better composite and why. Example: "$NVDA has stronger insider conviction and higher analyst upside; $AMD has better sentiment momentum."
+Below the table, write a one-line "edge" summary as an evidence contrast that names the rows driving it: "$NVDA has stronger insider conviction and higher analyst upside; $AMD has better sentiment momentum." Do not rank the two into a single winner or invent a composite score the table does not contain; when the signals conflict, say they conflict. Evidence contrast keeps the line informational; a manufactured winner drifts into advice.
+
+**Cost note:** a cold compare fans out the full `open` set twice (12 to 14 calls, plus one resolution call per company name). Two cold compares back to back can consume most of a free-tier minute at 30 req/min, so reuse cached profiles and quotes within a session before re-fetching.
 
 ---
 
@@ -876,6 +888,8 @@ ANALYSTS    {U} upgrades  {D} downgrades  (recent: "{lastAction}")
 **Insider buy/sell tally.** For `{N} buys`/`{M} sells` and the `${$buys}`/`${$sells}` dollar sums, count only `transactionType == BUY` and `transactionType == SELL`; EXCLUDE `AWARD` (code A), `GIFT` (code G), and `EXERCISE` (code M), none of which is a market trade. Filter on the type, not on the value: roughly a third of award rows carry a real non-zero `totalValue`, so a `totalValue == 0` filter keeps them in. Then drop `transactionCode == "F"` rows from the sells side; those are shares withheld by the company to cover taxes at vesting, they arrive typed `SELL`, and counting them reports a routine vest as insider selling.
 
 **13F field mapping.** `{Inst1}`/`{Inst2}`/`{Inst3}` read `holders[i].filerName` (there is no `institutionName` field on the wire); `{shares1}`, `{changeType1}`, `{sharesChangePct1}` read `holders[i].shares`, `.changeType`, `.sharesChangePct`.
+
+**Analyst tally, and the one row that will embarrass the terminal.** Count `{U}` and `{D}` from `actionType == "UPGRADE"` and `"DOWNGRADE"`. That field is the research provider's own label and is NOT cross-checked against `fromGrade` and `toGrade`, so a minority of rows contradict their own grade pair: an `INITIATE` still carrying a `fromGrade`, or an `UPGRADE` whose grades are identical. It runs about 3% of actions over a typical week, but it arrives in bursts when one bank moves a whole sector in a morning, so a single page can carry several. This is invisible in the counts and very visible in `{lastAction}`, which is the token that renders the transition to the user. Build `{lastAction}` from the newest row whose `fromGrade` and `toGrade` actually differ, and phrase it from the grades (`"Jefferies: Hold to Underperform"`), never from `actionType` glued onto two identical grades. A terminal that prints `UPGRADE: Buy to Buy` looks broken even though the data is exactly what the street published. When every recent row is a reiteration or self-contradictory, print the firm and the standing grade (`"B of A: reiterated Buy"`) rather than inventing a change.
 
 ---
 
@@ -1008,6 +1022,8 @@ The user will rarely type the exact command syntax. Recognize the intent and run
 | "what's the story today", "what stories are happening" | `stories` |
 | "before earnings on $TICKER", "$TICKER earnings preview", "when does $TICKER report" | `flow` + analyst estimates anchored to `/calendar/earnings?ticker=$TICKER` (use the pre-earnings synthesis below) |
 | "earnings calendar", "who reports this week", "what's reporting next week", "earnings this week" | `earnings` |
+
+**Company names are not tickers.** "open tesla", "compare tesla and google", "is alphabet a buy": whenever the user names a company instead of typing a symbol, resolve it first through `resolve_security` (ladder rung 0), then run the matching command on the resolved ticker. Never uppercase the word into a symbol and never guess the ticker from memory; model memory is fine for TSLA but wrong for renamed issuers, ADRs, and share classes, and a wrong symbol fails every call downstream.
 
 When the user asks something that doesn't map cleanly, default to `open` if a ticker is present, `daily brief` if not, and `help` only if neither.
 
@@ -1238,6 +1254,10 @@ The values are share-of-voice percentages summing to roughly 100, **not** per-so
 For full schemas: https://sentisense.ai/skill.md.
 
 ```
+RESOLVE       GET /api/v1/kb/entities/search?q={name}&type=company&limit=5
+                                            (name/alias/ticker fragment -> {name, urlSlug, type, ticker};
+                                             skip null-ticker matches for stock intents; type=etf for funds)
+
 PRICE         GET /api/v1/stocks/price?ticker={T}
               GET /api/v1/stocks/prices?tickers=A,B,C
               GET /api/v1/stocks/chart?ticker={T}&timeframe=1M|3M|6M|1Y
@@ -1277,7 +1297,7 @@ CALENDAR      GET /api/v1/calendar/earnings?week=this|next     (Public preview: 
 MARKET        GET /api/v1/market-summary
 ```
 
-**Wrap vs flat (verify per endpoint, do not assume).** Read these FLAT, with no `.data`: `price`, `prices`, `chart`, `popular`, `market-mood`, `stocks/{T}/profile`, `descriptions`, and `sentiment` (bare array). `institutional/quarters` is a bare array too (take the `reportDate` of the first entry whose `pending` is not true; skip `pending:true` quarters, do not blindly take `[0].reportDate`). `documents/ticker` has its own shape `{ documents, totalCount, ... }` (read `.documents[]`). These ARE wrapped in `{ isPreview, previewReason, data }` (read `.data`): `insider/*`, `analyst/*`, `insights/*`, `politicians/*`, `institutional/holders`, and `calendar/earnings` (whose `data` is a dict, so read `data.earnings[]`). When unsure, accept both: `const rows = Array.isArray(raw) ? raw : (raw?.data ?? raw)`.
+**Wrap vs flat (verify per endpoint, do not assume).** Read these FLAT, with no `.data`: `price`, `prices`, `chart`, `popular`, `market-mood`, `stocks/{T}/profile`, `descriptions`, `kb/entities/search` (bare array), and `sentiment` (bare array). `institutional/quarters` is a bare array too (take the `reportDate` of the first entry whose `pending` is not true; skip `pending:true` quarters, do not blindly take `[0].reportDate`). `documents/ticker` has its own shape `{ documents, totalCount, ... }` (read `.documents[]`). These ARE wrapped in `{ isPreview, previewReason, data }` (read `.data`): `insider/*`, `analyst/*`, `insights/*`, `politicians/*`, `institutional/holders`, and `calendar/earnings` (whose `data` is a dict, so read `data.earnings[]`). When unsure, accept both: `const rows = Array.isArray(raw) ? raw : (raw?.data ?? raw)`.
 
 ---
 
