@@ -92,6 +92,19 @@ All SentiSense endpoints require an API key. Free tier (1,000 req/month, 30 req/
 
 Anonymous calls return `401 api_key_required`. EDGAR and FRED (used for fundamentals and macro) are public and need no key; see **Fetch safety** before calling them.
 
+**Resolve a company name before the first data call.** Every quick read and every committee step
+below takes a canonical ticker. When the user names the company instead ("brief me on tesla",
+"should I own alphabet for 3 years"), resolve it first, over REST (there is no CLI command for this
+yet): `GET /api/v1/kb/entities/search?q={name}&type=company&limit=5` returns a bare array of
+`{name, urlSlug, type, ticker}`, best match first. Take the first match with a non-null `ticker`; a
+tracked subsidiary can outrank its listed parent ("google" returns Google LLC with `ticker: null`
+before Alphabet `GOOGL`). Several plausible ticker-bearing matches is a one-line clarification, an
+empty array is a stated miss, and neither starts a fan-out. Never uppercase the name into a symbol
+and never take the ticker from memory: memory is fine for TSLA and wrong for renamed issuers, ADRs
+and share classes, and a wrong symbol fails loudly over the CLI (exit 4, "unknown ticker") but
+quietly over REST, where `insider/trades/{T}` returns an empty `data: []` that reads like a quiet
+name. An exact ticker the user typed skips this step.
+
 ---
 
 ## Routing Gate: Quick Read or Committee?
@@ -785,6 +798,7 @@ options {T}               GET /api/v1/stocks/{T}/options/summary  (dossier; also
 No CLI command, REST only:
 
 ```
+RESOLVE     GET /api/v1/kb/entities/search?q={name}&type=company&limit=5   (bare array, best first; take the first non-null ticker; type=etf for funds)
 PRICE       GET /api/v1/stocks/prices?tickers=A,B,C
             GET /api/v1/stocks/chart?ticker={T}&timeframe=1M|3M|6M|1Y
             GET /api/v1/stocks/{T}/profile
@@ -816,6 +830,7 @@ PRIMARY (no key; see Fetch safety)
 - **Insider field is `transactionType` (`BUY`/`SELL`)**, congress uses `PURCHASE`/`SALE`. Exclude `AWARD`/`GIFT`/`EXERCISE` from tallies (grants and exercises can carry very large `totalValue`), and drop `transactionCode` `F` (tax withholding on vesting) even though it arrives typed `SELL`.
 - **`market-mood` nests the composite under `market`**; `sectors` is a dict whose GICS labels have historically overlapped, so dedupe defensively if a pair appears.
 - **Options are end-of-day chain aggregates, not order flow.** `/options/*` gives put/call volume and OI, an ATM IV term structure, 25-delta skew, OI walls with max pain, and unusual contracts, each ranked as a percentile of that ticker's OWN trailing history (`ivRank1y`, `pcVolPctl1y`, `skewPctl1y`), `asOf` the prior session. Read it as positioning context, never as live sweeps or dealer books. The `/options/overview` board is stocks-only; ETFs (`SPY`, `QQQ`, `TLT`, sector `XL*`) are covered but reachable only via `/stocks/{T}/options/summary`.
+- **Resolve names, then fetch.** A company name in the ask goes through `kb/entities/search` before any other call (see Authentication); take the first match with a non-null `ticker`, and treat a CLI exit 4 ("unknown ticker") as a resolution problem, not a coverage gap.
 - **Don't hallucinate endpoints, or CLI commands.** No real-time options order flow or sweeps feed (the `/options/*` endpoints above are end-of-day), no dark pool, no `/congress` (it's `/politicians`), no financial-statements endpoint on SentiSense (fundamentals come from EDGAR). The Fetch Reference above is the whole command list; `npx -y sentisense@0.47.1 --help` confirms it at runtime.
 - **Batch vs delayed.** Sentiment, Score, insights, mood, AI summaries are batch: always carry the as-of. Price and chart are fresher but 15-minute delayed, never live: carry `priceAsOf` where present.
 - **The analyst consensus carries its own price, and it can be days old.** `/analyst/{T}/consensus` (CLI `analysts {T}`) returns a `currentPrice` stamped with its own `updatedAt`, independent of the quote endpoint: on 2026-08-20 the AAPL consensus read $305.93 as of 2026-08-16 while `quote` read $316.83, an $11 gap. Present `currentPrice` and `upsidePercent` as of that `updatedAt`, and use `quote` whenever the answer needs a current price.

@@ -64,6 +64,15 @@ An anonymous call returns `401 api_key_required`. A rate-limited call returns `4
 
 On Windows, use the bundled Python client (cross-platform) and reference the key as `%SENTISENSE_API_KEY%` (cmd) or `$env:SENTISENSE_API_KEY` (PowerShell) rather than the POSIX `$SENTISENSE_API_KEY` shown above.
 
+**Fetch with the CLI instead, if the host can run `npx`.** The official SentiSense CLI ships inside the `sentisense` npm package, so there is nothing to install, and two of its commands map straight onto this skill: `sentiment {T}` prints the SentiSense Score surface (the 30-day score and band, direction, latest reading, mentions, share of voice, and a sparkline), and `mood` prints the composite with its four sub-signals. Add `--json` for the exact API response, envelope included, so every field path in this file reads the same whichever way you fetched. Set `SENTISENSE_SKILL=stock-sentiment` and the CLI stamps the identity above for you. The version is pinned deliberately: a pinned version runs reviewed, immutable code.
+
+```bash
+npx -y sentisense@0.47.1 sentiment NVDA
+npx -y sentisense@0.47.1 mood --json
+```
+
+One split to keep straight: the CLI's `sentiment` reads `/stocks/{T}/sentiment` (the Score) plus the Score time series, not the polarity series at `/api/v2/metrics/entity/{T}/metric/sentiment`, so the float in [-1, 1] that workflows 1, 4 and 5 use stays a REST call. For the complete command set, install the `sentisense-cli` skill.
+
 Two response envelopes exist; unwrap correctly before reading fields:
 
 - Read FLAT (top-level, no `.data`): `stocks/price`, `stocks/prices`, `stocks/chart`, `stocks/popular`, `stocks/{T}/profile`, `market-mood`, and the metric series (`sentiment`, `sentisense`, `mentions`, and `social_dominance` are bare arrays). `institutional/quarters` is also a bare array.
@@ -116,6 +125,11 @@ python scripts/sentiment_client.py mood
 All paths are relative to `https://app.sentisense.ai` and are GET. Every call requires the `X-SentiSense-API-Key` header. `{T}` is an uppercase ticker, `{slug}` a member slug, `{id}` a story id. Full schema: https://sentisense.ai/skill.md.
 
 ```
+RESOLVE A NAME (only when the user typed a company or fund name, not a symbol)
+  GET /api/v1/kb/entities/search?q={name}&type=company&limit=5
+        Bare array of {name, urlSlug, type, ticker}, best match first. Take the first match with a
+        non-null ticker. Use type=etf for fund names (SPY resolves only there). See Pitfalls.
+
 SENTIMENT & MOOD
   GET /api/v2/metrics/entity/{T}/metric/sentiment?startTime={epochMs}&endTime={epochMs}
         Sentiment polarity time series. Omit params for the server default 7-day window.
@@ -232,6 +246,7 @@ Frame the result as an observed divergence, not a signal to act: "Bullish diverg
 
 ## Pitfalls
 
+- **Company names are not tickers.** When the user names the company ("sentiment on tesla", "is the mood on alphabet bullish") instead of typing a symbol, resolve it first with `GET /api/v1/kb/entities/search?q={name}&type=company&limit=5`: a bare array of `{name, urlSlug, type, ticker}`, best match first (`type=etf` for a fund, since `SPY` resolves only there). Take the first match with a non-null `ticker`; a tracked subsidiary or private company can outrank its listed parent ("google" returns Google LLC with `ticker: null` before Alphabet `GOOGL`). Several plausible ticker-bearing matches means ask a one-line clarification; an empty array means say so. Never uppercase the word and hope: `$TESLA` fails the metric series with `404 entity_not_found` (that error carries up to three `suggestions`, which is a resolution hint, not data), while the smart-money feeds return an empty `data: []` that reads like a quiet name when the real failure was the identifier. An exact ticker the user typed skips this step, and one resolution call per name covers the whole session.
 - **Nothing here is real time.** Sentiment, the SentiSense Score, mentions, share of voice, news clustering, and AI insights are batch metrics computed on a schedule; quote, price, and chart points are the fresher class but carry a 15-minute delay. State a batch value with its `generatedAt` age, annotate price with `priceAsOf` where present, and never label either "real time."
 - **Empty smart-money windows are normal.** The 7-day insider and congressional feeds often return empty arrays on quiet weeks (disclosure lag, `isPreview:false`, not an error). Widen that specific call to `lookbackDays=30` and note the wider window rather than showing a blank result.
 - **Preview gating is data, not failure.** On the free tier, preview-gated endpoints return `isPreview:true` with a real truncated slice (for example the top 3 insights, the current earnings week, a sliced holder list). Render the slice as the answer and tag it `(preview)`. Mention PRO only when the truncation is materially limiting the answer.

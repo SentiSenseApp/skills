@@ -72,6 +72,15 @@ data = board.get("data")  # None before the first nightly build
 rows = (data or {}).get("rows", [])
 ```
 
+**Fetch with the CLI instead, if the host can run `npx`.** The official SentiSense CLI ships inside the `sentisense` npm package, so there is nothing to install; `options {T}` prints the per-stock dossier from workflow 2 (options sentiment, IV rank, put/call, ATM IV and skew, volumes and open interest, the walls and max pain, and the unusually active contracts), and it works for the covered ETFs. Add `--json` for the exact `/options/summary` response, envelope included, so every field path below reads the same whichever way you fetched. Set `SENTISENSE_SKILL=unusual-options-activity` and the CLI stamps the `User-Agent` identity described under workflow 1 for you. The radar board (`/options/overview`) and the history series have no CLI command yet, so those two workflows stay REST. The version is pinned deliberately: a pinned version runs reviewed, immutable code. For the complete command set, install the `sentisense-cli` skill.
+
+```bash
+npx -y sentisense@0.47.1 options NVDA
+npx -y sentisense@0.47.1 options SPY --json
+```
+
+**Company and fund names are not tickers.** When the user names the company or the fund ("unusual activity in tesla", "skew on the S&P 500 ETF") instead of typing a symbol, resolve it first: `GET /api/v1/kb/entities/search?q={name}&type=company&limit=5`, or `type=etf` for a fund (`SPY` resolves only under `etf`, never under `company`). The response is a bare array of `{name, urlSlug, type, ticker}`, best match first; take the first match with a non-null `ticker` (a tracked subsidiary can outrank its listed parent: "google" returns Google LLC with `ticker: null` before Alphabet `GOOGL`), ask a one-line clarification when several plausible matches carry tickers, and say so when the array is empty. Never uppercase the name into a symbol: `/stocks/TESLA/options/summary` answers `200` with `data: null`, which reads like an uncovered name when the real failure was the identifier (the CLI catches the same mistake and exits 4 with "unknown ticker"). An exact ticker the user typed skips this step.
+
 ## Endpoints
 
 - **`GET /api/v1/options/overview`** : the market-wide radar, one row per covered stock in `rows` plus the ETF board in `etfRows` (same row shape, omitted when a build has none), plus a few market-pulse aggregates (`asOf`, `medianIvRank`, `marketPcVol`, `extremeCount`, `coverageCount`). Rows arrive ranked by `interestScore` descending, so the top of the list is the most interesting names today; building-baseline rows sort last. Free keys receive the top 25 rows plus `totalCount`; PRO keys receive every row. Each row carries `ticker`, `name`, `sector`, `asOf`, `sentiment` (-1 to +1, options-implied), `interestScore` (0-100), `pcVol` and `pcVolPctl1y`, `atmIv` and `ivRank1y`, `skew25d` and `skewPctl1y`, `notionalVol`, `ivMove20`, `observations1y`, `unusualCount`, `maxVolOiRatio`, `maxUnusualPremium`, and the single heaviest wall as `wallSide` / `wallStrike` / `wallShare`.

@@ -61,6 +61,17 @@ Two consequences that follow, and are not optional:
 A single-ticker readout is four to six calls. A sweep is one call plus one earnings-summaries call
 per ticker you follow up on, so bound the follow-up list before you start (see Rate limits below).
 
+**Every call above takes a canonical ticker, so resolve a company name first.** When the user
+names the company ("what did tesla report", "alphabet's last quarter") instead of typing a symbol,
+call `GET /api/v1/kb/entities/search?q={name}&type=company&limit=5` before the fan-out. It returns
+a bare array of `{name, urlSlug, type, ticker}`, best match first. Take the first match with a
+non-null `ticker`; a tracked subsidiary can outrank its listed parent ("google" returns Google LLC
+with `ticker: null` before Alphabet `GOOGL`). Several plausible ticker-bearing matches is a
+one-line clarification, an empty array is a stated miss, and neither starts the fan-out. Never
+uppercase the name into a symbol: `/stocks/TESLA/earnings-summaries` answers `200` with
+`data: []`, which reads like a company that never reported when the real failure was the
+identifier. An exact ticker the user typed skips this step.
+
 ### The earnings analysis report
 
 `GET /api/v1/stocks/{ticker}/earnings-summaries` returns `{isPreview, previewReason, totalCount?,
@@ -211,6 +222,8 @@ how many calls you make.
 
 The default. "Analyze the latest AAPL earnings", "how did NVDA's quarter go".
 
+0. If the user named the company rather than typing a symbol, resolve it through
+   `kb/entities/search` first (see The fan-out); the calls below assume a canonical ticker.
 1. `GET /api/v1/stocks/{ticker}/earnings-summaries?limit=4` for the quarter and its recent history.
 2. `GET /api/v1/stocks/{ticker}/what-changed?limit=4` for the filing diffs, joined to quarters.
 3. `GET /api/v1/insights/stock/{ticker}?insightType=earnings_pulse` for the takeaway signal.
