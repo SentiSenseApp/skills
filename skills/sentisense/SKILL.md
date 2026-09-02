@@ -1091,13 +1091,15 @@ Response: string array, e.g. `["insider_buy_signal", "institutional_position_cha
 Wall Street analyst coverage: aggregate price target band, buy/hold/sell distribution, recent upgrade/downgrade actions, forward EPS estimates with earnings surprise history, and the individual analysts behind the calls -- who covers a stock, and everything one analyst has published. This is one of the most free-tier-generous surfaces in the API: free users get the price target band (`targetLow`, `targetMean`, `targetHigh`, `numberOfAnalysts`, `consensusLabel`) in full -- it powers the public projection cone -- and the entire first page (50 rows) of market-wide `/activity`. The buy/hold/sell distribution counts, full per-ticker action/estimate history, and deep `/activity` paging are PRO.
 
 ### GET /api/v1/analyst/{ticker}/consensus
-Aggregate Wall Street consensus: price target band, number of covering analysts, upside-to-current, recommendation distribution. **PRO (preview)** -- Free: full price band, no buy/hold/sell counts. PRO: full distribution.
+Aggregate Wall Street consensus: price target band, number of covering analysts, upside-to-current, recommendation distribution. **PRO (preview)** -- Free: full price band plus the as-of stamp, no buy/hold/sell counts. PRO: full distribution.
 
 | Param | Type | Required | Description |
 |-------|------|----------|-------------|
 | `ticker` | path | Yes | Stock ticker (e.g. `AAPL`) |
 
-Response: `{ isPreview, previewReason, data: { ticker, currentPrice, targetLow, targetMean, targetHigh, targetMedian, numberOfAnalysts, upsidePercent, consensusLabel, recommendationMean, strongBuy, buy, hold, sell, strongSell, updatedAt } }`. The five `*Buy/*Sell/hold` count fields are zero in the free preview. Returns 404 when no analyst coverage exists for the ticker.
+Response: `{ isPreview, previewReason, data: { ticker, currentPrice, targetLow, targetMean, targetHigh, targetMedian, numberOfAnalysts, upsidePercent, consensusLabel, recommendationMean, strongBuy, buy, hold, sell, strongSell, updatedAt, updatedAtEpoch } }`. The five `*Buy/*Sell/hold` count fields are zero in the free preview, and `recommendationMean` and `targetMedian` are null there. Returns 404 when no analyst coverage exists for the ticker.
+
+**The as-of stamp comes in two forms and is served on every tier, free included.** `updatedAt` is an ISO-8601 UTC instant with a `Z` suffix, to whole seconds (`"2026-09-01T21:04:59Z"`); `updatedAtEpoch` is the same moment in epoch seconds (`1788296699`). Both are absolute instants, so compare them against `now` in UTC, and prefer `updatedAtEpoch` over parsing the string. (Before 2026-09, `updatedAt` was served as a naive local-time string with no offset and read about four hours early; if you cached values from then, re-read rather than mixing the two.)
 
 **`recommendationMean` runs 1.0 to 5.0 and is INVERTED: lower is more bullish** (1 = Strong Buy, 2 = Buy, 3 = Hold, 4 = Sell, 5 = Strong Sell). Flip the comparison when you screen or rank on it (the options put/call and skew fields run inverted too, higher = more bearish; most other fields run the intuitive direction). The mean is aggregated from a different analyst set than the five rating counts, so it will not reconcile as their weighted average. `consensusLabel` is derived from it at these cutoffs: `<=1.5` STRONG_BUY, `<=2.5` BUY, `<=3.5` HOLD, `<=4.5` SELL, else STRONG_SELL. **`numberOfAnalysts` belongs to the price target, not the ratings.** The five rating fields sum to a separate count (not every analyst publishes both, and the rating total is usually the larger). For percent-of-analysts math, divide by the sum of the five rating fields; dividing by `numberOfAnalysts` mixes the two groups and returns above 100% on many tickers.
 
@@ -1156,9 +1158,11 @@ Who covers this stock and what they most recently said, grouped by firm, most re
 | `ticker` | path | Yes | - | Stock ticker (e.g. `AMD`) |
 | `lookbackDays` | int | No | 365 | Coverage window, capped at 1825. Returns `400 invalid_lookbackDays` below 1 |
 
-Response: `{ isPreview, previewReason, data: { ticker, windowDays, asOf, firmCount, namedAnalystCount, noteCount, attributedNoteCount, unattributedNoteCount, attributionNote, coverage: [...] } }`. `windowDays` echoes the window actually applied after clamping, so a request for 99999 comes back saying 1825. A truncated FREE response adds a top-level `totalCount` carrying the full number of covering firms; the untruncated response omits it, because nothing was withheld to count. Read `data.firmCount` when you want that number on every tier.
+Response: `{ isPreview, previewReason, data: { ticker, windowDays, asOf, firmCount, ratingOnlyFirmCount, namedAnalystCount, noteCount, attributedNoteCount, unattributedNoteCount, attributionNote, coverage: [...] } }`. `windowDays` echoes the window actually applied after clamping, so a request for 99999 comes back saying 1825. A truncated FREE response adds a top-level `totalCount` carrying the full number of covering firms; the untruncated response omits it, because nothing was withheld to count. Read `data.firmCount` when you want that number on every tier. `firmCount` counts firms that covered the ticker in the window, which means a price target note OR a rating action; `ratingOnlyFirmCount` says how many of them are here on a rating alone, so firms that published a target are `firmCount - ratingOnlyFirmCount`.
 
 Firm row: `{ firm, analysts: [{ slug, name, noteCount, firstNote, lastNote, latestPriceTarget }], noteCount, attributedNoteCount, unattributedNoteCount, firstNote, lastNote, latestNote: { publishedDate, analyst, priceTarget, adjPriceTarget, priceWhenPosted, newsTitle, newsUrl, newsPublisher }, firmRating: { rating, priorRating, actionType, date } }`. `latestNote.analyst` is an object `{ slug, name }`, not a string, and it is null when the report named nobody. `firmRating` is null for a firm that published a price target in the window without a rating action behind it, which is common: 5 of AMD's 27 covering firms on a 180-day window.
+
+**A firm can cover a stock without publishing a price target.** The upstream price target feed goes quiet on a desk while that desk's rating actions keep arriving, so a firm in that state comes back as an ordinary row with `noteCount: 0`, an empty `analysts` array, `null` for `firstNote` / `lastNote` / `latestNote`, and its `firmRating` set. Rows are ordered by whichever came later, the firm's last note or its last rating action, so a rating-only firm interleaves by its rating date rather than sinking to the end. Check `noteCount` on the row before reaching into `latestNote`, and never render such a row as "analyst not named": there is no note, so there is no byline to be missing.
 
 **A large share of price target notes name no individual analyst, and those notes are still here.** Whether a note carries a byline is a property of the PUBLISHER that reported it, not of the note, which is what the `attributionNote` field on every response says in plain language. The share is high and it varies enormously by ticker: across a 16-ticker large-cap sample on a 365-day window, 52% of notes named nobody, ranging from 11% on `CRM` to 64% on `BA`. Do not hardcode a rate. Filtering unnamed notes out would report a firm as absent from a stock it demonstrably published on, unevenly by publisher, so a firm can legitimately appear with an empty `analysts` array and a non-zero `noteCount`. Read the `attributedNoteCount` and `unattributedNoteCount` on the response you actually received before concluding a desk went quiet.
 
@@ -1589,7 +1593,7 @@ Response: `{"trackers": TrackerListing[]}` where each `TrackerListing` has:
 | `category` | string | Coarse grouping (`institutional`, etc.) |
 | `description` | string | One-sentence subtitle |
 | `viewType` | string | Renderer hint. Phase 1 publishes `table` |
-| `accessTier` | string | `free` or `pro`. `pro` trackers truncate to a free preview for FREE callers; `free` trackers return the full snapshot to everyone |
+| `accessTier` | string | `free` or `pro`. `pro` trackers serve FREE callers a preview, either fewer rows or fewer columns; `free` trackers return the full snapshot to everyone |
 | `methodologyAnchor` | string | Fragment on `/methodology` for the tracker |
 | `refreshIntervalSeconds` | int | Expected refresh cadence |
 | `canonicalUrl` | string | Detail endpoint path |
@@ -1601,13 +1605,14 @@ Standardized snapshot envelope for one tracker. Returns:
 {"isPreview": false, "previewReason": null, "data": TrackerSnapshot}
 ```
 
-A `pro` tracker served to a FREE caller truncates `rows[]` and sets `isPreview: true, previewReason: "PRO_REQUIRED"` plus `totalCount`; `free` trackers and PRO callers get the full snapshot. Where `TrackerSnapshot` has `trackerId`, `displayName`, `viewType`, `asOf`, `headline[]` (top-of-page stat tiles), and one payload field per `viewType`:
+A `pro` tracker served to a FREE caller sets `isPreview: true, previewReason: "PRO_REQUIRED"` plus `totalCount` (the full row count on every response), and withholds one of two ways: most truncate `rows[]` to a top-N preview, while a tracker whose value is a complete dataset keeps every row and drops the proprietary columns instead, naming them in `data.meta.previewWithheld` (`market-heatmap` is the one that does this). `free` trackers and PRO callers get the full snapshot. Where `TrackerSnapshot` has `trackerId`, `displayName`, `viewType`, `asOf`, `headline[]` (top-of-page stat tiles), and one payload field per `viewType`:
 
 | `viewType` | Payload field | Per-item shape |
 |-----------|---------------|----------------|
 | `table` | `rows[]` | `{rank, rowId, name, category?, url?, metrics[]}` where each metric is `{label, value, unit}` |
+| `heatmap` | `rows[]` | The same row plus its columns as named fields directly on the row, e.g. `rows[].marketCap`. Cheaper to read, and far smaller than repeating a label and unit on each of 500 rows |
 
-Live trackers as of this writing, all `viewType: table`. The catalog grows over time: treat the `GET /api/v1/trackers` discovery endpoint as the source of truth, not this table.
+Live trackers as of this writing. The catalog grows over time: treat the `GET /api/v1/trackers` discovery endpoint as the source of truth, not this table.
 
 | Tracker id | accessTier | What it ranks |
 |-----------|-----------|---------------|
@@ -1619,10 +1624,19 @@ Live trackers as of this writing, all `viewType: table`. The catalog grows over 
 | `sentiment-leaderboard` | free | Most bullish and most bearish stocks by pure sentiment polarity |
 | `sentiment-movers` | free | Biggest 7-day sentiment shifts, improving and deteriorating |
 | `trending-products` | free | Products and services by mention volume and week-over-week growth |
+| `market-heatmap` | pro | A whole index as tiles in one call: market cap, the day's move, GICS sector, plus sentiment, Score, mentions and options overlays per stock. Every row on every tier, overlays PRO. Scope-aware, see below |
 
 Column headers are the metric labels on `rows[0]`. Common metric `unit` values are `percent`, `usd`, and `count`; newer trackers add richer units such as `polarity`, `ratio`, `status`, and `sparkline`.
 
-Errors: `404 unknown_tracker`, `404 no_snapshot`, `503 tracker_unavailable`.
+**`market-heatmap` takes a `scope`:** `GET /api/v1/trackers/market-heatmap?scope=sp500` (the default), `nasdaq100` or `popular`. Any other value returns `400 invalid_scope` listing the valid ones; it is never silently coerced to the default.
+
+**Its tier split is by column, not by row.** Every caller gets every tile, the full `headline` and the full `meta` sector rollups. A non-PRO response carries `isPreview: true`, `previewReason: "PRO_REQUIRED"` and `meta.previewWithheld`, and drops the proprietary overlays from every row: `sentiment7d`, `sentimentChange7d`, `sentisenseScore` and `mentionsZ` (layer `sentiment`), and `optionsInterestScore` (layer `options`). `meta.previewWithheld` lists the layer names removed, and only ones this snapshot actually has, so it is the field to read when deciding whether to show a locked control rather than a missing reading.
+
+Per-row fields: `ticker`, `sector` (canonical GICS-11 or `Unclassified`), `industry`, `marketCap`, `price`, `previousClose`, `changePercent`, `volume`, `priceAsOf`, `sentiment7d`, `sentimentChange7d`, `sentisenseScore`, `mentionsZ`, `optionsInterestScore`. `meta` carries `scope`, `universeSize`, `tileCount`, `missingPrice[]`, `breadthUp`, `breadthDown`, `capWeightedChangePct`, `equalWeightedChangePct`, `marketMoodScore`, `marketMoodPhase`, `layers` and `sectors[]`.
+
+Within the layers you were served, an absent field means no reading for that tile, never a zero, and a measured `0.0` is always written. Whether an overlay ran at all is answered by `meta.layers`, which omits any layer that failed or is not shipped. Snapshots rewrite every 15 minutes during the US regular session and hourly outside it, with prices delayed about 15 minutes (`meta.layers.prices.delayMinutes`), so do not present the board as real time.
+
+Errors: `404 unknown_tracker`, `404 no_snapshot` (a scope whose first snapshot has not been written yet: a warm-up state, retry in 15 minutes), `400 invalid_scope`, `503 tracker_unavailable`.
 
 **Methodology:** <https://sentisense.ai/methodology/> (each tracker's `methodologyAnchor` from the discovery listing points at its own section; an empty anchor means the tracker has no dedicated section yet).
 

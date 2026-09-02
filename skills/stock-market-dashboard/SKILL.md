@@ -297,6 +297,11 @@ positioning and IV rank, congressional and insider trades on the watchlist names
 ticker, a sentiment leaderboard of the most bullish and bearish names. Add them as sections in the
 same file rather than splitting into multiple pages.
 
+For the whole index as one picture, every stock as a tile sized by market cap and coloured by the
+day's move or by sentiment, install `market-heatmap`. It is one API call and a self-contained
+file as well, so the two pair naturally: the dashboard for your watchlist, the heatmap for the
+market around it.
+
 **Keep it one file.** The moment it needs a bundler it stops being the thing that makes this
 useful, which is that anyone can generate one, email it, and have it open on the other end.
 

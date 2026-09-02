@@ -1,6 +1,6 @@
 ---
 name: stock-screener
-description: "Stock screener for AI agents: filter US stocks and ETFs on the SentiSense Score, sentiment direction, analyst ratings and upside, technicals, momentum, price and market cap in one query, or run 28 curated screens like Crowd vs Street and Golden Cross + Bullish. Translates plain-language asks such as find oversold stocks with bullish sentiment into valid screen plans. Use for stock screener API, ETF screener, stock scanner, find stocks by sentiment, momentum screener, analyst rating screener, oversold stocks, unusual social volume. Read-only. No trading, no purchases, no write operations, no wallet access."
+description: "Stock screener for AI agents: filter US stocks and ETFs on the SentiSense Score, sentiment direction, analyst ratings and upside, technicals, momentum, price and market cap in one query, or run 28 curated screens like Crowd vs Street and Golden Cross + Bullish. Translates plain-language asks such as find oversold stocks with bullish sentiment into valid screen plans. Use for AI stock screener, stock screener with sentiment, stock screener API, ETF screener, stock scanner, find stocks by sentiment, screen stocks by market cap, momentum screener, analyst upgrade screener, oversold stocks, 52-week low screener, unusual social volume. Read-only. No trading, no purchases, no write operations, no wallet access."
 license: MIT
 metadata:
   homepage: https://sentisense.ai
@@ -82,6 +82,33 @@ Most screening requests arrive fuzzy. Translate them honestly:
 4. **Add a coverage guard when a ratio can be thin.** `ANALYST_BUY_RATIO_PCT` from one analyst is noise: pair it with `ANALYST_COUNT GTE 5`. If a screen returns fewer rows than expected, check field coverage before loosening thresholds.
 5. **Show the plan with the results.** The user can only correct a translation they can see. State filters, sort, and `matched` count; `matched` is the pre-limit total, so truncation is visible. Say it as three numbers when they differ: "56 matched, showing 50, more exist" (more exist whenever `matched` is greater than the rows returned).
 6. **There is no OR.** Filters AND together; for an OR, run two screens and merge client-side, saying so.
+
+## Popular asks, translated
+
+The phrases people actually type, mapped to the screen that answers them. Curated ids run with
+`--screen <id>`; custom plans are filter triples in the `FIELD:OP:VALUE` form the API accepts, with
+the sort beside them. Show the plan with the results every time, so the user can loosen or tighten it.
+
+| The user says | Run |
+|---|---|
+| "run the momentum screen", "what has momentum right now" | curated `momentum` |
+| "oversold stocks people like", "beaten down but loved" | curated `oversold-with-positive-sentiment` |
+| "where do analysts and the crowd disagree" | curated `crowd-vs-street` |
+| "most bullish stocks right now", "high sentiment stocks" | curated `high-sentiment` |
+| "small caps people are talking about", "small cap buzz" | curated `small-cap-buzz` |
+| "golden cross stocks with bullish sentiment" | curated `golden-cross-bullish` |
+| "stocks under $20 with bullish sentiment", "cheap stocks the crowd likes" | `PRICE:LTE:20`, `SENTIMENT_DIRECTION:EQ:1`, sort `SCORE_CHANGE_7D:DESC` (a handful of names on a typical day; `PRICE:LTE:10` often returns none, say so rather than loosening silently) |
+| "large caps near their 52-week low with analyst upside" | `MARKET_CAP:GTE:10000000000`, `PCT_OFF_52W_LOW:LTE:10`, `ANALYST_TARGET_UPSIDE_PCT:GTE:20`, sort `ANALYST_TARGET_UPSIDE_PCT:DESC` (the CLI `--filter` wants a plain number here; `10B` is rejected with "expects a number") |
+| "stocks analysts just upgraded", "recent analyst upgrades" | `ANALYST_RATING_MOMENTUM_30D:GTE:1`, sort `ANALYST_RATING_MOMENTUM_30D:DESC` (2 narrows to about a dozen names) |
+| "strong buy consensus with upside left" | `ANALYST_BUY_RATIO_PCT:GTE:80`, `ANALYST_TARGET_UPSIDE_PCT:GTE:15`, sort `ANALYST_TARGET_UPSIDE_PCT:DESC` |
+| "low volatility stocks the crowd likes", "calm names with bullish sentiment" | `VOLATILITY_30D:LTE:25`, `SENTIMENT_DIRECTION:EQ:1`, sort `SENTI_SCORE_7D:DESC` |
+| "stocks 30% off their highs", "deep pullbacks" | `PCT_OFF_52W_HIGH:LTE:-30`, sort `PCT_OFF_52W_HIGH:ASC` |
+| "mentions spiking", "unusual social volume" | `MENTION_VELOCITY:GTE:100`, sort `MENTION_VELOCITY:DESC`; for share of the whole conversation, curated `rising-share-of-voice` |
+| "best performers this month that analysts still back" | `RETURN_1M:GTE:10`, `ANALYST_BUY_RATIO_PCT:GTE:70`, sort `RETURN_1M:DESC` |
+
+Two habits keep these honest: say which window a field measures (the 7-day Score versus its 1-month
+baseline, 3-day mention velocity, 30-day analyst momentum), and treat an empty result as the data,
+not a broken filter; the fix is to loosen one threshold and say so, never to invent a row.
 
 ## Field semantics that produce wrong-but-plausible screens
 

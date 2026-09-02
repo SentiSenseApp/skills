@@ -65,6 +65,7 @@ same secret.
 | "deep dive on this company", "bull case vs bear case", "due diligence", "is the thesis intact" | `stocks-analysis` (published on ClawHub as `us-stocks-analysis`) |
 | "open NVDA", "daily brief", "what is hot today", "one command and give me everything" | `stock-terminal` |
 | "build me a market dashboard", "a morning briefing I can open in a browser" | `stock-market-dashboard` |
+| "market heatmap", "sector heatmap", "what is moving today as a treemap", "which sectors are hot" | `market-heatmap` |
 | "unusual options activity", "IV rank", "max pain", "where is positioning stretched" | `unusual-options-activity` |
 | "how much is this stock expected to move", "expected move", "draw me the volatility cone" | `expected-move-visualizer` |
 | "options payoff diagram", "what does this covered call look like", "breakeven on a spread", "iron condor P/L" | `options-payoff-calculator` |
