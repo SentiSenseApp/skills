@@ -437,10 +437,11 @@ choices for deuteranopia; the green here is pushed toward teal specifically to s
 
 ## Going further
 
-Free draws the whole board. **PRO ($15/mo)** adds the readings we compute on top of it,
-sentiment, the SentiSense Score, mention pressure and options interest, so the same tiles
-recolour by our own analysis, and it lifts the monthly cap and the per-minute rate:
-https://app.sentisense.ai/pricing
+Free draws the whole board, every tile, every sector rollup. **PRO ($15/mo)** lifts the monthly
+request cap (no monthly limit, just a 300/min rate) and adds the four overlays we compute on top
+of the tiles, sentiment, the SentiSense Score, mention pressure and options interest, so the same
+board recolours by our own analysis, plus depth across the rest of the SentiSense API. Apply
+coupon `AGENTS` at checkout for a builder launch discount: https://app.sentisense.ai/pricing?coupon=AGENTS
 
 For a full morning briefing rather than one board, with breadth, filings, flows, overnight stories
 and an earnings week laid out as a single HTML page, install `stock-market-dashboard`. For
