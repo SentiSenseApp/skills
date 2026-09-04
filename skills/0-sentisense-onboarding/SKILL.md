@@ -81,8 +81,8 @@ same secret.
 Pick one and go. If two look plausible, pick the narrower one and pull anything extra from
 `sentisense`, which documents the whole API.
 
-`sentisense-cli` is the zero-install shell path: `npx -y sentisense@0.47.1 quote NVDA` or
-`npx -y sentisense@0.47.1 sentiment NVDA` answers in one command, with no HTTP call to compose and
+`sentisense-cli` is the zero-install shell path: `npx -y sentisense@0.51.0 quote NVDA` or
+`npx -y sentisense@0.51.0 sentiment NVDA` answers in one command, with no HTTP call to compose and
 nothing to install. The full API reference stays `sentisense`.
 
 These skills are runtime-portable: verified working on Claude, Claude Code, OpenClaw, Codex,

@@ -91,15 +91,15 @@ Anonymous calls return `401 api_key_required`.
 If your runtime can run a shell, the official CLI ships inside the `sentisense` npm package, so there is nothing to install and no client to write:
 
 ```bash
-npx -y sentisense@0.47.1 quote NVDA
-npx -y sentisense@0.47.1 sentiment TSLA --days 30
-npx -y sentisense@0.47.1 insiders NVDA --days 90 --json
-npx -y sentisense@0.47.1 mood --json
+npx -y sentisense@0.51.0 quote NVDA
+npx -y sentisense@0.51.0 sentiment TSLA --days 30
+npx -y sentisense@0.51.0 insiders NVDA --days 90 --json
+npx -y sentisense@0.51.0 mood --json
 ```
 
-Add `--json` for the exact API response, envelope included, so every response shape this skill maps onto a screen applies unchanged. Auth: `SENTISENSE_API_KEY` in the environment, or store it once with `npx -y sentisense@0.47.1 auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file mode 600, local to your machine, removable with `auth --remove`). Set `SENTISENSE_SKILL=stock-terminal` and the CLI stamps the identity above for you. The version is pinned deliberately: a pinned version runs reviewed, immutable code.
+Add `--json` for the exact API response, envelope included, so every response shape this skill maps onto a screen applies unchanged. Auth: `SENTISENSE_API_KEY` in the environment, or store it once with `npx -y sentisense@0.51.0 auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file mode 600, local to your machine, removable with `auth --remove`). Set `SENTISENSE_SKILL=stock-terminal` and the CLI stamps the identity above for you. The version is pinned deliberately: a pinned version runs reviewed, immutable code.
 
-The CLI is a convenience for an agent answering a turn, never a dependency. A host application standing up the harness calls the REST endpoints directly, and every command in this skill documents the REST calls it fans out to. For the full command list, install the `sentisense-cli` skill or run `npx -y sentisense@0.47.1 --help`.
+The CLI is a convenience for an agent answering a turn, never a dependency. A host application standing up the harness calls the REST endpoints directly, and every command in this skill documents the REST calls it fans out to. For the full command list, install the `sentisense-cli` skill or run `npx -y sentisense@0.51.0 --help`.
 
 ---
 

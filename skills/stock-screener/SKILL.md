@@ -1,6 +1,6 @@
 ---
 name: stock-screener
-description: "Stock screener for AI agents: filter US stocks and ETFs on the SentiSense Score, sentiment direction, analyst ratings and upside, technicals, momentum, price and market cap in one query, or run 28 curated screens like Crowd vs Street and Golden Cross + Bullish. Translates plain-language asks such as find oversold stocks with bullish sentiment into valid screen plans. Use for AI stock screener, stock screener with sentiment, stock screener API, ETF screener, stock scanner, find stocks by sentiment, screen stocks by market cap, momentum screener, analyst upgrade screener, oversold stocks, 52-week low screener, unusual social volume. Read-only. No trading, no purchases, no write operations, no wallet access."
+description: "Stock screener for AI agents: filter US stocks and ETFs on the SentiSense Score, the SentiSense Rating letter grade, sentiment direction, analyst ratings and upside, technicals, momentum, price and market cap in one query, or run 28 curated screens like Crowd vs Street and Golden Cross + Bullish. Translates plain-language asks such as find oversold stocks with bullish sentiment into valid screen plans. Use for AI stock screener, stock screener with sentiment, stock screener API, ETF screener, stock scanner, find stocks by sentiment, screen stocks by rating, find A rated stocks, screen stocks by market cap, momentum screener, analyst upgrade screener, oversold stocks, 52-week low screener, unusual social volume. Read-only. No trading, no purchases, no write operations, no wallet access."
 license: MIT
 metadata:
   homepage: https://sentisense.ai
@@ -8,7 +8,7 @@ metadata:
 ---
 # Stock Screener (SentiSense)
 
-Filter the tracked US stock and ETF universe in one query. This is the only surface where SentiSense's own signals, the SentiSense Score and social attention, sit in the same `WHERE` clause as analyst consensus, technicals, momentum, and price. A screen on analyst ratings alone is something a dozen free tools already do; a screen on *analyst ratings where the Score disagrees* is not. 28 curated screens ship ready to run, and all 48 screenable fields are available for custom plans; both are enumerated in the appendix at the end of this skill.
+Filter the tracked US stock and ETF universe in one query. This is the only surface where SentiSense's own signals, the SentiSense Score and social attention, sit in the same `WHERE` clause as analyst consensus, technicals, momentum, and price. A screen on analyst ratings alone is something a dozen free tools already do; a screen on *analyst ratings where the Score disagrees* is not. 28 curated screens ship ready to run, and all 49 screenable fields are available for custom plans; both are enumerated in the appendix at the end of this skill.
 
 This skill's job is translation: turning what the user actually asked ("find me oversold stocks people are turning bullish on") into a valid, honest screen plan, running it, and presenting the results with the plan visible so the user can tighten or loosen it.
 
@@ -27,7 +27,7 @@ Not this skill: single-ticker deep dives (`stock-sentiment`, `stocks-analysis`; 
 ## Prerequisites
 
 - A free `SENTISENSE_API_KEY`. Get one at https://app.sentisense.ai/get-api-key. The key is required on every call; anonymous requests return `401 api_key_required`.
-- Any HTTP client, or no install at all via the official CLI (`npx -y sentisense@0.47.1`).
+- Any HTTP client, or no install at all via the official CLI (`npx -y sentisense@0.51.0`).
 - Read-only scope: everything here is a `GET` or a filter-only `POST`. Nothing this skill does can place a trade, move money, or modify account state.
 
 | Tier | Quota | Rate |
@@ -44,14 +44,14 @@ A screen is a single request no matter how many rows it returns, so prefer one b
 The CLI is the fastest path:
 
 ```bash
-npx -y sentisense@0.47.1 screen --list                # the 28 curated screens
-npx -y sentisense@0.47.1 screen --fields              # every filterable field, with operators
-npx -y sentisense@0.47.1 screen --screen crowd-vs-street
-npx -y sentisense@0.47.1 screen --filter SENTI_SCORE_7D:GTE:13 --filter ANALYST_COUNT:GTE:5 --sort SENTI_SCORE_7D:DESC --limit 25
-npx -y sentisense@0.47.1 screen --etf --filter ISSUER:IN:Vanguard,iShares
+npx -y sentisense@0.51.0 screen --list                # the 28 curated screens
+npx -y sentisense@0.51.0 screen --fields              # every filterable field, with operators
+npx -y sentisense@0.51.0 screen --screen crowd-vs-street
+npx -y sentisense@0.51.0 screen --filter SENTI_SCORE_7D:GTE:13 --filter ANALYST_COUNT:GTE:5 --sort SENTI_SCORE_7D:DESC --limit 25
+npx -y sentisense@0.51.0 screen --etf --filter ISSUER:IN:Vanguard,iShares
 ```
 
-Filters are `FIELD:OP:VALUE` and are ANDed; operators are `GTE`, `LTE`, `GT`, `LT`, `EQ`, `NEQ`, `IN`, `NOT_IN`. Add `--json` for the exact API response, and `--tickers NVDA,AMD,AVGO` to screen a watchlist instead of the universe. Auth: `SENTISENSE_API_KEY` in the environment, or store it once with `npx -y sentisense@0.47.1 auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file mode 600, local to your machine, removable with `auth --remove`). The version is pinned deliberately: a pinned version runs reviewed, immutable code.
+Filters are `FIELD:OP:VALUE` and are ANDed; operators are `GTE`, `LTE`, `GT`, `LT`, `EQ`, `NEQ`, `IN`, `NOT_IN`. Add `--json` for the exact API response, and `--tickers NVDA,AMD,AVGO` to screen a watchlist instead of the universe. Auth: `SENTISENSE_API_KEY` in the environment, or store it once with `npx -y sentisense@0.51.0 auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file mode 600, local to your machine, removable with `auth --remove`). The version is pinned deliberately: a pinned version runs reviewed, immutable code.
 
 REST equivalent, same plan shape the CLI builds:
 
@@ -70,7 +70,7 @@ One REST shape difference that the numeric example above does not show: **`IN` a
 { "plan": { "filters": [ { "fieldName": "ISSUER", "op": "IN", "values": ["Vanguard", "iShares"] } ] } }
 ```
 
-The CLI builds this for you (`--filter ISSUER:IN:Vanguard,iShares`). The live string values for `ISSUER`, `ASSET_CLASS`, and `TRACKED_INDEX` come back in the fields catalog; note the plain `--fields` table shows names, ops, and units only, so add `--json` (or call `GET /fields` directly) when you need the descriptions and those value lists.
+The CLI builds this for you (`--filter ISSUER:IN:Vanguard,iShares`). Four fields are string-typed and take `IN`/`NOT_IN`: `SENTISENSE_RATING` in the stock universe, and `ISSUER`, `ASSET_CLASS`, `TRACKED_INDEX` in the ETF universe. The live values for the three ETF fields come back in the fields catalog; note the plain `--fields` table shows names, ops, and units only, so add `--json` (or call `GET /fields` directly) when you need the descriptions and those value lists.
 
 ## Translating a fuzzy ask (the procedure)
 
@@ -105,6 +105,8 @@ the sort beside them. Show the plan with the results every time, so the user can
 | "stocks 30% off their highs", "deep pullbacks" | `PCT_OFF_52W_HIGH:LTE:-30`, sort `PCT_OFF_52W_HIGH:ASC` |
 | "mentions spiking", "unusual social volume" | `MENTION_VELOCITY:GTE:100`, sort `MENTION_VELOCITY:DESC`; for share of the whole conversation, curated `rising-share-of-voice` |
 | "best performers this month that analysts still back" | `RETURN_1M:GTE:10`, `ANALYST_BUY_RATIO_PCT:GTE:70`, sort `RETURN_1M:DESC` |
+| "top rated stocks", "A rated stocks", "best SentiSense Rating" | `SENTISENSE_RATING:IN:A`, sort `SENTISENSE_RATING:DESC` (about a tenth of the rated universe by construction; add `MARKET_CAP:GTE:10000000000` to keep it to large caps) |
+| "highly rated but the street is cold on it" | `SENTISENSE_RATING:IN:A,B`, `ANALYST_BUY_RATIO_PCT:LTE:40`, sort `SENTISENSE_RATING:DESC` |
 
 Two habits keep these honest: say which window a field measures (the 7-day Score versus its 1-month
 baseline, 3-day mention velocity, 30-day analyst momentum), and treat an empty result as the data,
@@ -112,8 +114,9 @@ not a broken filter; the fix is to loosen one threshold and say so, never to inv
 
 ## Field semantics that produce wrong-but-plausible screens
 
-These three are the known traps; getting them wrong yields a screen that runs fine and means nothing:
+These four are the known traps; getting them wrong yields a screen that runs fine and means nothing:
 
+- **`SENTISENSE_RATING` is a letter, and it is a rank.** Values `A`, `B`, `C`, `D`, `F`; operators `IN` and `NOT_IN` only, with the letters in a `values` array (`--filter SENTISENSE_RATING:IN:A,B`). The letters are fixed slices of the rated universe, so an A means "top 10 percent of stocks rated today", never "a stock to buy". Sorting the field resolves to the underlying percentile rather than the letter's alphabetical order, so `DESC` puts the strongest rank first. Rows come back with `ratingLetter` and `ratingPercentile`; quote the percentile beside the letter. Stocks with too little data are unrated and match no letter, so `NOT_IN ["F"]` is not the complement of `IN ["F"]`.
 - **`ANALYST_RATING_MEAN` is inverted.** Vendor 1-to-5 scale where **1.0 is strong buy**. Bullish is `LTE 2.5`, not `GTE`. Prefer `ANALYST_BUY_RATIO_PCT`, which runs the intuitive direction.
 - **Score fields are banded, not [-1, 1].** The SentiSense Score is unbounded (roughly -30 to +45 across the universe) with bands at 5, 13, and 23 either side of zero: above +5 bullish lean, +13 bullish, +23 strong. Filter on band edges; `GTE:0.5` is a polarity-scale habit that silently means "any positive score". `SENTI_SCORE_7D` and `SENTI_SCORE_1M` are window averages; `SCORE_CHANGE_7D` is the 7-day minus the 1-month baseline, so positive means strengthening.
 - **Nulls never match, in either direction.** `RETURN_1Y >= 0` and `RETURN_1Y < 0` do not partition the universe: a recently listed stock is in neither. Sorting puts nulls last regardless of direction.
@@ -143,12 +146,13 @@ Every row carries the full field set (nulls where uncovered) plus render-ready e
 
 Generated from the same catalog the API serves, refreshed with every release of this skill. The live `--fields` and `--list` output is authoritative and can be ahead of this table; use this appendix to plan, and the live catalog to execute. Field names are case-sensitive and go into plans verbatim. Numeric fields take GTE/GT/LTE/LT and are sortable; nulls never match a filter and always sort last.
 
-### Stock fields (32)
+### Stock fields (33)
 
 | Field | Group | Type | Meaning |
 |---|---|---|---|
 | `SENTI_SCORE_7D` | Sentiment | number, Score | 7-day SentiSense score. Above +5 is bullish, +13 strongly so; below -5 is bearish. |
 | `SENTI_SCORE_1M` | Sentiment | number, Score | 1-month SentiSense score. Above +5 is bullish, +13 strongly so; below -5 is bearish. |
+| `SENTISENSE_RATING` | Sentiment | text, IN/NOT_IN | Letter grade by percentile rank of a six-dimension blend among rated stocks. A is the top 10 percent. Sorting this field orders by the underlying percentile, so the order inside a letter is defined. Stocks with too little data are unrated and match no letter. Values: A, B, C, D, F. Sortable, and sorting resolves to the underlying percentile. |
 | `SCORE_CHANGE_7D` | Sentiment | number, Score | 7-day SentiSense Score minus the 1-month baseline. Positive means the score is strengthening versus the longer window. |
 | `SENTIMENT_DIRECTION` | Sentiment | enum, EQ only | Which side of the neutral band the 7-day SentiSense Score sits on. Bullish is above +5, bearish below -5, and anything between reads Neutral. Values: 1 = Bullish, 0 = Neutral, -1 = Bearish. |
 | `SENTI_SCORE_TREND_7D` | Sentiment | number, Score | Slope of the daily SentiSense score over the last 7 days, in score points per day. Positive means the score is climbing. Blank when the week is too sparse to call. |

@@ -101,12 +101,12 @@ curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
 Three of the four have a CLI equivalent, if you would rather not compose HTTP:
 
 ```bash
-npx -y sentisense@0.47.1 options NVDA --json
-npx -y sentisense@0.47.1 quote NVDA --json
-npx -y sentisense@0.47.1 earnings --json          # forward calendar
+npx -y sentisense@0.51.0 options NVDA --json
+npx -y sentisense@0.51.0 quote NVDA --json
+npx -y sentisense@0.51.0 earnings --json          # forward calendar
 ```
 
-`--json` returns the exact API response, envelope included. Neither the daily closes nor the earnings reactions have a CLI command today, so those two calls stay REST whichever path you take. Auth: `SENTISENSE_API_KEY` in the environment, or store it once with `npx -y sentisense@0.47.1 auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file mode 600, local to your machine, removable with `auth --remove`). The version is pinned deliberately: a pinned version runs reviewed, immutable code.
+`--json` returns the exact API response, envelope included. Neither the daily closes nor the earnings reactions have a CLI command today, so those two calls stay REST whichever path you take. Auth: `SENTISENSE_API_KEY` in the environment, or store it once with `npx -y sentisense@0.51.0 auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file mode 600, local to your machine, removable with `auth --remove`). The version is pinned deliberately: a pinned version runs reviewed, immutable code.
 
 A rate-limited call returns `429` with a `Retry-After` header; back off for the indicated seconds.
 

@@ -67,8 +67,8 @@ On Windows, use the bundled Python client (cross-platform) and reference the key
 **Fetch with the CLI instead, if the host can run `npx`.** The official SentiSense CLI ships inside the `sentisense` npm package, so there is nothing to install, and two of its commands map straight onto this skill: `sentiment {T}` prints the SentiSense Score surface (the 30-day score and band, direction, latest reading, mentions, share of voice, and a sparkline), and `mood` prints the composite with all six of its sub-signals and the sector table. Add `--json` for the exact API response, envelope included, so every field path in this file reads the same whichever way you fetched. Set `SENTISENSE_SKILL=stock-sentiment` and the CLI stamps the identity above for you. The version is pinned deliberately: a pinned version runs reviewed, immutable code.
 
 ```bash
-npx -y sentisense@0.47.1 sentiment NVDA
-npx -y sentisense@0.47.1 mood --json
+npx -y sentisense@0.51.0 sentiment NVDA
+npx -y sentisense@0.51.0 mood --json
 ```
 
 One split to keep straight: the CLI's `sentiment` reads `/stocks/{T}/sentiment` (the Score) plus the Score time series, not the polarity series at `/api/v2/metrics/entity/{T}/metric/sentiment`, so the float in [-1, 1] that workflows 1, 4 and 5 use stays a REST call. For the complete command set, install the `sentisense-cli` skill.

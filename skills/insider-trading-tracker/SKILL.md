@@ -36,7 +36,7 @@ Do not use it for order entry, portfolio management, or personalized advice. It 
 ## Prerequisites
 
 - A free `SENTISENSE_API_KEY`. Get one at https://app.sentisense.ai/get-api-key. Send it on every call: a request without a valid key gets at most a shaped crawler-facing preview slice, never the dataset, and that fallback is not a contract you can build on.
-- Any HTTP client, or no install at all via the official CLI (`npx -y sentisense@0.47.1`). Plain `curl` works, or Python 3.8+ using only the standard library.
+- Any HTTP client, or no install at all via the official CLI (`npx -y sentisense@0.51.0`). Plain `curl` works, or Python 3.8+ using only the standard library.
 - Network access to `https://app.sentisense.ai`.
 - Read-only scope. Every endpoint here is a GET. Nothing this skill does can place a trade, move money, or modify account state.
 
@@ -54,18 +54,18 @@ The free tier exercises every workflow below; preview-gated endpoints return a t
 For a single stock, one CLI command answers with no HTTP call to compose:
 
 ```bash
-npx -y sentisense@0.47.1 insiders NVDA --days 90
-npx -y sentisense@0.47.1 insiders NVDA --days 180 --json
-npx -y sentisense@0.47.1 insiders NVDA --full     # all rows in plain output, not the top 15
+npx -y sentisense@0.51.0 insiders NVDA --days 90
+npx -y sentisense@0.51.0 insiders NVDA --days 180 --json
+npx -y sentisense@0.51.0 insiders NVDA --full     # all rows in plain output, not the top 15
 ```
 
-Plain output in a terminal, exact API JSON with `--json` (envelope included). Auth: `SENTISENSE_API_KEY` in the environment, or store it once with `npx -y sentisense@0.47.1 auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file mode 600, local to your machine, removable with `auth --remove`). The version is pinned deliberately: a pinned version runs reviewed, immutable code.
+Plain output in a terminal, exact API JSON with `--json` (envelope included). Auth: `SENTISENSE_API_KEY` in the environment, or store it once with `npx -y sentisense@0.51.0 auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file mode 600, local to your machine, removable with `auth --remove`). The version is pinned deliberately: a pinned version runs reviewed, immutable code.
 
 The market-wide endpoints are plain REST. All three endpoints return the wrapped envelope `{ isPreview, previewReason, data }`; read `.data`, and when `isPreview` is true say so ("showing the free preview slice"). A rate-limited call returns `429` with a `Retry-After` header; back off for the indicated seconds.
 
 ## Endpoints
 
-- **`GET /api/v1/insider/trades/{ticker}`** : individual Form 4 transactions for one stock, newest first. Query `lookbackDays` (1-365, default 90). Free: top 5; PRO: full window. Each row: `insiderName`, `insiderTitle`, `insiderRelation`, `officer`, `director`, `tenPctOwner`, `transactionDate`, `filedDate`, `transactionCode`, `transactionType`, `securityTitle`, `sharesTransacted`, `pricePerShare` (null on $0 awards), `totalValue`, `sharesOwnedAfter`, `directOwnership`, `rule10b51`. CLI: `npx -y sentisense@0.47.1 insiders {ticker} --days N --json`.
+- **`GET /api/v1/insider/trades/{ticker}`** : individual Form 4 transactions for one stock, newest first. Query `lookbackDays` (1-365, default 90). Free: top 5; PRO: full window. Each row: `insiderName`, `insiderTitle`, `insiderRelation`, `officer`, `director`, `tenPctOwner`, `transactionDate`, `filedDate`, `transactionCode`, `transactionType`, `securityTitle`, `sharesTransacted`, `pricePerShare` (null on $0 awards), `totalValue`, `sharesOwnedAfter`, `directOwnership`, `rule10b51`. CLI: `npx -y sentisense@0.51.0 insiders {ticker} --days N --json`.
 - **`GET /api/v1/insider/activity`** : market-wide insider activity aggregated by ticker, split into top `buys` and top `sells` by total dollar value (`.data.buys` and `.data.sells`). Query `lookbackDays` (1-365, default 90). Each entry: `ticker`, `companyName`, `tradeCount`, `insiderCount`, `totalShares`, `totalValue`, `latestDate`, `latestInsider`, `latestTitle`. Free: top 5 per direction; PRO: full. The `sells` side already excludes code-F tax withholding server-side, so these dollars are discretionary selling and you should not filter them again; dispositions to the issuer (code `D`) are still counted.
 - **`GET /api/v1/insider/cluster-buys`** : stocks where **3 or more distinct insiders** bought within the window. Query `lookbackDays` (1-365, default 90). Each signal: `ticker`, `companyName`, `insiderCount`, `tradeCount`, `totalShares`, `totalValue`, `firstBuyDate`, `lastBuyDate`. Free: top 5; PRO: full.
 
@@ -74,7 +74,7 @@ The market-wide endpoints are plain REST. All three endpoints return the wrapped
 **1. The insider tape for one stock**
 
 ```bash
-npx -y sentisense@0.47.1 insiders NVDA --days 90 --json
+npx -y sentisense@0.51.0 insiders NVDA --days 90 --json
 ```
 
 REST equivalent: `GET /api/v1/insider/trades/NVDA?lookbackDays=90`. Filter to the directional rows first (code `P` and code `S`, minus code `F`), then report: who bought and sold, their roles, net dollars, and how much of the selling was 10b5-1 planned. The CLI's plain output already does this split for you: `sold:` counts open-market sales only, withholding shows as its own `withheld:` figure, and those rows read `TAX-W` in the table. With `--json` you get every row exactly as filed, so apply the code filter yourself before quoting dollar sums. An all-award window is zero insider conviction either way, not a wave of it; say "no open-market insider activity" rather than presenting awards as trades.
