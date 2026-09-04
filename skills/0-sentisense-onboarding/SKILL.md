@@ -73,10 +73,11 @@ same secret.
 | "who owns this stock", "13F holdings", "what did the big funds buy last quarter" | `institutional-13f-tracker` |
 | "congress stock trades", "what is that senator buying", "STOCK Act disclosures" | `politicians-stock-tracker` |
 | "insider buying", "Form 4 filings", "is the CEO selling", "cluster buys" | `insider-trading-tracker` |
+| "who covers this stock", "analyst price targets", "any upgrades or downgrades today", "what has this analyst said before", "do analysts and the crowd agree", "which firms moved after earnings" | `analyst-ratings-tracker` |
 | "find me stocks that...", "screen for...", "which stocks are oversold but loved" | `stock-screener` |
 | "just give me a shell command", "no install", "wire this into a script or a cron job" | `sentisense-cli` |
 | "full API reference", "build an integration", "endpoint documentation", "what is the response shape" | `sentisense` |
-| anything else: prices, news, analyst ratings, or a task no narrower skill covers | `sentisense` |
+| anything else: prices, news, financial statements, or a task no narrower skill covers | `sentisense` |
 
 Pick one and go. If two look plausible, pick the narrower one and pull anything extra from
 `sentisense`, which documents the whole API.
