@@ -868,7 +868,7 @@ Institutional holders for a stock. **Public (preview)** -- Free: top 5, PRO: ful
 
 | Param | Type | Required | Description |
 |-------|------|----------|-------------|
-| `reportDate` | ISO date | Yes | Quarter end date |
+| `reportDate` | ISO date | No | Quarter end date. Omit it and the endpoint resolves the latest quarter that actually has holders for this ticker, preferring a settled quarter over a still-filing one, and echoes the quarter it used in `data.reportDate`. |
 | `limit` | int | No | Page size (1-1000). When present, returns a sorted page plus `returnedCount`/`offset` and a `notableChanges` summary; when omitted, returns the full list (legacy). Mega-caps have 5,000+ holders, so paging is recommended. |
 | `offset` | int | No | Page start within the sorted list (default 0; used with `limit`) |
 | `sortBy` | string | No | `shares` (default), `valueUsd`, or `sharesChangePct` (used with `limit`) |
@@ -1837,9 +1837,21 @@ every tool, no monthly cap, 300/min. Full setup and tier detail: <https://sentis
 | 400 | Bad request (missing/invalid parameters) |
 | 401 | Unauthorized (invalid or missing API key) |
 | 403 | Forbidden (insufficient tier) |
-| 404 | Resource not found |
+| 404 | Resource not found (see the three per-ticker codes below) |
 | 429 | Rate limit (`rate_limit_exceeded`, per-minute) response carries a `Retry-After: 60` header; monthly quota (`quota_exceeded`) does NOT include `Retry-After` |
 | 500 | Internal server error |
+
+### Reading a 404 from a per-ticker endpoint
+
+A 404 from `/api/v1/analyst/{ticker}/consensus`, `/api/v1/stocks/{ticker}/sentiment`, `/api/v1/stocks/{ticker}/publisher-sentiment` or `/api/v2/metrics/entity/{entityId}/metric/{metricType}` carries an `error` code that tells you which of three situations you are in. They need opposite responses, so branch on the code, never on the status alone:
+
+| `error` | Meaning | Do this |
+|---------|---------|---------|
+| `entity_not_found` | No stock is tracked under that symbol. Body carries up to three `suggestions` (`name`, `urlSlug`, `ticker`); the list can be empty | Resolve the real handle with `GET /api/v1/kb/entities/search?q=` and retry once |
+| `no_coverage` | The symbol IS tracked; we hold no record of that kind for it | Stop. Report the gap and move on. Another spelling cannot help |
+| `ticker_is_etf` | The symbol is a fund, so the question does not apply. Body carries `seeInstead` | Call one of the paths in `seeInstead` |
+
+On `/api/v2/metrics`, a tracked entity with no readings in your window returns an empty `200`, not a 404. An empty array there means "quiet window"; a 404 means "wrong identifier".
 
 ---
 
