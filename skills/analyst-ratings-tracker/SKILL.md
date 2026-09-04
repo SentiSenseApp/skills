@@ -41,7 +41,7 @@ Do not use it for order entry, portfolio management, or personalized advice. It 
 ## Prerequisites
 
 - A free `SENTISENSE_API_KEY`. Get one at https://app.sentisense.ai/get-api-key. Send it on every REST call as the `X-SentiSense-API-Key` header (`curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" ...`); the CLI reads `SENTISENSE_API_KEY` from the environment. A call without it: a request without a valid key gets at most a shaped crawler-facing preview slice, never the dataset, and that fallback is not a contract you can build on.
-- Any HTTP client, or no install at all via the official CLI (`npx -y sentisense@0.51.0`). Plain `curl` works, or Python 3.8+ using only the standard library.
+- Any HTTP client, or no install at all via the official CLI (`npx -y sentisense@0.52.0`). Plain `curl` works, or Python 3.8+ using only the standard library.
 - Network access to `https://app.sentisense.ai`.
 - Read-only scope. Every endpoint here is a GET. Nothing this skill does can place a trade, move money, or modify account state.
 
@@ -59,11 +59,14 @@ The free tier exercises every workflow below; preview-gated endpoints return a t
 For the consensus and the recent rating changes on one stock, one CLI command answers with no HTTP call to compose:
 
 ```bash
-npx -y sentisense@0.51.0 analysts NVDA
-npx -y sentisense@0.51.0 analysts NVDA --json
+npx -y sentisense@0.52.0 analysts NVDA --coverage      # who covers it: whole-book buckets, then one row per firm
+npx -y sentisense@0.52.0 analysts NVDA --days 30       # consensus band plus the last 30 days of rating changes
+npx -y sentisense@0.52.0 analyst quinn-bolton --calls  # one analyst's firms, coverage book and call history
+npx -y sentisense@0.52.0 search Tesla --type company   # a company name to its symbol (TSLA)
+npx -y sentisense@0.52.0 analysts NVDA --coverage --json
 ```
 
-Plain output in a terminal, exact API JSON with `--json` (envelope included). Auth: `SENTISENSE_API_KEY` in the environment, or store it once with `npx -y sentisense@0.51.0 auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file mode 600, local to your machine, removable with `auth --remove`). The version is pinned deliberately: a pinned version runs reviewed, immutable code.
+Plain output in a terminal, exact API JSON with `--json` (envelope included). Auth: `SENTISENSE_API_KEY` in the environment, or store it once with `npx -y sentisense@0.52.0 auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file mode 600, local to your machine, removable with `auth --remove`). The version is pinned deliberately: a pinned version runs reviewed, immutable code.
 
 Coverage, people and the market-wide feed are plain REST. Every `/api/v1/analyst/...` endpoint returns the wrapped envelope `{ isPreview, previewReason, data }`; read `.data`, and when `isPreview` is true say so ("showing the free preview slice"). The two crowd-metric series under `/api/v2/metrics/...` are the exception: a bare JSON array of points with no envelope, so read them directly. A rate-limited call returns `429` with a `Retry-After` header; back off for the indicated seconds.
 
@@ -84,15 +87,15 @@ Coverage, people and the market-wide feed are plain REST. Every `/api/v1/analyst
 
 **1. Who covers this stock, and where do they stand today**
 
-`GET /api/v1/analyst/NVDA/coverage`, then `GET /api/v1/analyst/NVDA/consensus`. Lead with `ratingBuckets` as the rating line ("31 firms rate it: 97% Buy, 3% Hold, 0% Sell"), then the consensus target against `currentPrice`, then the three most recently active firms by name with their latest target. Say how many firms are rating-only and how many notes carried no byline. On a free key the firm list is five rows and `totalCount` tells you the book size; the counts at the top are whole either way.
+CLI: `npx -y sentisense@0.52.0 analysts NVDA --coverage` prints the whole-book counts (Buy, Hold, Sell, Unrated, Total), the note counts and the as-of date as a header, then one row per firm (firm, named analyst with slug, latest target and date, firm rating and action), and `npx -y sentisense@0.52.0 analysts NVDA` adds the consensus band; `--limit` trims the rows printed, not the request, and `--json` is the coverage envelope untouched. REST: `GET /api/v1/analyst/NVDA/coverage`, then `GET /api/v1/analyst/NVDA/consensus`. Either way, lead with `ratingBuckets` as the rating line ("31 firms rate it: 97% Buy, 3% Hold, 0% Sell"), then the consensus target against `currentPrice`, then the three most recently active firms by name with their latest target. Say how many firms are rating-only and how many notes carried no byline. On a free key the firm list is five rows and `totalCount` tells you the book size; the counts at the top are whole either way.
 
 **2. What changed**
 
-For one name: `GET /api/v1/analyst/NVDA/actions?lookbackDays=30`, or `npx -y sentisense@0.51.0 analysts NVDA --days 30` (the CLI defaults to 90 days, so pass `--days` to match the REST window). Market-wide: `GET /api/v1/analyst/activity?lookbackDays=7&actionTypes=UPGRADE,DOWNGRADE,INITIATE&limit=100`. Report the firm, the direction and the grades; an `INITIATE` reads "initiated at Neutral", a change reads "Equal-Weight to Overweight". When one firm initiates a dozen names in one morning, that is one event, not twelve stories.
+For one name: `GET /api/v1/analyst/NVDA/actions?lookbackDays=30`, or `npx -y sentisense@0.52.0 analysts NVDA --days 30` (the CLI defaults to 90 days, so pass `--days` to match the REST window). Market-wide: `GET /api/v1/analyst/activity?lookbackDays=7&actionTypes=UPGRADE,DOWNGRADE,INITIATE&limit=100`. Report the firm, the direction and the grades; an `INITIATE` reads "initiated at Neutral", a change reads "Equal-Weight to Overweight". When one firm initiates a dozen names in one morning, that is one event, not twelve stories.
 
 **3. One analyst's record**
 
-Take a `slug` from a coverage row, then `GET /api/v1/analyst/people/{slug}` and `GET /api/v1/analyst/people/{slug}/calls?limit=25`. Report the firms and dates, the coverage book, and the calls as published facts: the date, the target, the price when posted, the publisher. This is call history, not an accuracy score. Do not compute a hit rate or rank analysts; the API does not, on purpose.
+Take a `slug` from a coverage row (the `--coverage` SLUG column, or `analysts[].slug` on the REST row). CLI: `npx -y sentisense@0.52.0 analyst quinn-bolton --calls` prints the firms with first and last note dates, the coverage book, then the calls; it takes a slug only, and a name ("Quinn Bolton") is rejected with exit 2 before any request is spent. REST: `GET /api/v1/analyst/people/{slug}` and `GET /api/v1/analyst/people/{slug}/calls?limit=25`. Report the firms and dates, the coverage book, and the calls as published facts: the date, the target, the price when posted, the publisher. This is call history, not an accuracy score. Do not compute a hit rate or rank analysts; the API does not, on purpose.
 
 **4. Street versus crowd**
 
@@ -106,7 +109,7 @@ Combine workflow 1 with the two metric calls (`.../metric/sentisense` and `.../m
 
 ## Answering well
 
-- **A wrong symbol looks like an uncovered stock.** `/coverage`, `/actions` and `/estimates` answer `200` with a well-formed all-zero payload for a symbol SentiSense does not hold (`TESLA`, `ZZZZ`), while `/consensus` for the same symbol answers `404`. Never conclude "no analyst covers this" from an empty book alone. When the user typed a company name, resolve it first with `GET /api/v1/kb/entities/search?q={name}&type=company&limit=5` (a bare array of `{name, urlSlug, type, ticker}`, best match first; take the first match with a non-null `ticker`). When a typed symbol returns an empty book, check `/consensus`: a `404` there means the symbol was wrong, not that coverage is empty.
+- **A wrong symbol looks like an uncovered stock.** `/coverage`, `/actions` and `/estimates` answer `200` with a well-formed all-zero payload for a symbol SentiSense does not hold (`TESLA`, `ZZZZ`), while `/consensus` for the same symbol answers `404`. Never conclude "no analyst covers this" from an empty book alone. When the user typed a company name, resolve it first with `npx -y sentisense@0.52.0 search Tesla --type company` (prints symbol, name, type and slug; nothing matching exits 4) or `GET /api/v1/kb/entities/search?q={name}&type=company&limit=5` (a bare array of `{name, urlSlug, type, ticker}`, best match first; take the first match with a non-null `ticker`). When a typed symbol returns an empty book, check `/consensus`: a `404` there means the symbol was wrong, not that coverage is empty.
 - Ratings belong to firms. Write "Morgan Stanley upgraded to Overweight" and, only when the vendor named the person, "Morgan Stanley's Michael Cyprys". Never invent a name for an unattributed note and never write "unknown analyst".
 - One population per number: `ratingBuckets` for "how many say Buy", `numberOfAnalysts` and `targetMean` for the target band. Do not average the two.
 - Quote the target's date and `priceWhenPosted` next to the target; a July target on a stock that has run 30% since is a fact about July.

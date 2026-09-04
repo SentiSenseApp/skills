@@ -26,14 +26,14 @@ deliberately: a pinned version runs reviewed, immutable code rather than whateve
 ## Quickstart
 
 ```bash
-npx -y sentisense@0.51.0 health
-npx -y sentisense@0.51.0 quote NVDA
-npx -y sentisense@0.51.0 sentiment TSLA --days 30
-npx -y sentisense@0.51.0 mood --json
+npx -y sentisense@0.52.0 health
+npx -y sentisense@0.52.0 quote NVDA
+npx -y sentisense@0.52.0 sentiment TSLA --days 30
+npx -y sentisense@0.52.0 mood --json
 ```
 
 Auth: set `SENTISENSE_API_KEY` in the environment, or store it once with
-`npx -y sentisense@0.51.0 auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file
+`npx -y sentisense@0.52.0 auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file
 mode 600, local to your machine, remove anytime with `auth --remove`). `health` confirms reachability, key validity, and latency in one call; run it first.
 
 ## Identify yourself (optional, appreciated)
@@ -54,6 +54,9 @@ export SENTISENSE_AGENT_NAME=my-research-bot # what your agent is called
 | `sentiment <ticker>` | SentiSense Score, tone by source, and attention |
 | `mood` | Composite market sentiment, its signals, and the sector map |
 | `analysts <ticker>` | Consensus, price target band, recent rating changes |
+| `analysts <ticker> --coverage` | Who covers the stock: whole-book Buy / Hold / Sell / Unrated counts, then one row per firm with the named analyst and slug |
+| `analyst <slug> [--calls]` | One analyst: firms with note windows, coverage book, and with `--calls` the published call history (slug only, from a coverage row) |
+| `search <name> [--type company]` | Resolve a company, fund, person or product name to the symbol and slug the other commands take; no match exits 4 |
 | `earnings [ticker]` | Upcoming report dates, or one ticker's reported quarters |
 | `insiders <ticker>` | Form 4 insider transactions |
 | `insights <ticker>` | Generated signals, most urgent first |
@@ -63,7 +66,7 @@ export SENTISENSE_AGENT_NAME=my-research-bot # what your agent is called
 | `options <ticker>` | End-of-day options positioning |
 | `screen --filter ...` | Filter the tracked universe on Score, analyst, and price fields |
 
-Run `npx -y sentisense@0.51.0 --help` for the full list, and `help <command>` for flags and
+Run `npx -y sentisense@0.52.0 --help` for the full list, and `help <command>` for flags and
 copy-paste examples. The help is the reference: every example in it runs as written.
 
 ## Output modes: which one to use
@@ -82,20 +85,20 @@ no data, so a typo exits 4 rather than looking like a company with nothing to re
 every error prints a one-line next step on stderr, so recovery rarely needs documentation.
 
 ```bash
-npx -y sentisense@0.51.0 insiders "$TICKER" || echo "exit $? tells you which way it failed"
+npx -y sentisense@0.52.0 insiders "$TICKER" || echo "exit $? tells you which way it failed"
 ```
 
 ## Scripting patterns
 
 ```bash
 # One call, several tickers
-npx -y sentisense@0.51.0 quote NVDA AMD AVGO
+npx -y sentisense@0.52.0 quote NVDA AMD AVGO
 
 # Feed a field into another tool
-npx -y sentisense@0.51.0 quote NVDA --json | jq .changePercent
+npx -y sentisense@0.52.0 quote NVDA --json | jq .changePercent
 
 # Screen, then inspect the top hit
-npx -y sentisense@0.51.0 screen --filter SENTI_SCORE_7D:GTE:13 --limit 5
+npx -y sentisense@0.52.0 screen --filter SENTI_SCORE_7D:GTE:13 --limit 5
 ```
 
 ## Without the CLI
