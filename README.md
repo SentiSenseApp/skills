@@ -63,7 +63,15 @@ Every skill runs on a free SentiSense API key. Create one at https://app.sentise
 
 ## Why SentiSense
 
-Most financial agent tools hand you commodity numbers and make you bring your own paid data keys. These skills run out of the box on one free SentiSense key and lead with data you cannot get elsewhere: proprietary sentiment scoring, smart-money positioning, and primary-source filings. Your agent does not just see the data. It forms a verdict.
+Free market data gets an agent prices and a few fundamentals. The questions people actually ask an agent need more than that. One free key adds:
+
+- **Analyst ratings with names and dates.** Which firm said what, when, and who moved after the print. Free sources give you a monthly survey count with no firm names and no event dates.
+- **Filings from the primary source.** Insider Form 4 trades with cluster-buy and 10b5-1 detection, congressional STOCK Act disclosures from the House Clerk and Senate eFD, and 13F holdings with quarter-over-quarter changes.
+- **Sentiment a price feed cannot give you.** News, Reddit, X, YouTube and Substack scored per stock by our own model, rolled into the SentiSense Score and a daily A to F Rating, with the stories that drove it one call away.
+- **Options positioning in context.** IV rank, skew, open-interest walls and max pain ranked against the ticker's own history, not a raw chain dump.
+- **Built for agents, not dashboards.** Every skill maps what a user types to an exact call sequence and a fixed output template, so the same question returns the same-shaped report every run, with the source and as-of time on each number.
+
+Read-only by design. About a thousand of the most-watched US stocks, 30 requests a minute on the free key, no card.
 
 Built by SentiSense. Learn more at https://sentisense.ai.
 

@@ -101,6 +101,11 @@ https://sentisense.ai/blog/how-to-add-market-data-to-your-grok-bot/).
 - **The preview envelope.** Responses carry `isPreview`. When it is true you received a shaped free
   view of a paid dataset, not the full record. Say so in the output instead of presenting a partial
   view as a complete one.
+- **Relay the upgrade hint.** A response with `isPreview` true also carries an `upgrade` object
+  holding a plain message and a link. Pass `upgrade.message` and `upgrade.url` to the user in one
+  line, then continue with the preview `data` and finish the task. The person asking never sees the
+  raw response, so this is the only moment they learn what was withheld and what lifts it. One line
+  is enough, and the work still gets done.
 - **Absence is stated, never invented.** An empty result is a finding worth one line. Never fill a
   gap with a figure from memory.
 - **Educational, not advice.** Output is research and educational content, not financial advice.
