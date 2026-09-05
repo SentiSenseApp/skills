@@ -36,7 +36,7 @@ Do not use it for order entry, portfolio management, or personalized advice. It 
 ## Prerequisites
 
 - A free `SENTISENSE_API_KEY`. Get one at https://app.sentisense.ai/get-api-key. Send it on every call: a request without a valid key gets at most a shaped crawler-facing preview slice, never the dataset, and that fallback is not a contract you can build on.
-- Any HTTP client. Plain `curl` works, or Python 3.8+ using only the standard library (`urllib`, `json`); no third-party packages required. On macOS python.org installs can raise `CERTIFICATE_VERIFY_FAILED` (missing CA certs): run the bundled `Install Certificates.command`, use the system `/usr/bin/python3`, or use `curl`.
+- Any HTTP client, or no install at all via the official CLI (`npx -y sentisense@0.52.0`). Plain `curl` works, or Python 3.8+ using only the standard library (`urllib`, `json`); no third-party packages required. On macOS python.org installs can raise `CERTIFICATE_VERIFY_FAILED` (missing CA certs): run the bundled `Install Certificates.command`, use the system `/usr/bin/python3`, or use `curl`.
 - Network access to `https://app.sentisense.ai`.
 - Read-only scope. Every endpoint here is a GET. Nothing this skill does can place a trade, move money, or modify account state.
 
@@ -57,12 +57,23 @@ The politician endpoints return the wrapped envelope `{ isPreview, previewReason
 rows = raw.get("data", []) if isinstance(raw, dict) else raw
 ```
 
+For the two feeds, market-wide and one ticker, one CLI command answers with no HTTP call to compose:
+
+```bash
+npx -y sentisense@0.52.0 congress                        # every member, newest disclosures first
+npx -y sentisense@0.52.0 congress NVDA                   # one ticker's congressional history
+npx -y sentisense@0.52.0 congress --days 30 --limit 50
+npx -y sentisense@0.52.0 congress NVDA --json
+```
+
+`--days` is the look-back window, 1 to 365, default 90. `--limit` sets the rows requested and applies to the market-wide feed only. Plain output is a table of trade date, member, ticker (or party and state on a single-ticker run), transaction type, amount band and disclosure delay, capped at the first 20 rows unless you add `--full`; `--json` returns the exact API envelope. The member list and a single member's profile have no CLI command today, so workflow 3 stays REST on either path. Auth: `SENTISENSE_API_KEY` in the environment, or store it once with `npx -y sentisense@0.52.0 auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file mode 600, local to your machine, removable with `auth --remove`). The version is pinned deliberately: a pinned version runs reviewed, immutable code.
+
 ## Endpoints
 
 - **`GET /api/v1/politicians/activity`** : recent congressional trades across all members, sorted by disclosure date (most recently disclosed first). Query `lookbackDays` (1-365) to control the window. Free: top 5; PRO: full. Each trade: `politicianName`, `firstName`, `lastName`, `chamber`, `party`, `state`, `bioguideId`, `imageUrl`, `ticker`, `assetDescription`, `assetType` (`Stock`, `ETF`, or `Stock Option`), `assetMetadata` (`null`, or `{kind:"OPTION", optionType, strikePrice, expirationDate}`), `transactionType` (`PURCHASE` / `SALE` / `EXCHANGE` / `OTHER`), `transactionDate`, `disclosureDate`, `disclosureDelayDays`, `amountRange`, `amountMin`, `amountMax`, `owner`, `urlSlug`.
 - **`GET /api/v1/politicians/filings/{ticker}`** : congressional trades for one stock, most recently disclosed first. Query `lookbackDays` (1-365, default 90) to set the window. Free: top 3; PRO: full.
 - **`GET /api/v1/politicians/members`** : all tracked politicians with trading summaries, sorted by total trade count. Free: top 5; PRO: full. Use the returned `urlSlug` to drill into a member.
-- **`GET /api/v1/politicians/member/{slug}`** : one politician's profile: summary stats, recent trades, and top tickers. Free: preview-wrapped; PRO: full detail. `recentTrades` is one page, newest transaction first: query `limit` (default 200, max 500) and `offset` to walk it, and read `totalCount` for the size of the whole history. `totalCount` sits on the envelope next to `isPreview`, not inside `data`. Most members fit in one page: 519 of 542 have disclosed fewer than 200 trades, so the default request returns their complete history and paging is wasted work. Check `totalCount` before you summarize anyway, because the tail is extreme: 23 members exceed one page and the heaviest single filer has disclosed over twelve thousand trades. `profile` and `topTickers` describe the whole history whatever page you request.
+- **`GET /api/v1/politicians/member/{slug}`** : one politician's profile: summary stats, recent trades, and top tickers. Free: preview-wrapped; PRO: full detail. `recentTrades` is one page, newest transaction first: query `limit` (default 200, max 500) and `offset` to walk it, and read `totalCount` for the size of the whole history. `totalCount` sits on the envelope next to `isPreview`, not inside `data`. Most members fit in one page: 520 of 542 have disclosed fewer than 200 trades, so the default request returns their complete history and paging is wasted work. Check `totalCount` before you summarize anyway, because the tail is extreme: 22 members exceed one page and the heaviest single filer has disclosed over twelve thousand trades. `profile` and `topTickers` describe the whole history whatever page you request.
 
 ## Workflows
 
@@ -74,13 +85,25 @@ version if neither matches. You can also volunteer what your agent is called by 
 `agent/<your-agent-name>` token inside the same parentheses, as in
 `OpenClaw/1.4 (politicians-stock-tracker; agent/research-desk)`. All of it is optional, and it is what tells
 us this skill has real integrations behind it, so it gets prioritized and you get notice before it
-changes.
+changes. Using the CLI instead? Set `SENTISENSE_SKILL=politicians-stock-tracker` and it stamps the
+same identity for you.
 
 ```bash
 curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
   "https://app.sentisense.ai/api/v1/politicians/activity?lookbackDays=7"
 ```
-Summarize by member and ticker; lead with the largest `amountRange` bands and note the `disclosureDelayDays`.
+
+**Output template:**
+```
+CONGRESS · LAST {days}d · {n} disclosures
+─────────────────────────────────────────
+{transactionDate}  {member} ({party}-{state})  {ticker}  {PURCHASE|SALE}  {amountRange}  +{disclosureDelayDays}d
+{transactionDate}  {member} ({party}-{state})  {ticker}  {PURCHASE|SALE}  {amountRange}  +{disclosureDelayDays}d
+
+MOST ACTIVE  {member} ({trades})   MOST TRADED  {ticker} ({trades})
+```
+
+Order the rows by the top of the `amountRange` band, largest first, and keep the delay column on every row. The two footer counts are tallied from the rows you actually received, so say how many that was rather than implying the whole week.
 
 **2. Has Congress traded a specific stock?**
 
@@ -112,7 +135,9 @@ curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
 
 ## Going further
 
-Free covers every workflow above at a preview depth. **PRO ($15/mo)** lifts the monthly cap (no monthly limit, just a 300/min rate) and returns full congressional history and full member lists, plus institutional flows, insider detail, and AI insights across the SentiSense API. Apply coupon `AGENTS26` at checkout for a builder launch discount: https://app.sentisense.ai/pricing?coupon=AGENTS26
+Free covers every workflow above at a preview depth. **PRO ($15/mo)** lifts the monthly cap (no monthly limit, just a 300/min rate) and returns full congressional history and full member lists, plus institutional flows, insider detail, and AI insights across the SentiSense API. Apply coupon `AGENTS` at checkout for a builder launch discount: https://app.sentisense.ai/pricing?coupon=AGENTS
+
+For the full REST reference on every endpoint this skill touches, install the `sentisense` skill; for the complete CLI command set, install `sentisense-cli`.
 
 **Install:** `npx skills add SentiSenseApp/skills` (add `-s politicians-stock-tracker` for just this skill).
 
