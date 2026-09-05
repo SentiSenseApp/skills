@@ -535,15 +535,27 @@ Time series metrics for stocks and entities: mentions, sentiment, social dominan
 
 Which handle to store: the `urlSlug` is the quick, memorable one and is what discovery hands you. For a long-lived reference, such as a tracker that must keep working if an entity is renamed, store the entity `id` in URL-safe dashed form instead (replace `/` with `-`, e.g. `kb-person-65`). Both forms resolve on every endpoint that takes an `{entityId}`.
 
-Every metric type (`mentions`, `sentiment`, `sentisense`, `social_dominance`) is available on the Free tier: no PRO subscription needed. All metrics endpoints are **Quota-gated**: an API key is required and each request counts against your monthly quota (Free: 1,000 requests/month; PRO: no monthly cap). Per-minute rate limits apply on every tier.
+Every metric type (`mentions`, `sentiment`, `sentisense`, `social_dominance`, `app_review_count`, `app_rating`) is available on the Free tier: no PRO subscription needed. All metrics endpoints are **Quota-gated**: an API key is required and each request counts against your monthly quota (Free: 1,000 requests/month; PRO: no monthly cap). Per-minute rate limits apply on every tier.
 
 ### GET /api/v2/metrics/entity/{entityId}/metric/{metricType}
-Time series metric data for a stock or entity. **Quota-gated** -- all metric types (`mentions`, `sentiment`, `sentisense`, `social_dominance`, `sentisense_rating`) are available on the Free tier. `sentisense_rating` is stocks-only and its `value` is the daily Rating percentile, 0 to 100; see the SentiSense Rating API section above.
+Time series metric data for a stock or entity. **Quota-gated** -- all metric types (`mentions`, `sentiment`, `sentisense`, `social_dominance`, `sentisense_rating`, `app_review_count`, `app_rating`) are available on the Free tier. `sentisense_rating` is stocks-only and its `value` is the daily Rating percentile, 0 to 100; see the SentiSense Rating API section above.
+
+What each metric type means:
+
+- `mentions` -- count of documents that mentioned the entity that day, across news, social and other tracked sources.
+- `sentiment` -- mean polarity of those documents, a float in [-1, 1].
+- `sentisense` -- the SentiSense Score, an unbounded composite of sentiment and attention (`sentisense_score` also resolves).
+- `social_dominance` -- the entity's share of the day's total conversation.
+- `sentisense_rating` -- the daily Rating percentile, 0 to 100. Stocks only.
+- `app_review_count` -- count of new Apple App Store reviews for a product's iOS app that day. Products only, and only those with a tracked app.
+- `app_rating` -- mean star rating (1 to 5) of that day's new App Store reviews. Same coverage as `app_review_count`.
+
+**From 2026-09-05, `mentions` no longer includes App Store reviews.** A review is a rating, not chatter, and for review-heavy products the two used to read as one number. The App Store slice itself is unchanged and still appears under `distribution/mentions?dimension=source`; only the root `mentions` total stopped summing it. Read review volume from `app_review_count` instead, and expect a step down in the root series around that date for products with an app (history has been restated, so a long window should be continuous).
 
 | Param | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `entityId` | path | Yes | - | Stock ticker (e.g., `AAPL`) or entity `urlSlug` (e.g., `Nancy-Pelosi`) |
-| `metricType` | path | Yes | - | `mentions`, `sentiment`, `sentisense`, `social_dominance`, `sentisense_rating` |
+| `metricType` | path | Yes | - | `mentions`, `sentiment`, `sentisense`, `social_dominance`, `sentisense_rating`, `app_review_count`, `app_rating` |
 | `startTime` | long | No | 7 days ago | Epoch milliseconds |
 | `endTime` | long | No | now | Epoch milliseconds |
 | `maxDataPoints` | int | No | - | Downsample to N data points |
@@ -818,7 +830,7 @@ AI-curated news story clusters. **Public.**
 | `days` | int | No | 7 | Accepted but has no effect on the response; ignored server-side. Use `filterHours` instead (the CLI's `--days` flag sends `filterHours` for you). |
 | `offset` | int | No | 0 | Pagination offset |
 
-Response: Story objects with a top-level `id` AND `clusterId` (both equal to the cluster id -- pass either to `/documents/stories/{clusterId}`), plus `cluster.title`, `cluster.averageSentiment`, `tickers`, `displayTickers`, `impactScore` (0-10), `brokeAt` (epoch seconds, nullable), `cluster.clusteredAt` (epoch seconds). Use `tickers` (bare symbols, e.g. `["AAPL"]`) programmatically; `displayTickers` are human-formatted labels (e.g. `["Apple Inc (AAPL)"]`) for display only, do not parse symbols out of them. The `cluster.createdAt` field (epoch millis) is deprecated and will be removed on or after 2026-08-16; use `cluster.clusteredAt`.
+Response: Story objects with a top-level `id` AND `clusterId` (both equal to the cluster id -- pass either to `/documents/stories/{clusterId}`), plus `cluster.title`, `cluster.averageSentiment`, `tickers`, `displayTickers`, `impactScore` (0-10), `brokeAt` (epoch seconds, nullable), `cluster.clusteredAt` (epoch seconds). Each entry also carries `cluster.storySource` (`ORIGINAL` for an editorially authored SentiSense Original, `AI` for a pipeline-generated story, always one of the two) and `cluster.isLive` (true while we are actively updating a developing story). Use `tickers` (bare symbols, e.g. `["AAPL"]`) programmatically; `displayTickers` are human-formatted labels (e.g. `["Apple Inc (AAPL)"]`) for display only, do not parse symbols out of them. The `cluster.createdAt` field (epoch millis) is deprecated and will be removed on or after 2026-08-16; use `cluster.clusteredAt`.
 
 CLI equivalent: `npx -y sentisense@0.52.0 news --days 2 --limit 20 --json` (the CLI's `--days` sends `filterHours` = days x 24; needs 0.45.0 or newer)
 
@@ -834,9 +846,9 @@ Full detail for a single story cluster. **Public** -- Free: 10 story views/month
 |-------|------|----------|-------------|
 | `clusterId` | path | Yes | Story cluster ID (from `/stories` or `/stories/ticker/{ticker}`) |
 
-Response: a flat story object (no `{isPreview, data}` wrapper) containing SentiSense-generated content and derived data only: `id`, `createdAt`, `lastUpdatedAt`; AI-written content (`title`, `summarizedContent`, `narrativeBody`, `bullishView`, `bearishView`, `aspectPerspectives`); `citationLinks` (map of `docN` markdown references in `narrativeBody` to public article URLs); computed metrics (`averageSentiment`, `momentumScore`, `aiConfidence`); source metadata (`clusterSize`, `sourcesList`, `primaryCategory`, `dominantEventType`, `publishersList`, `primaryPublisher`, `topPublishers`); `tickers`, `displayTickers`, `primaryEntityNames`, `relatedEntities`; `archived`, `totalDocuments`.
+Response: a flat story object (no `{isPreview, data}` wrapper) containing SentiSense-generated content and derived data only: `id`, `createdAt`, `lastUpdatedAt`; AI-written content (`title`, `summarizedContent`, `narrativeBody`, `bullishView`, `bearishView`, `aspectPerspectives`); `citationLinks` (map of `docN` markdown references in `narrativeBody` to public article URLs); computed metrics (`averageSentiment`, `momentumScore`, `aiConfidence`); source metadata (`clusterSize`, `sourcesList`, `primaryCategory`, `dominantEventType`, `publishersList`, `primaryPublisher`, `topPublishers`); `tickers`, `displayTickers`, `primaryEntityNames`, `relatedEntities`; `archived`, `totalDocuments`; and provenance: `storySource` (`ORIGINAL` for an editorially authored SentiSense Original, `AI` for a pipeline-generated story, always one of the two), `isLive` (true while we are actively updating a developing story), and `timeline` (dated updates newest first, each `{publishedAt, updateType, content}` where `publishedAt` is epoch millis, `updateType` is `INITIAL` / `UPDATE` / `CORRECTION`, and `content` is SentiSense-written markdown whose `[docN]` references resolve through `citationLinks`; empty array when the story has no updates).
 
-Consistent with the documents policy above, publisher headlines, article text, and images are never included: the `title` and narrative are AI-generated by SentiSense, and `citationLinks` point to the original sources.
+Consistent with the documents policy above, publisher headlines, article text, and images are never included: the `title` and narrative are AI-generated by SentiSense, and `citationLinks` point to the original sources. Originals may embed SentiSense-authored chart images as standard markdown image links (`![caption](url)` on `sentisense.ai` hosts) inside `narrativeBody` and timeline `content`; the fields stay markdown strings.
 
 ---
 

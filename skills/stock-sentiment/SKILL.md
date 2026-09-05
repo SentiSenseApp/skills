@@ -140,6 +140,11 @@ SENTIMENT & MOOD
         Mention-volume time series (how much a ticker is being talked about).
   GET /api/v2/metrics/entity/{T}/metric/social_dominance
         Share-of-conversation time series (a ticker's dominance of the chatter).
+  GET /api/v2/metrics/entity/{E}/metric/app_review_count
+        New Apple App Store reviews per day for a product's iOS app. Products with a
+        tracked app only, so {E} is a product entity slug, never a ticker.
+  GET /api/v2/metrics/entity/{E}/metric/app_rating
+        Mean star rating (1 to 5) of that day's new App Store reviews. Same coverage.
   GET /api/v2/market-mood
         Composite fear/greed plus sub-signals and per-sector breakdowns. Flat, but the
         composite is nested: market.currentScore, market.phase, market.weeklyChange,
@@ -184,7 +189,7 @@ SUPPORTING  (price, prices, chart are 15-minute delayed; profile, popular, calen
   GET /api/v1/market-summary                                Market-wide narrative headline.
 ```
 
-Sentiment is polarity: a float in [-1, 1] where the sign is the direction (negative is bearish and meaningful, positive is bullish) and the magnitude is conviction. Represent the sign unmistakably; do not map it onto a 0-100 scale. The SentiSense Score is a separate, unbounded composite; report it as-is. Mentions and social dominance are their own metric series on the same `/metric/{metricType}` endpoint (`mentions` for talk volume, `social_dominance` for share of the conversation); all four series (`sentiment`, `sentisense`, `mentions`, `social_dominance`) are available on the Free tier, and like every metrics call each request counts against your monthly quota. A separate `/api/v2/metrics/entity/{T}/distribution/{metricType}` endpoint breaks a metric down by source (share of voice, a "where this signal came from" view, not per-source sentiment values).
+Sentiment is polarity: a float in [-1, 1] where the sign is the direction (negative is bearish and meaningful, positive is bullish) and the magnitude is conviction. Represent the sign unmistakably; do not map it onto a 0-100 scale. The SentiSense Score is a separate, unbounded composite; report it as-is. Mentions and social dominance are their own metric series on the same `/metric/{metricType}` endpoint (`mentions` for talk volume, `social_dominance` for share of the conversation); all four series (`sentiment`, `sentisense`, `mentions`, `social_dominance`) are available on the Free tier, and like every metrics call each request counts against your monthly quota. Two more Free-tier series cover consumer products rather than tickers: `app_review_count` (new Apple App Store reviews for a product's iOS app that day) and `app_rating` (the mean star rating, 1 to 5, of those reviews). **From 2026-09-05 `mentions` excludes App Store reviews**, because a review is a rating rather than chatter and for review-heavy products the two read as one number; the App Store slice still appears under `distribution/mentions?dimension=source`, so read review volume from `app_review_count`. A separate `/api/v2/metrics/entity/{T}/distribution/{metricType}` endpoint breaks a metric down by source (share of voice, a "where this signal came from" view, not per-source sentiment values).
 
 ## Workflows
 
