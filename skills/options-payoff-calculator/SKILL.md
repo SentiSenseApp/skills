@@ -1,6 +1,6 @@
 ---
 name: options-payoff-calculator
-description: "Options payoff calculator for stocks and ETFs, pre-loaded with live data for the ticker instead of hand typed inputs: an interactive profit and loss chart at expiry for long calls, long puts, covered calls, cash secured puts, bull call spreads, bear put spreads, straddles, strangles and iron condors, with breakevens, max profit, max loss and the expected move band drawn in behind the curve. The real last price, implied volatility at 30, 60 and 90 days, the 25 delta skew, the IV rank and the next earnings date are bound in at build time. Premiums are modeled with Black-Scholes from end of day implied volatility, not quoted from a live options chain. Renders offline, no live call at view time. Use for options payoff calculator, options payoff diagram, options profit calculator, options P/L chart, covered call calculator, vertical spread calculator, straddle payoff, iron condor calculator, options breakeven calculator. Read-only. No trading, no purchases, no write operations, no wallet access."
+description: "Options payoff calculator for stocks and ETFs, pre-loaded with the ticker's own market data instead of hand typed inputs: an interactive profit and loss chart at expiry for long calls, long puts, covered calls, cash secured puts, bull call spreads, bear put spreads, straddles, strangles and iron condors, with breakevens, max profit, max loss and the expected move band drawn in behind the curve. The 15 minute delayed last price, implied volatility at 30, 60 and 90 days, the 25 delta skew, the IV rank and the next earnings date are bound in at build time. Premiums are modeled with Black-Scholes from end of day implied volatility, not quoted from a live options chain. Renders offline, no live call at view time. Use for options payoff calculator, options payoff diagram, options profit calculator, options P/L chart, covered call calculator, vertical spread calculator, straddle payoff, iron condor calculator, options breakeven calculator. Read-only. No trading, no purchases, no write operations, no wallet access."
 license: MIT
 metadata:
   homepage: https://sentisense.ai
@@ -141,9 +141,9 @@ Implied volatilities are annualized fractions. Three fields decide how much of t
 
 ## Answering well
 
-- Lead with the shape, then the numbers. "A 30 day $210 call costs about $970 and needs $219.58 at expiry to break even" is the sentence, and it beats reciting four statistics.
+- Lead with the shape, then the numbers. "A 30 day $210 call costs about $970 and needs $219.67 at expiry to break even" is the sentence, and it beats reciting four statistics.
 - Say "modeled" out loud, every time. It is the difference between describing our arithmetic and implying a market quote.
-- Put the breakeven next to the expected move. "The breakeven sits at $219.58 and the one standard deviation move over the same window reaches about $233" tells the user something. A breakeven on its own does not.
+- Put the breakeven next to the expected move. "The breakeven sits at $219.67 and the one standard deviation move over the same window reaches about $233" tells the user something. A breakeven on its own does not.
 - Use `ivRank1y` for the "is this expensive" question, and say it compares the stock to its own past year rather than to other stocks.
 - When an earnings date falls inside the expiry, name it as the reason the premiums are rich rather than treating the cost as a standalone signal.
 - Never present max profit as an expectation or a target. It is the top of a diagram, reached only at expiry and only in one scenario.

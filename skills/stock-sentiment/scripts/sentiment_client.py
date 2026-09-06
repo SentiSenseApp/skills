@@ -67,10 +67,22 @@ def shaped(raw):
 
 
 def sentiment_scalar(series):
-    """Latest polarity in [-1, 1]; the float is nested at metricValue.value.value."""
+    """Latest reading of a metric series, read from the flat top-level `value`.
+
+    Every point carries `value` alongside the nested `metricValue`, and it holds the scalar
+    for every metric type. Prefer it: the nested depth is not uniform, since a value metric
+    nests at metricValue.value.value while a count metric like `mentions` puts the integer
+    at metricValue.value. The nested read stays as a fallback for a point without `value`."""
     if not series:
         return None
-    return float(series[-1]["metricValue"]["value"]["value"])
+    point = series[-1]
+    flat = point.get("value")
+    if flat is not None:
+        return float(flat)
+    nested = (point.get("metricValue") or {}).get("value")
+    if isinstance(nested, dict):
+        nested = nested.get("value")
+    return None if nested is None else float(nested)
 
 
 def out(obj):

@@ -219,7 +219,7 @@ The registry is the single source of truth for what the model can do. It maps on
 Handler rules, non-negotiable:
 
 - **The handler injects `X-SentiSense-API-Key`, not the model.** The key lives in host process state (`SENTISENSE_API_KEY`), is read inside the handler, and never enters the message history, a tool argument, or an emitted event. A model that cannot see the key cannot leak it.
-- **The handler normalizes the response before returning it.** Do the wrap-vs-flat unwrapping, the `metricValue.value.value` extraction, and the epoch-seconds-vs-ms fixes (see **API shape gotchas**) inside the handler so the model reasons over clean values, not raw envelopes.
+- **The handler normalizes the response before returning it.** Do the wrap-vs-flat unwrapping, the metric-scalar extraction from the flat `value` (see **API shape gotchas**), and the epoch-seconds-vs-ms fixes inside the handler so the model reasons over clean values, not raw envelopes.
 - **Every handler must hit the API (or the `read_screen` cache), never training memory.** This is what keeps extensibility from reintroducing the stale-number failure the ladder exists to prevent.
 - **The registry filters by surface.** `exposedFor(surface)` returns only the tools that make sense where the user is: a ticker dashboard exposes `read_screen('dashboard')`; a cold omnibox thread with no active ticker does not. Narrowing the toolset per surface is how you stop the model from calling `read_screen` when there is no screen.
 
@@ -521,7 +521,7 @@ CacheEntry {
 
 Two hard rules on the cache:
 
-- Store the *normalized* value, not the raw envelope. Unwrap `{ isPreview, data }` and pull `metricValue.value.value` at write time (see API shape gotchas) so the model never re-derives a shape, and never re-introduces a shape bug it cannot see.
+- Store the *normalized* value, not the raw envelope. Unwrap `{ isPreview, data }` and pull the metric scalar from the flat `value` at write time (see API shape gotchas) so the model never re-derives a shape, and never re-introduces a shape bug it cannot see.
 - Reset the whole cache on context change (ticker change, route change). A stale `$AMD` metrics entry surviving into a `$NVDA` dashboard is the haunted-app failure from the multi-surface section, in data form.
 
 When a slot has nothing yet, `read_screen` returns the loading placeholder (already specified in the ladder), not an omission. An absent row reads as "zero"; a labeled "loading" row reads as "not yet."
@@ -756,7 +756,7 @@ The flagship command. One-screen composite report. If the user gave a company na
 
 Use the monospace box if your host renders it cleanly; fall back to markdown table otherwise. Same fields, same order, same density either way.
 
-**Field mapping (real response keys).** The tokens above are display labels, not response field names. Read price from the `stocks/price` response's `currentPrice` (flat, at root, no `price` wrapper), today's move from its `changePercent`, company name from `profile.name` (not `companyName`), rating from the `analyst/consensus` response's `data.consensusLabel` (a raw enum like `STRONG_BUY`; humanize to `Strong Buy`), the sentiment value from `metricValue.value.value` (see API shape gotchas), and the AI line from `insights[0].insightText` (the `/insights/stock` items expose `insightText`, there is no `headline` field). For the `INSIDERS {insiderBuys} buys / {insiderSells} sells` line, count only rows with `transactionType == BUY` as buys and `transactionType == SELL` as sells; EXCLUDE `AWARD` (code A), `GIFT` (code G), and `EXERCISE` (code M) from both the buy/sell counts and any dollar sums, because none of them is a market trade. Do NOT try to detect them by value: about a third of award rows carry a real non-zero `totalValue`, so filtering on `totalValue == 0` silently keeps them. Also drop rows whose raw `transactionCode` is `F` from the sells side: those are shares the company withheld to cover taxes at vesting, they arrive typed `SELL`, and on heavy-granting names they are the majority of the apparent selling.
+**Field mapping (real response keys).** The tokens above are display labels, not response field names. Read price from the `stocks/price` response's `currentPrice` (flat, at root, no `price` wrapper), today's move from its `changePercent`, company name from `profile.name` (not `companyName`), rating from the `analyst/consensus` response's `data.consensusLabel` (a raw enum like `STRONG_BUY`; humanize to `Strong Buy`), the sentiment value from the point's flat `value` (see API shape gotchas), and the AI line from `insights[0].insightText` (the `/insights/stock` items expose `insightText`, there is no `headline` field). For the `INSIDERS {insiderBuys} buys / {insiderSells} sells` line, count only rows with `transactionType == BUY` as buys and `transactionType == SELL` as sells; EXCLUDE `AWARD` (code A), `GIFT` (code G), and `EXERCISE` (code M) from both the buy/sell counts and any dollar sums, because none of them is a market trade. Do NOT try to detect them by value: about a third of award rows carry a real non-zero `totalValue`, so filtering on `totalValue == 0` silently keeps them. Also drop rows whose raw `transactionCode` is `F` from the sells side: those are shares the company withheld to cover taxes at vesting, they arrive typed `SELL`, and on heavy-granting names they are the majority of the apparent selling.
 
 ---
 
@@ -1214,14 +1214,14 @@ const points = Array.isArray(raw) ? raw : (raw?.data ?? []);
 
 Each point has both a `timestamp` (Unix ms) and a pre-formatted display `date` string. Read x-axis values from `timestamp`. Parsing the formatted `date` string falls back to the current year on some JS date parsers (e.g. `Apr 6` becomes the current year instead of the year the bar belongs to).
 
-**`entityMetrics/metrics` returns `ServingMetric[]` where the scalar lives at `metricValue.value.value`** (nested). Rank info, when present, is at `metricValue.value.properties.{rank, percentile, totalStocks}` or `metricValue.properties.{rank, percentile, totalStocks}`. Top-level `value: number` is a legacy fallback; handle it but don't rely on it.
+**The metric series returns `ServingMetric[]`, and the scalar to read is the flat top-level `value`.** Every point carries it, and it holds the reading for every metric type. Prefer it over the nested `metricValue`, whose depth is not uniform: a value metric (`sentiment`, `sentisense`, `social_dominance`) nests at `metricValue.value.value` because `metricValue.value` is itself a dict, while a count metric (`mentions`) puts the integer straight at `metricValue.value`, so a hardcoded `metricValue.value.value` throws on it. Keep the nested chain only as a fallback for a point that omits `value`. Rank info still lives on the nested object, at `metricValue.value.properties.{rank, percentile, totalStocks}` or `metricValue.properties.{rank, percentile, totalStocks}`.
 
 ```
 function extractMetric(m) {
-  return m?.metricValue?.value?.value
+  return m?.value
+      ?? m?.metricValue?.value?.value
       ?? m?.metricValue?.value
       ?? m?.metricValue
-      ?? m?.value
       ?? null;
 }
 ```

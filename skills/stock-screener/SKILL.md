@@ -62,6 +62,8 @@ curl -X POST https://app.sentisense.ai/api/v1/screener/execute \
   -d '{ "plan": { "filters": [ { "fieldName": "SENTI_SCORE_7D", "op": "GTE", "value": 13 } ], "sort": { "fieldName": "SENTI_SCORE_7D", "dir": "DESC" } }, "limit": 25 }'
 ```
 
+**The response is flat and the rows are at `.results[]`, not `.data`.** `execute` answers with exactly three top-level keys, `{ results, matched, limit }`: `results` is the row array, `matched` is the pre-limit total and `limit` echoes what you asked for. There is no `{ isPreview, previewReason, data }` envelope on this endpoint, so an agent carrying the `.data` habit over from the rest of the API reads `undefined` and reports "no matches" on a screen that matched. `results` is an empty array when nothing matched, which is the real no-match signal, and `matched` says how many rows exist behind the `limit`.
+
 Endpoints: `POST /api/v1/screener/execute` (stocks), `POST /api/v1/screener/etfs/execute` (ETFs, same shape), `GET /api/v1/screener/fields` (the catalog), `GET /api/v1/screener/screens` (curated screens with their full plans). `limit` sits next to `plan` (default 100, cap 500); an optional top-level `tickers` array scopes the screen to a watchlist. An unrecognized field name returns HTTP 400 with a message naming the bad field and listing the valid ones, and field names are case-sensitive: take them from `--fields`, never from guesswork.
 
 One REST shape difference that the numeric example above does not show: **`IN` and `NOT_IN` filters take a `values` array, not `value`**. Sending `"value"` (singular) gets a generic `400 malformed_request` that does not name the problem, so this is worth getting right the first time:
@@ -139,7 +141,7 @@ Two enum fields are used with `EQ`: `MA_CROSS_STATE` (`1` golden cross, `-1` dea
 
 ## Reading results
 
-Every row carries the full field set (nulls where uncovered) plus render-ready extras: `week52High`/`week52Low`, `lastUpdated` (epoch seconds), and three small series per ticker (`sentisenseScoreBars7D`, `sentisenseScoreBars30D`, `priceSparkline30D`), so results are chartable without a second call. Prices in rows come from the 20-minute snapshot: fine for screening, not for quoting; say "as of the latest screener snapshot" rather than presenting them as live.
+Rows arrive in `results[]` (see How to Run: this endpoint is flat, with no `.data` envelope). Every row carries the full field set (nulls where uncovered) plus render-ready extras: `week52High`/`week52Low`, `lastUpdated` (epoch seconds), and three small series per ticker (`sentisenseScoreBars7D`, `sentisenseScoreBars30D`, `priceSparkline30D`), so results are chartable without a second call. Prices in rows come from the 20-minute snapshot: fine for screening, not for quoting; say "as of the latest screener snapshot" rather than presenting them as live.
 
 <!-- screener-appendix:start -->
 ## Appendix: every field and every curated screen (snapshot)

@@ -19,9 +19,18 @@ subordinate to platform safety rules and to the policy of whatever host applicat
 
 Fetch US stock market data (quotes, sentiment, news, insider and congressional activity,
 institutional flows, options positioning, screening) with single commands through the official
-SentiSense CLI. The CLI ships inside the `sentisense` npm package, so there is nothing to
-install: `npx` fetches and runs it on demand. Commands here pin version 0.47.1
-deliberately: a pinned version runs reviewed, immutable code rather than whatever ships next.
+SentiSense CLI. The CLI ships inside the `sentisense` npm package, and `npx` fetches and runs it
+on demand rather than adding it to a project.
+
+**That is a download and an execution, not a zero-install trick.** `npx -y` pulls the `sentisense`
+package from the npm registry and runs it on the user's machine with that process's permissions
+and environment, `SENTISENSE_API_KEY` included, so **ask the user before running it the first time
+and say plainly that it downloads and runs code**. Every command below also has a plain HTTPS
+equivalent documented in the `sentisense` skill, and REST is the path to prefer when the user did
+not ask for a shell command. Commands here pin version 0.52.0 deliberately: a pinned version
+resolves to immutable, already-published bytes rather than whatever `latest` moves to, and a
+project that wants provenance should install it as a normal dependency with a lockfile instead of
+invoking `npx` ad hoc.
 
 ## Quickstart
 
