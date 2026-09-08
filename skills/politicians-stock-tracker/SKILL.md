@@ -36,7 +36,7 @@ Do not use it for order entry, portfolio management, or personalized advice. It 
 ## Prerequisites
 
 - A free `SENTISENSE_API_KEY`. Get one at https://app.sentisense.ai/get-api-key. Send it on every call: a request without a valid key gets at most a shaped crawler-facing preview slice, never the dataset, and that fallback is not a contract you can build on.
-- Any HTTP client, or no install at all via the official CLI (`npx -y sentisense@0.52.0`). Plain `curl` works, or Python 3.8+ using only the standard library (`urllib`, `json`); no third-party packages required. On macOS python.org installs can raise `CERTIFICATE_VERIFY_FAILED` (missing CA certs): run the bundled `Install Certificates.command`, use the system `/usr/bin/python3`, or use `curl`.
+- Any HTTP client. Plain `curl` works, or Python 3.8+ using only the standard library (`urllib`, `json`); no third-party packages required. On macOS python.org installs can raise `CERTIFICATE_VERIFY_FAILED` (missing CA certs): run the bundled `Install Certificates.command`, use the system `/usr/bin/python3`, or use `curl`.
 - Network access to `https://app.sentisense.ai`.
 - Read-only scope. Every endpoint here is a GET. Nothing this skill does can place a trade, move money, or modify account state.
 
@@ -47,7 +47,16 @@ Do not use it for order entry, portfolio management, or personalized advice. It 
 
 The free tier exercises every workflow below; preview-gated endpoints return a truncated but real slice on a free key.
 
+## Permissions
+
+- Network: HTTPS to app.sentisense.ai only.
+- Credentials: SENTISENSE_API_KEY from the environment.
+- Shell: none required.
+- Files: none.
+
 ## How to Run
+
+The REST recipe in this file is the primary path. A maintained command-line client is available as the separate `sentisense-cli` skill for hosts that prefer one.
 
 Issue HTTP GET requests to `https://app.sentisense.ai` and synthesize the JSON into a concise, sourced answer. Authenticate every request with the `X-SentiSense-API-Key` header; keep the key in the shell environment and never place it in a query string or in user-facing output.
 
@@ -56,17 +65,6 @@ The politician endpoints return the wrapped envelope `{ isPreview, previewReason
 ```python
 rows = raw.get("data", []) if isinstance(raw, dict) else raw
 ```
-
-For the two feeds, market-wide and one ticker, one CLI command answers with no HTTP call to compose:
-
-```bash
-npx -y sentisense@0.52.0 congress                        # every member, newest disclosures first
-npx -y sentisense@0.52.0 congress NVDA                   # one ticker's congressional history
-npx -y sentisense@0.52.0 congress --days 30 --limit 50
-npx -y sentisense@0.52.0 congress NVDA --json
-```
-
-`--days` is the look-back window, 1 to 365, default 90. `--limit` sets the rows requested and applies to the market-wide feed only. Plain output is a table of trade date, member, ticker (or party and state on a single-ticker run), transaction type, amount band and disclosure delay, capped at the first 20 rows unless you add `--full`; `--json` returns the exact API envelope. The member list and a single member's profile have no CLI command today, so workflow 3 stays REST on either path. Auth: `SENTISENSE_API_KEY` in the environment, or store it once with `npx -y sentisense@0.52.0 auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file mode 600, local to your machine, removable with `auth --remove`). The version is pinned deliberately: a pinned version runs reviewed, immutable code.
 
 ## Endpoints
 
@@ -85,8 +83,7 @@ version if neither matches. You can also volunteer what your agent is called by 
 `agent/<your-agent-name>` token inside the same parentheses, as in
 `OpenClaw/1.4 (politicians-stock-tracker; agent/research-desk)`. All of it is optional, and it is what tells
 us this skill has real integrations behind it, so it gets prioritized and you get notice before it
-changes. Using the CLI instead? Set `SENTISENSE_SKILL=politicians-stock-tracker` and it stamps the
-same identity for you.
+changes.
 
 ```bash
 curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \

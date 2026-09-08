@@ -21,6 +21,13 @@ metadata:
 **Full API reference:** https://sentisense.ai/skill.md
 **Authentication:** API key via `X-SentiSense-API-Key` header. Get a free key at https://app.sentisense.ai/get-api-key
 
+## Permissions
+
+- Network: HTTPS to app.sentisense.ai only.
+- Credentials: SENTISENSE_API_KEY from the environment.
+- Shell: none required.
+- Files: writes one HTML file the user names.
+
 ---
 
 ## What this skill is
@@ -297,10 +304,8 @@ positioning and IV rank, congressional and insider trades on the watchlist names
 ticker, a sentiment leaderboard of the most bullish and bearish names. Add them as sections in the
 same file rather than splitting into multiple pages.
 
-For the whole index as one picture, every stock as a tile sized by market cap and coloured by the
-day's move or by sentiment, install `market-heatmap`. It is one API call and a self-contained
-file as well, so the two pair naturally: the dashboard for your watchlist, the heatmap for the
-market around it.
+For "show the broader market", hand off to the `market-heatmap` skill when available. Pass the desired scope, metric, and watchlist context. Return a market treemap with coverage and as-of labels. Hand off only when the user changes the question; do not automatically route back. If the sibling is unavailable, answer the supported part here using a connected tool or the inline REST workflow, state any remaining gap, and never require an install.
+
 
 **Keep it one file.** The moment it needs a bundler it stops being the thing that makes this
 useful, which is that anyone can generate one, email it, and have it open on the other end.

@@ -23,7 +23,7 @@ Reach for this skill when the question is about perception, positioning, or sign
 - "What is the pre-earnings sentiment setup on $AAPL?"
 - "What is the AI insight on $MSFT, and what are people saying in the news?"
 
-This skill complements the rest of the SentiSense collection rather than competing with it. It owns the signal read: what the market feels and where the money is moving. `stocks-analysis` (published on ClawHub as `us-stocks-analysis`) owns the judgment layer, so when a quick read turns thesis-shaped, hand it off there for the adversarial deep dive. `sentisense` is the full REST API reference, for any endpoint or response shape not covered below. `stock-terminal` is the one to reach for when the answer should be a terminal-style screen rather than a chat reply. Each of those is a separate skill: install any of them from ClawHub under the same publisher, or get the whole collection at once with `npx skills add https://sentisense.ai`.
+For "does this change my thesis?", hand off to the `stocks-analysis` skill when available. Pass the ticker, user thesis, horizon, and dated signal disagreements. Return an evidence-led bull/bear assessment and unresolved objections. Hand off only when the user changes the question; do not automatically route back. If the sibling is unavailable, answer the supported part here using a connected tool or the inline REST workflow, state any remaining gap, and never require an install.
 
 Do not use it for order entry, portfolio management, or personalized advice. It has no write, trading, or wallet surface; every endpoint is a GET.
 
@@ -33,6 +33,13 @@ Do not use it for order entry, portfolio management, or personalized advice. It 
 - A free `SENTISENSE_API_KEY`. Get one at https://app.sentisense.ai/get-api-key. The key is required on every call; anonymous requests return `401 api_key_required`.
 - Network access to `https://app.sentisense.ai`.
 - Read-only scope. Every endpoint here is a GET. Nothing this skill does can place a trade, move money, or modify account state.
+
+## Permissions
+
+- Network: HTTPS to app.sentisense.ai only.
+- Credentials: SENTISENSE_API_KEY from the environment.
+- Shell: none required.
+- Files: none.
 
 Tiers:
 
@@ -64,14 +71,7 @@ An anonymous call returns `401 api_key_required`. A rate-limited call returns `4
 
 On Windows, use the bundled Python client (cross-platform) and reference the key as `%SENTISENSE_API_KEY%` (cmd) or `$env:SENTISENSE_API_KEY` (PowerShell) rather than the POSIX `$SENTISENSE_API_KEY` shown above.
 
-**Fetch with the CLI instead, if the host can run `npx`.** The official SentiSense CLI ships inside the `sentisense` npm package, so there is nothing to install, and two of its commands map straight onto this skill: `sentiment {T}` prints the SentiSense Score surface (the 30-day score and band, direction, latest reading, mentions, share of voice, and a sparkline), and `mood` prints the composite with all six of its sub-signals and the sector table. Add `--json` for the exact API response, envelope included, so every field path in this file reads the same whichever way you fetched. Set `SENTISENSE_SKILL=stock-sentiment` and the CLI stamps the identity above for you. The version is pinned deliberately: a pinned version runs reviewed, immutable code.
-
-```bash
-npx -y sentisense@0.52.0 sentiment NVDA
-npx -y sentisense@0.52.0 mood --json
-```
-
-One split to keep straight: the CLI's `sentiment` reads `/stocks/{T}/sentiment` (the Score) plus the Score time series, not the polarity series at `/api/v2/metrics/entity/{T}/metric/sentiment`, so the float in [-1, 1] that workflows 1, 4 and 5 use stays a REST call. For the complete command set, install the `sentisense-cli` skill.
+The REST recipe in this file is the primary path. A maintained command-line client is available as the separate `sentisense-cli` skill for hosts that prefer one.
 
 Two response envelopes exist; unwrap correctly before reading fields:
 
@@ -88,15 +88,29 @@ An optional stdlib helper, `scripts/sentiment_client.py`, wraps all of this: it 
 """Minimal stdlib client for the read-only SentiSense API."""
 import json, os, urllib.parse, urllib.request
 
-BASE = "https://app.sentisense.ai"
+API_ORIGIN = "https://app.sentisense.ai"
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+def sentisense_api_url(path, params=None):
+    url = urllib.parse.urljoin(API_ORIGIN + "/", path)
+    parsed = urllib.parse.urlparse(url)
+    if (parsed.scheme != "https" or parsed.hostname != "app.sentisense.ai"
+            or parsed.netloc != "app.sentisense.ai"
+            or parsed.username is not None or parsed.password is not None
+            or parsed.port is not None):
+        raise ValueError("API URL must use https://app.sentisense.ai with no credentials or port")
+    if params:
+        url += ("&" if parsed.query else "?") + urllib.parse.urlencode(params)
+    return url
 
 def get(path, **params):
-    url = BASE + path
-    if params:
-        url += "?" + urllib.parse.urlencode(params)
+    url = sentisense_api_url(path, params)
     req = urllib.request.Request(
         url, headers={"X-SentiSense-API-Key": os.environ["SENTISENSE_API_KEY"]})
-    with urllib.request.urlopen(req, timeout=20) as r:
+    with urllib.request.build_opener(NoRedirect).open(req, timeout=20) as r:
         return json.load(r)
 
 def rows(raw):

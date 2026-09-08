@@ -47,6 +47,13 @@ Two consequences that follow, and are not optional:
 
 ---
 
+## Permissions
+
+- Network: HTTPS to app.sentisense.ai only.
+- Credentials: SENTISENSE_API_KEY from the environment.
+- Shell: none required.
+- Files: none.
+
 ## The fan-out
 
 | Layer | Call | Answers |
@@ -416,6 +423,8 @@ from the data.
 ## Variants worth supporting
 
 Same fan-out, different scope. None of them relaxes an Output Law.
+
+For "how did the Street react?", hand off to the `analyst-ratings-tracker` skill when available. Pass the ticker, fiscal quarter, report date, known trading session, and guidance context. Return dated rating actions, firms publishing latest targets, the current target band, and the full firm denominator; never infer target revision direction without prior values. Hand off only when the user changes the question; do not automatically route back. If the sibling is unavailable, answer the supported part here using a connected tool or the inline REST workflow, state any remaining gap, and never require an install.
 
 - **Two-ticker comparison.** Pull both companies at `limit=4` and compare the same fiscal period
   side by side, guidance against guidance. Fiscal calendars differ between companies, so align on

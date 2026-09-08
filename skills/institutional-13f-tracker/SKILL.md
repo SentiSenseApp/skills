@@ -46,6 +46,13 @@ Do not use it for order entry, portfolio management, or personalized advice. It 
 | Free | 1,000 requests/month | 30 requests/min | preview slice (top N per endpoint) |
 | PRO ($15/mo) | Unlimited | 300 requests/min | full holder lists and full portfolios |
 
+## Permissions
+
+- Network: HTTPS to app.sentisense.ai only.
+- Credentials: SENTISENSE_API_KEY from the environment.
+- Shell: none required.
+- Files: none.
+
 ## How to Run
 
 Issue HTTP GET requests to `https://app.sentisense.ai`, authenticated with the `X-SentiSense-API-Key` header. Keep the key in the shell environment; never place it in a query string or in user-facing output.

@@ -47,11 +47,20 @@ endpoint in the collection.** There is nothing else to configure.
 Hosts store that one key differently, and the value never needs to be re-entered per skill. A key
 configured for any one SentiSense skill in the host's credential store is the same credential
 every sibling skill needs: reference the same environment-backed secret rather than creating a
-second entry, and verify with a cheap call (`health` via the CLI, or any GET) instead of printing
+second entry, and verify with a cheap call (an HTTPS GET from the recipe below) instead of printing
 the value. If a shell reports `SENTISENSE_API_KEY` unset while a skill shows Ready, the key lives
 in the host's config store, not the environment; both work, they are just different homes for the
 same secret.
 
+
+---
+
+## Permissions
+
+- Network: HTTPS to app.sentisense.ai only.
+- Credentials: SENTISENSE_API_KEY from the environment.
+- Shell: none required.
+- Files: none.
 
 ---
 
@@ -82,19 +91,8 @@ same secret.
 Pick one and go. If two look plausible, pick the narrower one and pull anything extra from
 `sentisense`, which documents the whole API.
 
-`sentisense-cli` is the optional shell path: `npx -y sentisense@0.52.0 quote NVDA` or
-`npx -y sentisense@0.52.0 sentiment NVDA` answers in one command, with no HTTP call to compose.
-
-**Plain HTTPS is the default path, and the one to prefer.** Every skill here documents the REST
-call behind each command, so an agent never needs the CLI to answer a question. Reach for `npx`
-only when the user asks for a shell command or a script, because `npx -y` is not zero-install: it
-downloads the `sentisense` package from the npm registry and executes it on the user's machine
-with that process's permissions and environment, `SENTISENSE_API_KEY` included. So **ask the user
-before running it the first time, and say plainly that it downloads and runs code**. The version
-is pinned on purpose: a pinned version resolves to immutable, already-published bytes rather than
-whatever `latest` moves to, and a project that wants provenance should install it as a normal
-dependency with a lockfile instead of invoking `npx` ad hoc. The full API reference stays
-`sentisense`.
+The REST recipe in this file is the primary path. A maintained command-line client is available as
+the separate `sentisense-cli` skill for hosts that prefer one.
 
 These skills are runtime-portable: verified working on Claude, Claude Code, OpenClaw, Codex,
 and Grok Bot (for the Grok Bot two-minute setup, see

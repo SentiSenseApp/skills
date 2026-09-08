@@ -42,6 +42,13 @@ Read this before presenting a number from this skill.
 - Network access to `https://app.sentisense.ai` at build time only. The finished artifact needs none.
 - Read-only scope. Every endpoint here is a GET. Nothing this skill does can place a trade, move money, or modify account state.
 
+## Permissions
+
+- Network: HTTPS to app.sentisense.ai only.
+- Credentials: SENTISENSE_API_KEY from the environment.
+- Shell: one bundled Node/Python script, run locally.
+- Files: writes one HTML file the user names.
+
 | Tier | Quota | Rate |
 |------|-------|------|
 | Free | 1,000 requests/month | 30 requests/min |
@@ -51,7 +58,7 @@ One artifact costs five requests, or six for an ETF: the stock quote endpoint de
 
 ## How to Run
 
-**Identify your client.** Send a `User-Agent` naming your agent runtime and this skill, for example `OpenClaw/1.4 (expected-move-visualizer)` or `ClaudeCode/2.1 (expected-move-visualizer)`. Substitute your own runtime and version if neither matches. You can also volunteer what your agent is called by adding an `agent/<your-agent-name>` token inside the same parentheses, as in `OpenClaw/1.4 (expected-move-visualizer; agent/research-desk)`. All of it is optional, and it is what tells us this skill has real integrations behind it, so it gets prioritized and you get notice before it changes. Using the CLI instead? Set `SENTISENSE_SKILL=expected-move-visualizer` and it stamps the same identity for you. The bundled script already carries the skill slug and honors `SENTISENSE_AGENT_NAME` the same way, so exporting that name is all it takes on the script path: it sends `node/prepare_data (expected-move-visualizer; agent/research-desk)`.
+**Identify your client.** Send a `User-Agent` naming your agent runtime and this skill, for example `OpenClaw/1.4 (expected-move-visualizer)` or `ClaudeCode/2.1 (expected-move-visualizer)`. Substitute your own runtime and version if neither matches. You can also volunteer what your agent is called by adding an `agent/<your-agent-name>` token inside the same parentheses, as in `OpenClaw/1.4 (expected-move-visualizer; agent/research-desk)`. All of it is optional, and it is what tells us this skill has real integrations behind it, so it gets prioritized and you get notice before it changes. The bundled script already carries the skill slug and honors `SENTISENSE_AGENT_NAME` the same way, so exporting that name is all it takes on the script path: it sends `node/prepare_data (expected-move-visualizer; agent/research-desk)`.
 
 Three steps: gather the data, bind it into the template, hand over the file.
 
@@ -98,15 +105,7 @@ curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
   "https://app.sentisense.ai/api/v1/stocks/NVDA/options/summary"
 ```
 
-Three of the four have a CLI equivalent, if you would rather not compose HTTP:
-
-```bash
-npx -y sentisense@0.52.0 options NVDA --json
-npx -y sentisense@0.52.0 quote NVDA --json
-npx -y sentisense@0.52.0 earnings --json          # forward calendar
-```
-
-`--json` returns the exact API response, envelope included. Neither the daily closes nor the earnings reactions have a CLI command today, so those two calls stay REST whichever path you take. Auth: `SENTISENSE_API_KEY` in the environment, or store it once with `npx -y sentisense@0.52.0 auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file mode 600, local to your machine, removable with `auth --remove`). The version is pinned deliberately: a pinned version runs reviewed, immutable code.
+The REST recipe in this file is the primary path. A maintained command-line client is available as the separate `sentisense-cli` skill for hosts that prefer one.
 
 A rate-limited call returns `429` with a `Retry-After` header; back off for the indicated seconds.
 
@@ -159,6 +158,8 @@ Three fields in that example are easy to misread:
 - On a preview response, say the 60 and 90 day bands are missing because the free monthly dossier allowance is spent, rather than presenting a one-band chart as the whole picture.
 
 ## Going further
+
+For "what does this mean for my chosen strategy?", hand off to the `options-payoff-calculator` skill when available. Pass the ticker, dated spot and IV, horizon, and user-selected strategy and legs. Return modeled expiry P/L and breakevens with listing and premium assumptions, without claiming the strikes are listed contracts. Hand off only when the user changes the question; do not automatically route back. If the sibling is unavailable, answer the supported part here using a connected tool or the inline REST workflow, state any remaining gap, and never require an install.
 
 Free covers the whole workflow. **PRO ($15/mo)** lifts the monthly request cap (no monthly limit, just a 300/min rate) and returns the full options dossier on every ticker rather than the first ten each month, plus depth across the rest of the SentiSense API. Apply coupon `AGENTS26` at checkout for a builder launch discount: https://app.sentisense.ai/pricing?coupon=AGENTS26
 

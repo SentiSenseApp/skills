@@ -19,20 +19,39 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-BASE = "https://app.sentisense.ai"
+API_ORIGIN = "https://app.sentisense.ai"
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def sentisense_api_url(path, params=None):
+    """Return a validated API URL at the one origin allowed to receive the key."""
+    url = urllib.parse.urljoin(API_ORIGIN + "/", path)
+    parsed = urllib.parse.urlparse(url)
+    if (parsed.scheme != "https" or parsed.hostname != "app.sentisense.ai"
+            or parsed.netloc != "app.sentisense.ai"
+            or parsed.username is not None or parsed.password is not None
+            or parsed.port is not None):
+        raise ValueError("API URL must use https://app.sentisense.ai with no credentials or port")
+    if params:
+        url += ("&" if parsed.query else "?") + urllib.parse.urlencode(params)
+    return url
 
 
 def get(path, **params):
-    """GET {BASE}{path} with the auth header; returns parsed JSON or exits non-zero."""
+    """GET the fixed API origin with the auth header; returns parsed JSON or exits non-zero."""
     params = {k: v for k, v in params.items() if v is not None}
-    url = BASE + path + ("?" + urllib.parse.urlencode(params) if params else "")
+    url = sentisense_api_url(path, params)
     key = os.environ.get("SENTISENSE_API_KEY")
     if not key:
         sys.exit("SENTISENSE_API_KEY is not set "
                  "(free key: https://app.sentisense.ai/get-api-key)")
     req = urllib.request.Request(url, headers={"X-SentiSense-API-Key": key})
     try:
-        with urllib.request.urlopen(req, timeout=20) as r:
+        with urllib.request.build_opener(NoRedirect).open(req, timeout=20) as r:
             return json.load(r)
     except urllib.error.HTTPError as e:
         retry = e.headers.get("Retry-After")

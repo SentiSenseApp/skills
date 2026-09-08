@@ -27,7 +27,7 @@ Not this skill: single-ticker deep dives (`stock-sentiment`, `stocks-analysis`; 
 ## Prerequisites
 
 - A free `SENTISENSE_API_KEY`. Get one at https://app.sentisense.ai/get-api-key. The key is required on every call; anonymous requests return `401 api_key_required`.
-- Any HTTP client, or no install at all via the official CLI (`npx -y sentisense@0.52.0`).
+- Any HTTP client.
 - Read-only scope: everything here is a `GET` or a filter-only `POST`. Nothing this skill does can place a trade, move money, or modify account state.
 
 | Tier | Quota | Rate |
@@ -37,23 +37,20 @@ Not this skill: single-ticker deep dives (`stock-sentiment`, `stocks-analysis`; 
 
 A screen is a single request no matter how many rows it returns, so prefer one broad screen plus client-side slicing over many narrow ones.
 
+## Permissions
+
+- Network: HTTPS to app.sentisense.ai only.
+- Credentials: SENTISENSE_API_KEY from the environment.
+- Shell: none required.
+- Files: none.
+
 ## How to Run
 
-**Identify your client.** Send a `User-Agent` naming your agent runtime and this skill, for example `OpenClaw/1.4 (stock-screener)` or `ClaudeCode/2.1 (stock-screener)`. Substitute your own runtime and version if neither matches. You can also volunteer what your agent is called by adding an `agent/<your-agent-name>` token inside the same parentheses, as in `OpenClaw/1.4 (stock-screener; agent/research-desk)`. All of it is optional, and it is what tells us this skill has real integrations behind it, so it gets prioritized and you get notice before it changes. Using the CLI instead? Set `SENTISENSE_SKILL=stock-screener` and it stamps the same identity for you.
+The REST recipe in this file is the primary path. A maintained command-line client is available as the separate `sentisense-cli` skill for hosts that prefer one.
 
-The CLI is the fastest path:
+**Identify your client.** Send a `User-Agent` naming your agent runtime and this skill, for example `OpenClaw/1.4 (stock-screener)` or `ClaudeCode/2.1 (stock-screener)`. Substitute your own runtime and version if neither matches. You can also volunteer what your agent is called by adding an `agent/<your-agent-name>` token inside the same parentheses, as in `OpenClaw/1.4 (stock-screener; agent/research-desk)`. All of it is optional, and it is what tells us this skill has real integrations behind it, so it gets prioritized and you get notice before it changes.
 
-```bash
-npx -y sentisense@0.52.0 screen --list                # the 28 curated screens
-npx -y sentisense@0.52.0 screen --fields              # every filterable field, with operators
-npx -y sentisense@0.52.0 screen --screen crowd-vs-street
-npx -y sentisense@0.52.0 screen --filter SENTI_SCORE_7D:GTE:13 --filter ANALYST_COUNT:GTE:5 --sort SENTI_SCORE_7D:DESC --limit 25
-npx -y sentisense@0.52.0 screen --etf --filter ISSUER:IN:Vanguard,iShares
-```
-
-Filters are `FIELD:OP:VALUE` and are ANDed; operators are `GTE`, `LTE`, `GT`, `LT`, `EQ`, `NEQ`, `IN`, `NOT_IN`. Add `--json` for the exact API response, and `--tickers NVDA,AMD,AVGO` to screen a watchlist instead of the universe. Auth: `SENTISENSE_API_KEY` in the environment, or store it once with `npx -y sentisense@0.52.0 auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file mode 600, local to your machine, removable with `auth --remove`). The version is pinned deliberately: a pinned version runs reviewed, immutable code.
-
-REST equivalent, same plan shape the CLI builds:
+Use this REST request:
 
 ```bash
 curl -X POST https://app.sentisense.ai/api/v1/screener/execute \
@@ -64,7 +61,7 @@ curl -X POST https://app.sentisense.ai/api/v1/screener/execute \
 
 **The response is flat and the rows are at `.results[]`, not `.data`.** `execute` answers with exactly three top-level keys, `{ results, matched, limit }`: `results` is the row array, `matched` is the pre-limit total and `limit` echoes what you asked for. There is no `{ isPreview, previewReason, data }` envelope on this endpoint, so an agent carrying the `.data` habit over from the rest of the API reads `undefined` and reports "no matches" on a screen that matched. `results` is an empty array when nothing matched, which is the real no-match signal, and `matched` says how many rows exist behind the `limit`.
 
-Endpoints: `POST /api/v1/screener/execute` (stocks), `POST /api/v1/screener/etfs/execute` (ETFs, same shape), `GET /api/v1/screener/fields` (the catalog), `GET /api/v1/screener/screens` (curated screens with their full plans). `limit` sits next to `plan` (default 100, cap 500); an optional top-level `tickers` array scopes the screen to a watchlist. An unrecognized field name returns HTTP 400 with a message naming the bad field and listing the valid ones, and field names are case-sensitive: take them from `--fields`, never from guesswork.
+Endpoints: `POST /api/v1/screener/execute` (stocks), `POST /api/v1/screener/etfs/execute` (ETFs, same shape), `GET /api/v1/screener/fields` (the catalog), `GET /api/v1/screener/screens` (curated screens with their full plans). `limit` sits next to `plan` (default 100, cap 500); an optional top-level `tickers` array scopes the screen to a watchlist. An unrecognized field name returns HTTP 400 with a message naming the bad field and listing the valid ones, and field names are case-sensitive: take them from `GET /api/v1/screener/fields`, never from guesswork.
 
 One REST shape difference that the numeric example above does not show: **`IN` and `NOT_IN` filters take a `values` array, not `value`**. Sending `"value"` (singular) gets a generic `400 malformed_request` that does not name the problem, so this is worth getting right the first time:
 
@@ -72,14 +69,14 @@ One REST shape difference that the numeric example above does not show: **`IN` a
 { "plan": { "filters": [ { "fieldName": "ISSUER", "op": "IN", "values": ["Vanguard", "iShares"] } ] } }
 ```
 
-The CLI builds this for you (`--filter ISSUER:IN:Vanguard,iShares`). Four fields are string-typed and take `IN`/`NOT_IN`: `SENTISENSE_RATING` in the stock universe, and `ISSUER`, `ASSET_CLASS`, `TRACKED_INDEX` in the ETF universe. The live values for the three ETF fields come back in the fields catalog; note the plain `--fields` table shows names, ops, and units only, so add `--json` (or call `GET /fields` directly) when you need the descriptions and those value lists.
+The shorthand `ISSUER:IN:Vanguard,iShares` means `{ "fieldName": "ISSUER", "op": "IN", "values": ["Vanguard", "iShares"] }`; convert every shorthand filter in this file to that JSON shape before executing it. Four fields are string-typed and take `IN`/`NOT_IN`: `SENTISENSE_RATING` in the stock universe, and `ISSUER`, `ASSET_CLASS`, `TRACKED_INDEX` in the ETF universe. The live values for the three ETF fields come back in the fields catalog at `GET /api/v1/screener/fields`, alongside each field's name, operators, unit, description, and `values` array.
 
 ## Translating a fuzzy ask (the procedure)
 
 Most screening requests arrive fuzzy. Translate them honestly:
 
-1. **Check the curated screens first** (`--list`). If one matches the intent, run it and say which one you used; the curated plans are also worked examples of the plan shape, so quote the plan when adapting one. In the names, `+` means both conditions hold and `vs` means the two sides disagree.
-2. **Get the field catalog** (`--fields`) rather than guessing names. The catalog carries units, operators, and descriptions, and grows without notice; a guessed field name is a 400, never a silent wrong answer. The appendix below is a per-release snapshot of the same catalog, good for planning without a call; the live catalog can be ahead of it.
+1. **Check the curated screens first** with `GET /api/v1/screener/screens`. If one matches the intent, post its `plan` unchanged to the stock or ETF execute endpoint and say which one you used; the curated plans are also worked examples of the plan shape, so quote the plan when adapting one. In the names, `+` means both conditions hold and `vs` means the two sides disagree.
+2. **Get the field catalog** with `GET /api/v1/screener/fields` rather than guessing names. The catalog carries units, operators, descriptions, and allowed array values, and grows without notice; a guessed field name is a 400, never a silent wrong answer. The appendix below is a per-release snapshot of the same catalog, good for planning without a call; the live catalog can be ahead of it.
 3. **Map intent words to field groups.** "Loved / bullish / mood improving" is the Score group; "everyone is talking about it" is popularity (`SOCIAL_DOMINANCE`, `MENTION_VELOCITY`); "cheap lately / beaten down" is `PCT_OFF_52W_HIGH` or the moving-average distances; "analysts like it" is the analyst group; "big / liquid" is `MARKET_CAP` and `VOLUME`.
 4. **Add a coverage guard when a ratio can be thin.** `ANALYST_BUY_RATIO_PCT` from one analyst is noise: pair it with `ANALYST_COUNT GTE 5`. If a screen returns fewer rows than expected, check field coverage before loosening thresholds.
 5. **Show the plan with the results.** The user can only correct a translation they can see. State filters, sort, and `matched` count; `matched` is the pre-limit total, so truncation is visible. Say it as three numbers when they differ: "56 matched, showing 50, more exist" (more exist whenever `matched` is greater than the rows returned).
@@ -87,9 +84,10 @@ Most screening requests arrive fuzzy. Translate them honestly:
 
 ## Popular asks, translated
 
-The phrases people actually type, mapped to the screen that answers them. Curated ids run with
-`--screen <id>`; custom plans are filter triples in the `FIELD:OP:VALUE` form the API accepts, with
-the sort beside them. Show the plan with the results every time, so the user can loosen or tighten it.
+The phrases people actually type, mapped to the screen that answers them. For a curated id, find
+that entry in `GET /api/v1/screener/screens`, then post its returned `plan` unchanged to the stock
+execute endpoint, or the ETF endpoint for an `etf-` id. Custom plans below use compact
+`FIELD:OP:VALUE` shorthand: convert each triple to `{ "fieldName": "FIELD", "op": "OP", "value": VALUE }`, using `values` instead of `value` for `IN` and `NOT_IN`, then put the displayed sort in the plan's `sort` object. Show the executed plan with the results every time, so the user can loosen or tighten it.
 
 | The user says | Run |
 |---|---|
@@ -100,7 +98,7 @@ the sort beside them. Show the plan with the results every time, so the user can
 | "small caps people are talking about", "small cap buzz" | curated `small-cap-buzz` |
 | "golden cross stocks with bullish sentiment" | curated `golden-cross-bullish` |
 | "stocks under $20 with bullish sentiment", "cheap stocks the crowd likes" | `PRICE:LTE:20`, `SENTIMENT_DIRECTION:EQ:1`, sort `SCORE_CHANGE_7D:DESC` (a handful of names on a typical day; `PRICE:LTE:10` often returns none, say so rather than loosening silently) |
-| "large caps near their 52-week low with analyst upside" | `MARKET_CAP:GTE:10000000000`, `PCT_OFF_52W_LOW:LTE:10`, `ANALYST_TARGET_UPSIDE_PCT:GTE:20`, sort `ANALYST_TARGET_UPSIDE_PCT:DESC` (the CLI `--filter` wants a plain number here; `10B` is rejected with "expects a number") |
+| "large caps near their 52-week low with analyst upside" | `MARKET_CAP:GTE:10000000000`, `PCT_OFF_52W_LOW:LTE:10`, `ANALYST_TARGET_UPSIDE_PCT:GTE:20`, sort `ANALYST_TARGET_UPSIDE_PCT:DESC` (use the numeric JSON value `10000000000`; do not send the shorthand string `10B`) |
 | "stocks analysts just upgraded", "recent analyst upgrades" | `ANALYST_RATING_MOMENTUM_30D:GTE:1`, sort `ANALYST_RATING_MOMENTUM_30D:DESC` (2 narrows to about a dozen names) |
 | "strong buy consensus with upside left" | `ANALYST_BUY_RATIO_PCT:GTE:80`, `ANALYST_TARGET_UPSIDE_PCT:GTE:15`, sort `ANALYST_TARGET_UPSIDE_PCT:DESC` |
 | "low volatility stocks the crowd likes", "calm names with bullish sentiment" | `VOLATILITY_30D:LTE:25`, `SENTIMENT_DIRECTION:EQ:1`, sort `SENTI_SCORE_7D:DESC` |
@@ -118,7 +116,7 @@ not a broken filter; the fix is to loosen one threshold and say so, never to inv
 
 These four are the known traps; getting them wrong yields a screen that runs fine and means nothing:
 
-- **`SENTISENSE_RATING` is a letter, and it is a rank.** Values `A`, `B`, `C`, `D`, `F`; operators `IN` and `NOT_IN` only, with the letters in a `values` array (`--filter SENTISENSE_RATING:IN:A,B`). The letters are fixed slices of the rated universe, so an A means "top 10 percent of stocks rated today", never "a stock to buy". Sorting the field resolves to the underlying percentile rather than the letter's alphabetical order, so `DESC` puts the strongest rank first. Rows come back with `ratingLetter` and `ratingPercentile`; quote the percentile beside the letter. Stocks with too little data are unrated and match no letter, so `NOT_IN ["F"]` is not the complement of `IN ["F"]`.
+- **`SENTISENSE_RATING` is a letter, and it is a rank.** Values `A`, `B`, `C`, `D`, `F`; operators `IN` and `NOT_IN` only, with the letters in a `values` array (`{ "fieldName": "SENTISENSE_RATING", "op": "IN", "values": ["A", "B"] }`). The letters are fixed slices of the rated universe, so an A means "top 10 percent of stocks rated today", never "a stock to buy". Sorting the field resolves to the underlying percentile rather than the letter's alphabetical order, so `DESC` puts the strongest rank first. Rows come back with `ratingLetter` and `ratingPercentile`; quote the percentile beside the letter. Stocks with too little data are unrated and match no letter, so `NOT_IN ["F"]` is not the complement of `IN ["F"]`.
 - **`ANALYST_RATING_MEAN` is inverted.** Vendor 1-to-5 scale where **1.0 is strong buy**. Bullish is `LTE 2.5`, not `GTE`. Prefer `ANALYST_BUY_RATIO_PCT`, which runs the intuitive direction.
 - **Score fields are banded, not [-1, 1].** The SentiSense Score is unbounded (roughly -30 to +45 across the universe) with bands at 5, 13, and 23 either side of zero: above +5 bullish lean, +13 bullish, +23 strong. Filter on band edges; `GTE:0.5` is a polarity-scale habit that silently means "any positive score". `SENTI_SCORE_7D` and `SENTI_SCORE_1M` are window averages; `SCORE_CHANGE_7D` is the 7-day minus the 1-month baseline, so positive means strengthening.
 - **Nulls never match, in either direction.** `RETURN_1Y >= 0` and `RETURN_1Y < 0` do not partition the universe: a recently listed stock is in neither. Sorting puts nulls last regardless of direction.
@@ -127,17 +125,17 @@ Two enum fields are used with `EQ`: `MA_CROSS_STATE` (`1` golden cross, `-1` dea
 
 **`SCORE_CHANGE_7D` and `SENTI_SCORE_TREND_7D` are different measurements, not aliases**, and mixing them up in an explanation is a common slip. `SCORE_CHANGE_7D` is a level difference: the 7-day Score minus the 1-month baseline, so positive means stronger than the longer window. `SENTI_SCORE_TREND_7D` is a slope: score points per day over the last 7 days, null when the week is too sparse to call. A stock can be positive on one and negative on the other (strong versus last month but fading this week). Use the field's own catalog description when explaining a screen, and name the field you actually filtered on. `ANALYST_COUNT` sums the rating buckets, which deliberately differs from the vendor's own analyst count.
 
-**ETF universe:** `CONSTITUENTS_WEIGHTED_SENTISENSE` is the holdings-weighted Score across what the fund owns (usually the one you want); `DIRECT_SENTISENSE` is chatter about the fund's own ticker, mostly macro noise on an index fund. Check `WEIGHT_COVERED_PCT` before leaning on a weighted number, and use `IN`/`NOT_IN` on the string fields (`ISSUER`, `ASSET_CLASS`, `TRACKED_INDEX`), whose live values come back in the `--fields` catalog.
+**ETF universe:** `CONSTITUENTS_WEIGHTED_SENTISENSE` is the holdings-weighted Score across what the fund owns (usually the one you want); `DIRECT_SENTISENSE` is chatter about the fund's own ticker, mostly macro noise on an index fund. Check `WEIGHT_COVERED_PCT` before leaning on a weighted number, and use `IN`/`NOT_IN` on the string fields (`ISSUER`, `ASSET_CLASS`, `TRACKED_INDEX`), whose live values come back in the fields catalog.
 
 ## Workflows
 
-**1. Run a curated screen.** `--list`, pick by intent, `--screen <id>`. 17 stock screens and 11 ETF screens, all listed with what each finds in the appendix. Screen ids are stable and never reused, but a screen can be retired, so handle a missing id gracefully.
+**1. Run a curated screen.** Fetch `GET /api/v1/screener/screens`, pick an entry by intent, and post that entry's `plan` unchanged to `POST /api/v1/screener/execute`, or to `POST /api/v1/screener/etfs/execute` when its id starts with `etf-`. Wrap the returned plan in the request body's `plan` field, with `limit` alongside it, as in the example above. Do not send a screen id to either execute endpoint. The 17 stock screens and 11 ETF screens are listed with what each finds in the appendix. Screen ids are stable and never reused, but a screen can be retired, so handle a missing id gracefully.
 
 **2. Translate a fuzzy ask.** "Beaten-down names the crowd is warming to" becomes: `PCT_OFF_52W_HIGH:LTE:-30`, `SCORE_CHANGE_7D:GTE:5`, sort by `SCORE_CHANGE_7D:DESC`, with the plan shown alongside the results. Compare with the curated `oversold-with-positive-sentiment` and say if you diverged and why.
 
-**3. Screen a watchlist.** Pass `--tickers` (CLI) or the top-level `tickers` array (REST) to run any plan against the user's own list instead of the universe.
+**3. Screen a watchlist.** Add a top-level `tickers` array next to `plan` in the execute request to run any plan against the user's own list instead of the universe.
 
-**4. Hand off the results.** A screen finds candidates; it does not research them. For the names that survive, go deeper with `stock-sentiment` (the sentiment picture), `unusual-options-activity` (positioning), `insider-trading-tracker` (Form 4 activity), or `stocks-analysis` (the full thesis workflow; `us-stocks-analysis` on ClawHub).
+**4. Hand off the results.** For "research these candidates", hand off to the `stocks-analysis` skill when available. Pass the executed plan, universe, one to three user-selected rows, source dates where available, and the research question. Return per-name thesis evidence and contrary facts for the selected names. Hand off only when the user changes the question; do not automatically route back. If the sibling is unavailable, answer the supported part here using a connected tool or the inline REST workflow, state any remaining gap, and never require an install.
 
 ## Reading results
 
@@ -146,7 +144,7 @@ Rows arrive in `results[]` (see How to Run: this endpoint is flat, with no `.dat
 <!-- screener-appendix:start -->
 ## Appendix: every field and every curated screen (snapshot)
 
-Generated from the same catalog the API serves, refreshed with every release of this skill. The live `--fields` and `--list` output is authoritative and can be ahead of this table; use this appendix to plan, and the live catalog to execute. Field names are case-sensitive and go into plans verbatim. Numeric fields take GTE/GT/LTE/LT and are sortable; nulls never match a filter and always sort last.
+Generated from the same catalog the API serves, refreshed with every release of this skill. The live responses from `GET /api/v1/screener/fields` and `GET /api/v1/screener/screens` are authoritative and can be ahead of this table; use this appendix to plan, and the live catalog to execute. Field names are case-sensitive and go into plans verbatim. Numeric fields take GTE/GT/LTE/LT and are sortable; nulls never match a filter and always sort last.
 
 ### Stock fields (33)
 
@@ -209,7 +207,7 @@ Generated from the same catalog the API serves, refreshed with every release of 
 
 ### Curated stock screens (17)
 
-Run with `--screen <id>` or `GET /api/v1/screener/screens` for the full plans.
+Fetch `GET /api/v1/screener/screens` for the full plans, then post the selected plan to the matching execute endpoint.
 
 | Id | Name | What it finds |
 |---|---|---|

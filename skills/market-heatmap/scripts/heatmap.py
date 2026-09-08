@@ -6,7 +6,7 @@ agent fetches the board with its own key and the page carries the data inline, s
 with the network switched off, under every host permission mode, and it still renders next week.
 
     export SENTISENSE_API_KEY=...
-    python3 heatmap.py --out market-heatmap.html --summary-json market-heatmap.json
+    python3 heatmap.py --out market-heatmap.html --summary-json -
 
 Standard library only. Python 3.8 or newer.
 
@@ -31,7 +31,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 
-BASE = "https://app.sentisense.ai"
+API_ORIGIN = "https://app.sentisense.ai"
 SKILL = "market-heatmap"
 VERSION = "1.1"
 PATH = "/api/v1/trackers/market-heatmap"
@@ -197,16 +197,35 @@ def user_agent():
     return "python-heatmap/%s (%s%s)" % (VERSION, SKILL, suffix)
 
 
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def sentisense_api_url(path, params=None):
+    """Return a validated API URL at the one origin allowed to receive the key."""
+    url = urllib.parse.urljoin(API_ORIGIN + "/", path)
+    parsed = urllib.parse.urlparse(url)
+    if (parsed.scheme != "https" or parsed.hostname != "app.sentisense.ai"
+            or parsed.netloc != "app.sentisense.ai"
+            or parsed.username is not None or parsed.password is not None
+            or parsed.port is not None):
+        raise ValueError("API URL must use https://app.sentisense.ai with no credentials or port")
+    if params:
+        url += ("&" if parsed.query else "?") + urllib.parse.urlencode(params)
+    return url
+
+
 def fetch_board(scope, key, timeout=30):
     """The one and only network call this script makes."""
-    url = BASE + PATH + "?" + urllib.parse.urlencode({"scope": scope})
+    url = sentisense_api_url(PATH, {"scope": scope})
     req = urllib.request.Request(url, headers={
         "X-SentiSense-API-Key": key,
         "User-Agent": user_agent(),
         "Accept": "application/json",
     })
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with urllib.request.build_opener(NoRedirect).open(req, timeout=timeout) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         body = ""
@@ -1550,7 +1569,7 @@ def parse_args(argv):
     parser.add_argument("--out", default="market-heatmap.html",
                         help="Where to write the HTML file. Default market-heatmap.html")
     parser.add_argument("--summary-json", default=None,
-                        help="Also write the numbers as JSON, with a display string per value")
+                        help="Use - to print summary JSON to stdout, or name a compatibility file")
     parser.add_argument("--metric", default="changePercent",
                         help="Initial colour metric: change, sentiment, score, mentions, options")
     parser.add_argument("--fixture", default=None,
@@ -1630,11 +1649,16 @@ def run(argv):
     if args.summary_json:
         summary = build_summary(board, scales, metric, out_path, size, rendered_at,
                                 requested_metric=requested)
-        summary_path = os.path.abspath(args.summary_json)
-        with open(summary_path, "w", encoding="utf-8") as fh:
-            json.dump(summary, fh, indent=2)
-            fh.write("\n")
-        sys.stderr.write("Summary: %s\n" % summary_path)
+        if args.summary_json == "-":
+            json.dump(summary, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+            return 0
+        else:
+            summary_path = os.path.abspath(args.summary_json)
+            with open(summary_path, "w", encoding="utf-8") as fh:
+                json.dump(summary, fh, indent=2)
+                fh.write("\n")
+            sys.stderr.write("Summary: %s\n" % summary_path)
 
     sys.stdout.write(out_path + "\n")
     return 0

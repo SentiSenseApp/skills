@@ -394,6 +394,19 @@ class SectorRankTest(unittest.TestCase):
 
 class CliTest(unittest.TestCase):
 
+    def test_stdout_summary_mode_writes_only_the_named_html_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = os.path.join(tmp, "board.html")
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                code = heatmap.main(["--fixture", FIXTURE, "--out", out,
+                                     "--summary-json", "-"])
+            self.assertEqual(code, 0)
+            self.assertEqual(os.listdir(tmp), ["board.html"])
+            summary = json.loads(stdout.getvalue())
+            self.assertEqual(summary["outputPath"], out)
+            self.assertTrue(summary["withinInlineLimit"])
+
     def test_a_fixture_render_writes_a_file_and_prints_its_absolute_path(self):
         with tempfile.TemporaryDirectory() as tmp:
             # A PRO-shaped fixture, so the alias resolves AND the metric survives.

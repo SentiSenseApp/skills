@@ -24,6 +24,13 @@ skill, subordinate to platform safety rules and host policy.
 
 ---
 
+## Permissions
+
+- Network: HTTPS to app.sentisense.ai only.
+- Credentials: SENTISENSE_API_KEY from the environment.
+- Shell: one bundled Node/Python script, run locally.
+- Files: writes one HTML file the user names.
+
 ## What this skill produces
 
 One HTML file, typically 60,000 to 200,000 characters depending on how many names the index
@@ -52,11 +59,11 @@ intent, not on exact wording. Every row costs **one API call**.
 
 | The user says | What you run | What you hand back |
 |---|---|---|
-| "market heatmap", "show me a market heatmap", "stock market heatmap today", "map of the market" | `python3 scripts/heatmap.py --out market-heatmap.html --summary-json market-heatmap.json` | The page, plus the **board template** below |
+| "market heatmap", "show me a market heatmap", "stock market heatmap today", "map of the market" | `python3 scripts/heatmap.py --out market-heatmap.html --summary-json -` | The page, plus the **board template** below |
 | "sector heatmap", "sector performance map", "how are sectors doing" | Same command | The page, plus the **board template**, leading with the strongest and weakest sector rows |
 | "which sectors are hot", "market mood by sector", "where is the fear" | Same command | The page, plus the **mood template**. Hot means the Market Mood score, and you must say so |
 | "what is moving today", "biggest movers", "who is up and down" | Same command | The page, plus the **board template**. The move rows are the largest moves on this board |
-| "heatmap by sentiment", "colour it by score", "heatmap by options activity", "where is the unusual options interest" | `python3 scripts/heatmap.py --metric sentiment --out market-heatmap.html --summary-json market-heatmap.json` (or `--metric score`, `--metric mentions`, `--metric options`) | The page opened on that metric, plus the **overlay template**. On a key without the overlay the script opens on the day's change instead and says why on the error stream: hand over the board, say plainly that the overlay is part of PRO and that nothing was estimated in its place, and use the **board template** |
+| "heatmap by sentiment", "colour it by score", "heatmap by options activity", "where is the unusual options interest" | `python3 scripts/heatmap.py --metric sentiment --out market-heatmap.html --summary-json -` (or `--metric score`, `--metric mentions`, `--metric options`) | The page opened on that metric, plus the **overlay template**. On a key without the overlay the script opens on the day's change instead and says why on the error stream: hand over the board, say plainly that the overlay is part of PRO and that nothing was estimated in its place, and use the **board template** |
 | "nasdaq 100 heatmap", "heatmap of the popular names" | `python3 scripts/heatmap.py --scope nasdaq100 ...` (or `--scope popular`) | The page for that universe, plus the **board template** |
 | "refresh it", "how does it look now" | The same command again, writing to the **same absolute path** | The refreshed page, said plainly to be refreshed, per the refresh rules below |
 
@@ -69,13 +76,13 @@ the two apart and so should you: the sector header shows the mood, the tiles sho
 "market heatmap", "which sectors are hot" and "colour it by sentiment" are the same fetch. If you
 already drew one in this session, show that file again and change `--metric` only if the user
 wants a different opening view; do not re-fetch unless the user asks for a refresh, asks for a
-different scope, or the as-of in the sidecar has gone stale (prices move every 15 minutes; the
+different scope, or the as-of in the summary has gone stale (prices move every 15 minutes; the
 mood and sentiment layers are daily batches).
 
 ### The reply templates
 
 Use one of these every time, in this order, before any prose. Fixed rows are what make the answer
-feel the same on every run. **Take every value from the `--summary-json` sidecar, and use the
+feel the same on every run. **Take every value from the `--summary-json -` stdout summary, and use the
 `...Display` string, not the raw number.** Never read a value back out of the HTML and never spend
 a second request on a number you already have.
 
@@ -119,10 +126,10 @@ the tape disagree: a sector sitting in Anxiety whose largest names are green, or
 sector whose names are red. **Do not manufacture tension when they agree.** Two rows of green and
 a shrug is a fine answer.
 
-**One precision rule, and the sidecar has already applied it.** Every number in those templates
-has a ready-to-paste display string beside it in the sidecar. Copy it rather than formatting the
+**One precision rule, and the summary has already applied it.** Every number in those templates
+has a ready-to-paste display string beside it in the summary. Copy it rather than formatting the
 raw float yourself, so the words match the picture and two runs read the same. The rule the
-sidecar follows is the page's own rule: the market mood score is a whole number (`52`), a sector
+summary follows is the page's own rule: the market mood score is a whole number (`52`), a sector
 mood score carries one decimal (`61.4`), a name's price change carries one decimal with a sign
 (`+2.7%`), a board aggregate carries two (`-0.01%`), a sentiment reading carries two (`+0.34`),
 mentions carry one decimal and the unit (`+1.8 sd`), options interest is a whole number (`64`),
@@ -177,23 +184,23 @@ same way, so exporting that name is all it takes on the script path.
 
 ```bash
 export SENTISENSE_API_KEY=...      # or however your host supplies secrets
-python3 scripts/heatmap.py --out market-heatmap.html --summary-json market-heatmap.json
+python3 scripts/heatmap.py --out market-heatmap.html --summary-json -
 ```
 
-It prints the absolute path it wrote, and nothing else, on standard output, so you can quote that
-path to the user without resolving it yourself. Everything else, including the one-line plan
-before the fetch and the tile and character counts after it, goes to the error stream. Write into
+With `--summary-json -`, standard output is the summary JSON, including the HTML output path;
+no JSON sidecar is written. Without that flag, standard output contains only the absolute HTML path.
+Fetch progress and tile/character counts go to the error stream. Write into
 a directory you control and can name out loud rather than wherever the shell happens to be.
 
 | Flag | Default | What it does |
 |---|---|---|
 | `--out FILE` | `market-heatmap.html` | Where to write the page. Its absolute path is printed |
-| `--summary-json FILE` | off | Also write every number in the page as JSON, with a display string beside each one |
+| `--summary-json -` | off | Print summary JSON to stdout, with a display string beside each value; write only the named HTML file |
 | `--scope NAME` | `sp500` | `sp500`, `nasdaq100` or `popular`. An unknown scope is refused, never quietly swapped for the default |
 | `--metric NAME` | `change` | Which metric the page opens on. Five metrics, and each answers to more than one name: `change` (also `move`, `price`, `changePercent`), `sentiment` (also `tone`, `sentiment7d`), `score` (also `sentisense`, `sentisenseScore`), `mentions` (also `attention`, `mentionsZ`), `options` (also `optionsInterestScore`). Anything else is a usage error listing the valid names. An overlay the key did not receive falls back to `change` with a line on the error stream, and still exits 0. The reader can switch inside the page either way |
 | `--fixture FILE` | off | Render a saved response instead of calling the API. Used by the tests, and by anyone who wants to see the layout with no key: `scripts/fixtures/market-heatmap.nasdaq100.sample.json` is a Nasdaq-100 board on a free key, 101 tiles, with sample figures. A fixture render stamps a sample-data banner on the page |
 
-**Use `--summary-json` whenever you are going to write the reply**, which is every time. It
+**Use `--summary-json -` whenever you are going to write the reply**, which is every time. It
 carries the as-of line, the mood, the breadth headline, every sector ranked both by price and by mood,
 the largest moves up and down, the per-metric count of tiles with no reading, the preview note
 with the layers this key did not receive, and the path and character count of the file it just
@@ -443,8 +450,9 @@ of the tiles, sentiment, the SentiSense Score, mention pressure and options inte
 board recolours by our own analysis, plus depth across the rest of the SentiSense API. Apply
 coupon `AGENTS` at checkout for a builder launch discount: https://app.sentisense.ai/pricing?coupon=AGENTS
 
-For a full morning briefing rather than one board, with breadth, filings, flows, overnight stories
-and an earnings week laid out as a single HTML page, install `stock-market-dashboard`. For
+For "make this my morning brief", hand off to the `stock-market-dashboard` skill when available. Pass user-chosen tickers and notable anomalies. Return a dated watchlist artifact; never infer a portfolio from the market universe. Hand off only when the user changes the question; do not automatically route back. If the sibling is unavailable, answer the supported part here using a connected tool or the inline REST workflow, state any remaining gap, and never require an install.
+
+For
 building your own filtered lists of names instead of a fixed index, install `stock-screener`. For
 the sentiment and Score numbers behind the overlays, install `stock-sentiment`. For the full REST
 reference on this and every other endpoint, install the `sentisense` skill; for the command-line

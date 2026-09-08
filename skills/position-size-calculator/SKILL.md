@@ -42,6 +42,13 @@ Read this before presenting any output. This skill sits closer to advice than an
 - Network access to `https://app.sentisense.ai` at build time only. The finished artifact needs none.
 - Read-only scope. Every endpoint here is a GET. Nothing this skill does can place a trade, move money, or modify account state.
 
+## Permissions
+
+- Network: HTTPS to app.sentisense.ai only.
+- Credentials: SENTISENSE_API_KEY from the environment.
+- Shell: one bundled Node/Python script, run locally.
+- Files: writes one HTML file the user names.
+
 | Tier | Quota | Rate |
 |------|-------|------|
 | Free | 1,000 requests/month | 30 requests/min |
@@ -51,7 +58,7 @@ One artifact costs three requests, or four for an ETF: the stock quote endpoint 
 
 ## How to Run
 
-**Identify your client.** Send a `User-Agent` naming your agent runtime and this skill, for example `OpenClaw/1.4 (position-size-calculator)` or `ClaudeCode/2.1 (position-size-calculator)`. Substitute your own runtime and version if neither matches. You can also volunteer what your agent is called by adding an `agent/<your-agent-name>` token inside the same parentheses, as in `OpenClaw/1.4 (position-size-calculator; agent/research-desk)`. All of it is optional, and it is what tells us this skill has real integrations behind it, so it gets prioritized and you get notice before it changes. Using the CLI instead? Set `SENTISENSE_SKILL=position-size-calculator` and it stamps the same identity for you. The bundled script already carries the skill slug and honors `SENTISENSE_AGENT_NAME` the same way, so exporting that name is all it takes on the script path: it sends `node/prepare_data (position-size-calculator; agent/research-desk)`.
+**Identify your client.** Send a `User-Agent` naming your agent runtime and this skill, for example `OpenClaw/1.4 (position-size-calculator)` or `ClaudeCode/2.1 (position-size-calculator)`. Substitute your own runtime and version if neither matches. You can also volunteer what your agent is called by adding an `agent/<your-agent-name>` token inside the same parentheses, as in `OpenClaw/1.4 (position-size-calculator; agent/research-desk)`. All of it is optional, and it is what tells us this skill has real integrations behind it, so it gets prioritized and you get notice before it changes. The bundled script already carries the skill slug and honors `SENTISENSE_AGENT_NAME` the same way, so exporting that name is all it takes on the script path: it sends `node/prepare_data (position-size-calculator; agent/research-desk)`.
 
 Three steps: gather the data, bind it into the template, hand over the file. The bundled script can do the first two together.
 
@@ -100,14 +107,7 @@ curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
   "https://app.sentisense.ai/api/v1/stocks/NVDA/quote"
 ```
 
-Two of the three have a CLI equivalent, if you would rather not compose HTTP:
-
-```bash
-npx -y sentisense@0.52.0 quote NVDA --json
-npx -y sentisense@0.52.0 sentiment NVDA --json      # the Score is at .sentiment.data.sentisenseScore
-```
-
-`--json` returns the exact API response, envelope included. There is no CLI command for the daily bars, so the chart call stays REST on either path. Auth: `SENTISENSE_API_KEY` in the environment, or store it once with `npx -y sentisense@0.52.0 auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file mode 600, local to your machine, removable with `auth --remove`). The version is pinned deliberately: a pinned version runs reviewed, immutable code.
+The REST recipe in this file is the primary path. A maintained command-line client is available as the separate `sentisense-cli` skill for hosts that prefer one.
 
 A rate-limited call returns `429` with a `Retry-After` header; back off for the indicated seconds.
 

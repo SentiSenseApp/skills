@@ -11,7 +11,10 @@
 // Zero dependencies on purpose. Plain fetch, Node 18+, no install step, nothing to audit but
 // this file.
 
-const BASE = process.env.SENTISENSE_BASE_URL || "https://app.sentisense.ai";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const API_ORIGIN = "https://app.sentisense.ai";
 const KEY = process.env.SENTISENSE_API_KEY;
 
 const SKILL_SLUG = "expected-move-visualizer";
@@ -66,10 +69,22 @@ function die(message, hint) {
   process.exit(1);
 }
 
+export function sentisenseApiUrl(path) {
+  const url = new URL(path, API_ORIGIN);
+  if (url.protocol !== "https:" || url.hostname !== "app.sentisense.ai"
+      || url.port !== "" || url.username !== "" || url.password !== ""
+      || url.origin !== API_ORIGIN) {
+    throw new Error("API URL must use https://app.sentisense.ai with no credentials or port");
+  }
+  return url;
+}
+
 async function get(path, { allowNullData = false, tolerate400 = false } = {}) {
   let response;
   try {
-    response = await fetch(`${BASE}${path}`, {
+    const url = sentisenseApiUrl(path);
+    response = await fetch(url, {
+      redirect: "error",
       headers: { "X-SentiSense-API-Key": KEY, Accept: "application/json", "User-Agent": UA },
     });
   } catch (cause) {
@@ -282,4 +297,4 @@ async function main() {
   process.stdout.write(JSON.stringify(payload, null, 2) + "\n");
 }
 
-main();
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();

@@ -37,7 +37,7 @@ Do not use it for order entry, portfolio management, or personalized advice. It 
 ## Prerequisites
 
 - A free `SENTISENSE_API_KEY`. Get one at https://app.sentisense.ai/get-api-key. Send it on every call: a request without a valid key gets at most a shaped crawler-facing preview slice, never the dataset, and that fallback is not a contract you can build on.
-- Any HTTP client, or no install at all via the official CLI (`npx -y sentisense@0.52.0`). Plain `curl` works, or Python 3.8+ using only the standard library.
+- Any HTTP client. Plain `curl` works, or Python 3.8+ using only the standard library.
 - Network access to `https://app.sentisense.ai`.
 - Read-only scope. Every endpoint here is a GET. Nothing this skill does can place a trade, move money, or modify account state.
 
@@ -48,25 +48,24 @@ Do not use it for order entry, portfolio management, or personalized advice. It 
 
 The free tier exercises every workflow below; preview-gated endpoints return a truncated but real slice on a free key.
 
+## Permissions
+
+- Network: HTTPS to app.sentisense.ai only.
+- Credentials: SENTISENSE_API_KEY from the environment.
+- Shell: none required.
+- Files: none.
+
 ## How to Run
 
-**Identify your client.** Send a `User-Agent` naming your agent runtime and this skill, for example `OpenClaw/1.4 (insider-trading-tracker)` or `ClaudeCode/2.1 (insider-trading-tracker)`. Substitute your own runtime and version if neither matches. You can also volunteer what your agent is called by adding an `agent/<your-agent-name>` token inside the same parentheses, as in `OpenClaw/1.4 (insider-trading-tracker; agent/research-desk)`. All of it is optional, and it is what tells us this skill has real integrations behind it, so it gets prioritized and you get notice before it changes. Using the CLI instead? Set `SENTISENSE_SKILL=insider-trading-tracker` and it stamps the same identity for you.
+The REST recipe in this file is the primary path. A maintained command-line client is available as the separate `sentisense-cli` skill for hosts that prefer one.
 
-For a single stock, one CLI command answers with no HTTP call to compose:
-
-```bash
-npx -y sentisense@0.52.0 insiders NVDA --days 90
-npx -y sentisense@0.52.0 insiders NVDA --days 180 --json
-npx -y sentisense@0.52.0 insiders NVDA --full     # all rows in plain output, not the top 15
-```
-
-Plain output in a terminal, exact API JSON with `--json` (envelope included). Auth: `SENTISENSE_API_KEY` in the environment, or store it once with `npx -y sentisense@0.52.0 auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file mode 600, local to your machine, removable with `auth --remove`). The version is pinned deliberately: a pinned version runs reviewed, immutable code.
+**Identify your client.** Send a `User-Agent` naming your agent runtime and this skill, for example `OpenClaw/1.4 (insider-trading-tracker)` or `ClaudeCode/2.1 (insider-trading-tracker)`. Substitute your own runtime and version if neither matches. You can also volunteer what your agent is called by adding an `agent/<your-agent-name>` token inside the same parentheses, as in `OpenClaw/1.4 (insider-trading-tracker; agent/research-desk)`. All of it is optional, and it is what tells us this skill has real integrations behind it, so it gets prioritized and you get notice before it changes.
 
 The market-wide endpoints are plain REST. All three endpoints return the wrapped envelope `{ isPreview, previewReason, data }`; read `.data`, and when `isPreview` is true say so ("showing the free preview slice"). A rate-limited call returns `429` with a `Retry-After` header; back off for the indicated seconds.
 
 ## Endpoints
 
-- **`GET /api/v1/insider/trades/{ticker}`** : individual Form 4 transactions for one stock, newest first. Query `lookbackDays` (1-365, default 90). Free: top 5; PRO: full window. Each row: `insiderName`, `insiderTitle`, `insiderRelation`, `officer`, `director`, `tenPctOwner`, `transactionDate`, `filedDate`, `transactionCode`, `transactionType`, `securityTitle`, `sharesTransacted`, `pricePerShare` (null on $0 awards, and always null when `securityBasis` is set), `totalValue`, `sharesOwnedAfter`, `directOwnership`, `rule10b51`, `securityBasis`. CLI: `npx -y sentisense@0.52.0 insiders {ticker} --days N --json`.
+- **`GET /api/v1/insider/trades/{ticker}`** : individual Form 4 transactions for one stock, newest first. Query `lookbackDays` (1-365, default 90). Free: top 5; PRO: full window. Each row: `insiderName`, `insiderTitle`, `insiderRelation`, `officer`, `director`, `tenPctOwner`, `transactionDate`, `filedDate`, `transactionCode`, `transactionType`, `securityTitle`, `sharesTransacted`, `pricePerShare` (null on $0 awards, and always null when `securityBasis` is set), `totalValue`, `sharesOwnedAfter`, `directOwnership`, `rule10b51`, `securityBasis`.
 - **`GET /api/v1/insider/activity`** : market-wide insider activity aggregated by ticker, split into top `buys` and top `sells` by total dollar value (`.data.buys` and `.data.sells`). Query `lookbackDays` (1-365, default 90). Each entry: `ticker`, `companyName`, `tradeCount`, `insiderCount`, `totalShares`, `totalValue`, `latestDate`, `latestInsider`, `latestTitle`. Free: top 5 per direction; PRO: full. The `sells` side already excludes code-F tax withholding server-side, so these dollars are discretionary selling and you should not filter them again; dispositions to the issuer (code `D`) are still counted.
 - **`GET /api/v1/insider/cluster-buys`** : stocks where **3 or more distinct insiders** bought within the window. Query `lookbackDays` (1-365, default 90). Each signal: `ticker`, `companyName`, `insiderCount`, `tradeCount`, `totalShares`, `totalValue`, `firstBuyDate`, `lastBuyDate`. Free: top 5; PRO: full.
 
@@ -74,11 +73,8 @@ The market-wide endpoints are plain REST. All three endpoints return the wrapped
 
 **1. The insider tape for one stock**
 
-```bash
-npx -y sentisense@0.52.0 insiders NVDA --days 90 --json
-```
-
-REST equivalent: `GET /api/v1/insider/trades/NVDA?lookbackDays=90`. Filter to the directional rows first (code `P` and code `S`, minus code `F`), then report: who bought and sold, their roles, net dollars, and how much of the selling was 10b5-1 planned. The CLI's plain output already does this split for you: `sold:` counts open-market sales only, withholding shows as its own `withheld:` figure, and those rows read `TAX-W` in the table. With `--json` you get every row exactly as filed, so apply the code filter yourself before quoting dollar sums. An all-award window is zero insider conviction either way, not a wave of it; say "no open-market insider activity" rather than presenting awards as trades.
+Use: `GET /api/v1/insider/trades/NVDA?lookbackDays=90`. Filter to the directional rows first (code `P` and code `S`, minus code `F`), then report: who bought and sold, their roles, net dollars, and how much of the selling was 10b5-1 planned.
+An all-award window is zero insider conviction, not a wave of it; say "no open-market insider activity" rather than presenting awards as trades.
 
 **2. What are insiders buying market-wide?**
 

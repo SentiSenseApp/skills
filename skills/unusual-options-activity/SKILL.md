@@ -43,6 +43,13 @@ Options data is easy to over-read. Four things to hold onto:
 - Network access to `https://app.sentisense.ai`.
 - Read-only scope. Every endpoint here is a GET. Nothing this skill does can place a trade, move money, or modify account state.
 
+## Permissions
+
+- Network: HTTPS to app.sentisense.ai only.
+- Credentials: SENTISENSE_API_KEY from the environment.
+- Shell: none required.
+- Files: none.
+
 | Tier | Request quota | Rate | Options data |
 |------|---------------|------|--------------|
 | Free | 1,000 requests/month | 30 requests/min | Radar: top 25 rows plus every market-pulse aggregate. Per-stock dossier: full detail for the first 10 calls each calendar month, then a headline-only preview. History: `1y` window. |
@@ -57,14 +64,31 @@ Issue HTTP GET requests to `https://app.sentisense.ai` and synthesize the JSON i
 Every endpoint returns the wrapped envelope `{ isPreview, previewReason, data }`. When `isPreview` is `true` (`previewReason: "PRO_REQUIRED"`), say so ("showing the free preview slice"). Null-valued fields are omitted from the JSON entirely, so check for field presence rather than comparing against `null`. Two distinct `429` responses exist: a per-minute `rate_limit_exceeded` includes a `Retry-After: 60` header, so wait that long before retrying; a monthly `quota_exceeded` carries no `Retry-After` header and does not clear until the next calendar month, so stop calling rather than retrying.
 
 ```python
-import os, json, urllib.request
+import os, json, urllib.parse, urllib.request
+
+API_ORIGIN = "https://app.sentisense.ai"
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+def sentisense_api_url(path):
+    url = urllib.parse.urljoin(API_ORIGIN + "/", path)
+    parsed = urllib.parse.urlparse(url)
+    if (parsed.scheme != "https" or parsed.hostname != "app.sentisense.ai"
+            or parsed.netloc != "app.sentisense.ai"
+            or parsed.username is not None or parsed.password is not None
+            or parsed.port is not None):
+        raise ValueError("API URL must use https://app.sentisense.ai with no credentials or port")
+    return url
 
 def get(path):
+    url = sentisense_api_url(path)
     req = urllib.request.Request(
-        f"https://app.sentisense.ai{path}",
+        url,
         headers={"X-SentiSense-API-Key": os.environ["SENTISENSE_API_KEY"]},
     )
-    with urllib.request.urlopen(req) as r:
+    with urllib.request.build_opener(NoRedirect).open(req) as r:
         return json.load(r)
 
 board = get("/api/v1/options/overview")
@@ -72,14 +96,9 @@ data = board.get("data")  # None before the first nightly build
 rows = (data or {}).get("rows", [])
 ```
 
-**Fetch with the CLI instead, if the host can run `npx`.** The official SentiSense CLI ships inside the `sentisense` npm package, so there is nothing to install; `options {T}` prints the per-stock dossier from workflow 2 (options sentiment, IV rank, put/call, ATM IV and skew, volumes and open interest, the walls and max pain, and the unusually active contracts), and it works for the covered ETFs. Add `--json` for the exact `/options/summary` response, envelope included, so every field path below reads the same whichever way you fetched. Set `SENTISENSE_SKILL=unusual-options-activity` and the CLI stamps the `User-Agent` identity described under workflow 1 for you. The radar board (`/options/overview`) and the history series have no CLI command yet, so those two workflows stay REST. The version is pinned deliberately: a pinned version runs reviewed, immutable code. For the complete command set, install the `sentisense-cli` skill.
+The REST recipe in this file is the primary path. A maintained command-line client is available as the separate `sentisense-cli` skill for hosts that prefer one.
 
-```bash
-npx -y sentisense@0.52.0 options NVDA
-npx -y sentisense@0.52.0 options SPY --json
-```
-
-**Company and fund names are not tickers.** When the user names the company or the fund ("unusual activity in tesla", "skew on the S&P 500 ETF") instead of typing a symbol, resolve it first: `GET /api/v1/kb/entities/search?q={name}&type=company&limit=5`, or `type=etf` for a fund (`SPY` resolves only under `etf`, never under `company`). The response is a bare array of `{name, urlSlug, type, ticker}`, best match first; take the first match with a non-null `ticker` (a tracked subsidiary can outrank its listed parent: "google" returns Google LLC with `ticker: null` before Alphabet `GOOGL`), ask a one-line clarification when several plausible matches carry tickers, and say so when the array is empty. Never uppercase the name into a symbol: `/stocks/TESLA/options/summary` answers `200` with `data: null`, which reads like an uncovered name when the real failure was the identifier (the CLI catches the same mistake and exits 4 with "unknown ticker"). An exact ticker the user typed skips this step.
+**Company and fund names are not tickers.** When the user names the company or the fund ("unusual activity in tesla", "skew on the S&P 500 ETF") instead of typing a symbol, resolve it first: `GET /api/v1/kb/entities/search?q={name}&type=company&limit=5`, or `type=etf` for a fund (`SPY` resolves only under `etf`, never under `company`). The response is a bare array of `{name, urlSlug, type, ticker}`, best match first; take the first match with a non-null `ticker` (a tracked subsidiary can outrank its listed parent: "google" returns Google LLC with `ticker: null` before Alphabet `GOOGL`), ask a one-line clarification when several plausible matches carry tickers, and say so when the array is empty. Never uppercase the name into a symbol: `/stocks/TESLA/options/summary` answers `200` with `data: null`, which reads like an uncovered name when the real failure was the identifier. An exact ticker the user typed skips this step.
 
 ## Endpoints
 

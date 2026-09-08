@@ -39,7 +39,9 @@ This skill takes the opposite trade deliberately. It is slower, it spends a doze
 and it will tell the reader when the data does not reach, which parts of the month are thin, and
 what it could not cover. In exchange the reader gets something auditable: dated events ranked by a
 real impact score, a numeric mood series they can plot, and an explicit coverage line. Use it when
-the answer matters enough to be checked, and reach for the fast summary when it does not.
+the answer matters enough to be checked.
+
+For "just today's screen", hand off to the `stock-terminal` skill when available. Pass the focus or tickers and relevant already-fetched context. Return a compact current view without another month-long fetch. Hand off only when the user changes the question; do not automatically route back. If the sibling is unavailable, answer the supported part here using a connected tool or the inline REST workflow, state any remaining gap, and never require an install.
 
 The material it works from is unusual, and worth understanding before writing anything. This API
 returns **no publisher headlines and no article text**. It returns *story clusters*: groups of
@@ -54,6 +56,13 @@ So the standard throughout is simple: **if a statement cannot be supported from 
 does not go in the brief.** The rules below are what that standard means in practice.
 
 ---
+
+## Permissions
+
+- Network: HTTPS to app.sentisense.ai only.
+- Credentials: SENTISENSE_API_KEY from the environment.
+- Shell: none required.
+- Files: none.
 
 ## The fan-out
 

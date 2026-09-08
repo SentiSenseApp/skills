@@ -42,6 +42,13 @@ Read this before presenting a premium from this skill. It is the single thing mo
 - Network access to `https://app.sentisense.ai` at build time only. The finished artifact needs none.
 - Read-only scope. Every endpoint here is a GET. Nothing this skill does can place a trade, move money, or modify account state.
 
+## Permissions
+
+- Network: HTTPS to app.sentisense.ai only.
+- Credentials: SENTISENSE_API_KEY from the environment.
+- Shell: one bundled Node/Python script, run locally.
+- Files: writes one HTML file the user names.
+
 | Tier | Quota | Rate |
 |------|-------|------|
 | Free | 1,000 requests/month | 30 requests/min |
@@ -51,7 +58,7 @@ One artifact costs three requests, or four for an ETF: the stock quote endpoint 
 
 ## How to Run
 
-**Identify your client.** Send a `User-Agent` naming your agent runtime and this skill, for example `OpenClaw/1.4 (options-payoff-calculator)` or `ClaudeCode/2.1 (options-payoff-calculator)`. Substitute your own runtime and version if neither matches. You can also volunteer what your agent is called by adding an `agent/<your-agent-name>` token inside the same parentheses, as in `OpenClaw/1.4 (options-payoff-calculator; agent/research-desk)`. All of it is optional, and it is what tells us this skill has real integrations behind it, so it gets prioritized and you get notice before it changes. Using the CLI instead? Set `SENTISENSE_SKILL=options-payoff-calculator` and it stamps the same identity for you. The bundled script already carries the skill slug and honors `SENTISENSE_AGENT_NAME` the same way, so exporting that name is all it takes on the script path: it sends `node/prepare_data (options-payoff-calculator; agent/research-desk)`.
+**Identify your client.** Send a `User-Agent` naming your agent runtime and this skill, for example `OpenClaw/1.4 (options-payoff-calculator)` or `ClaudeCode/2.1 (options-payoff-calculator)`. Substitute your own runtime and version if neither matches. You can also volunteer what your agent is called by adding an `agent/<your-agent-name>` token inside the same parentheses, as in `OpenClaw/1.4 (options-payoff-calculator; agent/research-desk)`. All of it is optional, and it is what tells us this skill has real integrations behind it, so it gets prioritized and you get notice before it changes. The bundled script already carries the skill slug and honors `SENTISENSE_AGENT_NAME` the same way, so exporting that name is all it takes on the script path: it sends `node/prepare_data (options-payoff-calculator; agent/research-desk)`.
 
 Three steps: gather the data, bind it into the template, hand over the file. The bundled script can do the first two together.
 
@@ -100,15 +107,7 @@ curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
   "https://app.sentisense.ai/api/v1/stocks/NVDA/options/summary"
 ```
 
-All three have a CLI equivalent, if you would rather not compose HTTP:
-
-```bash
-npx -y sentisense@0.52.0 options NVDA --json
-npx -y sentisense@0.52.0 quote NVDA --json
-npx -y sentisense@0.52.0 earnings --json          # forward calendar
-```
-
-`--json` returns the exact API response, envelope included. Auth: `SENTISENSE_API_KEY` in the environment, or store it once with `npx -y sentisense@0.52.0 auth "$SENTISENSE_API_KEY"` (saved to `~/.config/sentisense/`, file mode 600, local to your machine, removable with `auth --remove`). The version is pinned deliberately: a pinned version runs reviewed, immutable code.
+The REST recipe in this file is the primary path. A maintained command-line client is available as the separate `sentisense-cli` skill for hosts that prefer one.
 
 A rate-limited call returns `429` with a `Retry-After` header; back off for the indicated seconds.
 
@@ -154,7 +153,9 @@ Implied volatilities are annualized fractions. Three fields decide how much of t
 
 Free covers the whole workflow. **PRO ($15/mo)** lifts the monthly request cap (no monthly limit, just a 300/min rate) and returns the full options dossier on every ticker rather than the first ten each month, plus depth across the rest of the SentiSense API. Apply coupon `AGENTS26` at checkout for a builder launch discount: https://app.sentisense.ai/pricing?coupon=AGENTS26
 
-For the implied move drawn against how this stock has actually reacted to its past reports, install `expected-move-visualizer`. For the positioning read behind the volatility (put/call percentiles, skew percentiles, open-interest walls, unusual contracts), install `unusual-options-activity`. For what a company actually reported, install `stock-earnings-analysis`. For turning a risk budget into a share count on the underlying, with the stop drawn against the stock's own daily range, install `position-size-calculator`. For the full REST reference on every endpoint this skill touches, install the `sentisense` skill; for the complete CLI command set, install `sentisense-cli`.
+For "how does breakeven compare range/past earnings?", hand off to the `expected-move-visualizer` skill when available. Pass the ticker, expiry, modeled breakeven, and data dates. Return a horizon-labeled range and past-earnings comparison, with no probability of profit. Hand off only when the user changes the question; do not automatically route back. If the sibling is unavailable, answer the supported part here using a connected tool or the inline REST workflow, state any remaining gap, and never require an install.
+
+ For the positioning read behind the volatility (put/call percentiles, skew percentiles, open-interest walls, unusual contracts), install `unusual-options-activity`. For what a company actually reported, install `stock-earnings-analysis`. For turning a risk budget into a share count on the underlying, with the stop drawn against the stock's own daily range, install `position-size-calculator`. For the full REST reference on every endpoint this skill touches, install the `sentisense` skill; for the complete CLI command set, install `sentisense-cli`.
 
 ## Use & Disclaimer
 
