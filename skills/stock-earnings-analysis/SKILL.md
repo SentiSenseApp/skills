@@ -1,6 +1,6 @@
 ---
 name: stock-earnings-analysis
-description: "Earnings analysis for US stocks, organized the way a quarter actually reads: the per-quarter analysis report of what a company reported, with the editorial headline, marquee KPI highlights and their year-over-year deltas, the guidance language as management phrased it, and a summary of the earnings call, plus SEC risk-factor diffs attached to the quarter they belong to, the AI takeaway signal, who reported in the last week, and the forward calendar of who reports next. Every claim carries its fiscal period and report date, and absence is stated rather than skipped. Use for \"analyze AAPL earnings\", \"earnings report analysis\", \"earnings call summary\", \"who reported earnings this week\", \"post earnings review\", \"upcoming earnings preview\". Read-only. No trading, no purchases, no write operations, no wallet access."
+description: "Earnings analysis for US stocks, organized by fiscal quarter: what the company reported, the editorial headline, marquee KPI highlights with year-over-year deltas, guidance as management phrased it, and an earnings-call summary, plus SEC risk-factor diffs attached to their quarter, the AI takeaway signal, recent reporters, the forward calendar, the importance-ranked view of who just reported and who reports next, the market-wide beat rate baseline, and the measured price reaction to each past announcement. Every claim carries its fiscal period and report date, and absence is stated rather than skipped. Use for \"analyze AAPL earnings\", \"earnings report analysis\", \"earnings call summary\", \"who reported earnings this week\", \"post earnings review\", \"upcoming earnings preview\", \"which earnings mattered this week\", \"earnings beat rate\", \"how does NVDA move on earnings\". Read-only. No trading, no purchases, no write operations, no wallet access."
 license: MIT
 metadata:
   homepage: https://sentisense.ai
@@ -64,9 +64,13 @@ Two consequences that follow, and are not optional:
 | **The anchor** | `GET /api/v1/calendar/earnings?ticker={ticker}` | Next report date, session timing, consensus EPS |
 | **The series** | `GET /api/v1/stocks/{ticker}/kpis` | Curated GAAP and non-GAAP KPI time series, when depth is asked for |
 | **Who reported** | `GET /api/v1/earnings/recent?days=7` | Cross-ticker: which covered companies reported in a window |
+| **The ranked layer** | `GET /api/v1/earnings/ranked` | Cross-ticker: recent reporters and upcoming reports ordered by importance, each with EPS surprise, next-session move, market cap and the 7-day Score |
+| **The market baseline** | `GET /api/v1/earnings/statistics` | How the market's reported quarters landed: beat, miss and inline counts, average move, baseline and deviation |
+| **The reaction series** | `GET /api/v1/stocks/{ticker}/earnings/reactions` | How the stock moved on each of its last twelve announcements, with the session it traded |
 
-A single-ticker readout is four to six calls. A sweep is one call plus one earnings-summaries call
-per ticker you follow up on, so bound the follow-up list before you start (see Rate limits below).
+A single-ticker readout is four to seven calls. A sweep is one or two cross-ticker calls plus one
+earnings-summaries call per ticker you follow up on, so bound the follow-up list before you start
+(see Rate limits below).
 
 **Every call above takes a canonical ticker, so resolve a company name first.** When the user
 names the company ("what did tesla report", "alphabet's last quarter") instead of typing a symbol,
@@ -161,6 +165,63 @@ outside that window of any quarter are residual. Two details:
 Coverage is roughly 500 large-cap US companies. A ticker outside it returns `200` with an empty
 `data` array.
 
+### The ranked layer, the baseline and the reaction series
+
+`GET /api/v1/earnings/ranked` has four bounded parameters. `reportedDays` accepts 1 to 31 and
+defaults to 14. `reportedLimit` accepts 1 to 50 and defaults to 12. `upcomingDays` accepts 1 to 31
+and defaults to 7. `upcomingLimit` accepts 1 to 50 and defaults to 12.
+
+The response has `reported` and `upcoming` sections. Each carries `windowStart`, `windowEnd`,
+`totalInWindow` and `rows`. `asOf` is the epoch second when the ranking was computed, and
+`rankingVersion` identifies the ranking rules.
+
+A reported row can carry `ticker`, `reportDate`, `fiscalPeriod`, `headline`,
+`hasTranscriptSummary`, `estimateEps`, `actualEps`, `surprisePct`, `outcome`, `movePct`,
+`reactionPending`, `liveReactionPct`, `awaitingConsensus`, `marketCap`, `sentisenseScore7d`,
+`scoreChange7d` and `importance`. An upcoming row can carry `ticker`, `companyName`,
+`earningsDate`, `earningsTime`, `confirmed`, `estimatedEps`, `marketCap`, `sentisenseScore7d`,
+`scoreChange7d` and `importance`. Null optional fields are omitted.
+
+`surprisePct` and `movePct` are signed percents. `importance` is in the range 0 to 1.
+`sentisenseScore7d` is signed and unbounded. `marketCap` is US dollars. `outcome` is `BEAT`,
+`MISS`, `INLINE` or `UNCLASSIFIED`. `scoreChange7d` is the 7-day average Score minus the 30-day average, in score units, not a change since seven days ago; positive means the Score is strengthening.
+
+Three flags control the sentence. `reactionPending: true` means the final reaction is missing and
+the reacting session may still be open, so say the reaction is pending. `liveReactionPct` is the
+signed in-session move while that final measurement is pending, so label it live rather than final.
+`awaitingConsensus: true` means the estimate and actual EPS consensus row has not arrived, so do
+not state a beat, miss or inline result.
+
+**Rank comes from the API, not from you.** `importance` is the ranker. Explain why a row ranked by
+using its surprise, move, market cap and Score. Do not re-rank it.
+
+`GET /api/v1/earnings/statistics` accepts `window=last_completed_week`, `week_to_date`,
+`trailing_52w` or `all_time`. It defaults to `last_completed_week`.
+
+Its `data` carries `calculationVersion`, `asOf`, `window`, `eventsInWindow`, `classifiedEvents`,
+`unclassifiedEvents`, `distinctTickers`, `completedReactions`, `pendingReactions`,
+`coverageRatio`, `beat`, `miss`, `inline`, `averageMovePct`, `baseline`, `deviation`, `thresholds`,
+`sufficientData` and, when false, `insufficientDataReason`. The `beat`, `miss` and `inline` objects
+carry `count`, `rate`, `withReaction`, `fell`, `rose`, `flat`, `fellRate` and `averageMovePct`.
+`baseline` and `deviation` are absent for `trailing_52w` and `all_time`.
+
+**Check `sufficientData` before quoting a rate, and always quote the denominator.**
+
+`GET /api/v1/stocks/{ticker}/earnings/reactions` returns the last twelve measured announcements,
+newest first. Each row carries `reportDate`, `timing`, `priorClose`, `nextClose` and `movePct`.
+`priorClose` is the close before the reaction session. `nextClose` is the reaction-session close.
+`movePct` is their signed percent change.
+
+`timing` is `AMC`, `BMO` or `null`. `AMC` means the next trading session carried the reaction.
+`BMO` means the report-date session carried it. `null` means the session was inferred rather than
+observed. This vocabulary differs from the Calendar's `earningsTime`, which is `before_open`,
+`after_close`, `during_market` or `unknown`. Do not translate one field by string matching the
+other.
+
+The reactions payload is direct: `{ticker, asOf, reactions}`. It has no `isPreview` envelope.
+
+**Drop `timing: null` rows when certainty matters, and say how many were dropped.**
+
 ### Which signals count as earnings signals
 
 Exactly three insight types: **`earnings_pulse`** (a short AI takeaway on a quarter already
@@ -210,6 +271,10 @@ FREE the top 3; `calendar/earnings` gives FREE one week and PRO about a 30-day f
 
 `GET /api/v1/earnings/recent` has no tier gate. Every key receives the full window it asks for.
 
+`GET /api/v1/earnings/ranked` gives FREE the top 3 rows of each section with `totalInWindow`
+intact and `previewReason: "PRO_REQUIRED"`. `GET /api/v1/earnings/statistics` and
+`GET /api/v1/stocks/{ticker}/earnings/reactions` have no tier gate.
+
 ### Rate limits and bounding the fan-out
 
 **30 requests per minute on Free, 300 on PRO.** A `429` carries `Retry-After: 60`; honor it rather
@@ -244,36 +309,83 @@ Then assemble by quarter, latest first, per the Structure section below.
 
 "What reported this week", "anything interesting in the last few days".
 
-1. `GET /api/v1/earnings/recent?days=7&limit=50`. Rows carry `ticker`, `fiscalPeriod`,
-   `reportDate`, `headline`, `hasTranscriptSummary` and `generatedAt`, newest first. `days` accepts
-   1 to 31 (above 31 is capped), `limit` accepts 1 to 100.
-2. Rank the rows for follow-up. Reasonable rankers: the reader's watchlist, `hasTranscriptSummary`
-   (a quarter with a call summary reads far better), and recency. Say which ranker you used.
-3. Fan out `earnings-summaries` on the bounded shortlist only.
-4. Present as one dated list of who reported, with the deeper readouts as a second section for the
+1. `GET /api/v1/earnings/ranked?reportedDays=7&reportedLimit=12` and read the `reported` section.
+   The API has already ordered the rows by `importance`.
+2. Explain the API's order from surprise, move, market cap and Score. Do not re-rank it. Use
+   `GET /api/v1/earnings/recent?days=7&limit=100` instead when the reader wants every covered name
+   rather than the important ones.
+3. `GET /api/v1/earnings/statistics?window=last_completed_week` when the requested window is the
+   last closed week. Use `week_to_date` for a still-open week and say that it is partial.
+4. Fan out `earnings-summaries` on the bounded shortlist only.
+5. Present as one dated list of who reported, with the deeper readouts as a second section for the
    names you followed up on.
 
-The window is bounded by `reportDate`, so a company that reported inside the window appears even if
-its call summary lands later. An empty `data` array means nobody in the covered set reported in that
-window, not an error. This is the only backward-looking earnings feed; the Calendar is forward-only.
+The reported window is bounded by `reportDate`, so a company that reported inside it appears even
+if its call summary lands later. Empty `rows` means nobody in the covered set reported in that
+window, not an error. `earnings/recent` remains the exhaustive backward-looking fallback. The
+Calendar remains forward-only.
 
 ### 3. Pre-earnings positioning
 
 "Who reports next week", "what should I watch before AAPL reports".
 
-1. `GET /api/v1/calendar/earnings?week=next` for the schedule, or `?ticker={ticker}` for one name.
-   Each event carries `earningsDate`, `earningsTime`, `fiscalQuarter`, `confirmed` and
+1. `GET /api/v1/earnings/ranked?upcomingDays=7&upcomingLimit=12` and read the `upcoming` section for
+   the reports the API ranks as most important.
+2. `GET /api/v1/calendar/earnings?week=next` for the broader schedule, or `?ticker={ticker}` for one
+   name. Each event carries `earningsDate`, `earningsTime`, `fiscalQuarter`, `confirmed` and
    `estimatedEps`.
-2. For each name worth a closer look, pull the **prior** quarter from `earnings-summaries` and read
+3. For each name worth a closer look, pull the **prior** quarter from `earnings-summaries` and read
    its guidance. Guidance from the last quarter is the most direct statement of what this quarter is
    supposed to look like, and the comparison it invites is the whole point of a preview.
-3. `GET /api/v1/stocks/{ticker}/what-changed?limit=2` for anything management rewrote since.
-4. Optionally `insightType=earnings_upcoming` for pre-report signals.
+4. `GET /api/v1/stocks/{ticker}/earnings/reactions` for how this name historically moved on the
+   print. Drop and count `timing: null` rows when session certainty matters.
+5. `GET /api/v1/stocks/{ticker}/what-changed?limit=2` for anything management rewrote since.
+6. Optionally `insightType=earnings_upcoming` for pre-report signals.
 
 `earningsTime` is always one of `before_open`, `after_close`, `during_market` or `unknown`. Treat
 `unknown` as no session claim rather than missing data. A weekend `earningsDate` is legitimate for
 the handful of issuers that report that way; do not shift it to a weekday. Unconfirmed dates
 (`confirmed: false`) move, and a preview should say so.
+
+---
+
+## Worked example: the week that just closed
+
+These live fixtures were captured on 2026-09-09.
+
+### The statistics call
+
+`GET /api/v1/earnings/statistics?window=last_completed_week`
+
+- The completed week held 24 events. All 24 were classified, with 22 completed reactions and 2
+  pending reactions.
+- `sufficientData` was false, so this is not a publishable market rate. The returned beat rate was
+  91.67%: 22 beats out of 24 classified events. The trailing baseline beat rate was 75.33%, and the
+  returned deviation was +16.34 percentage points.
+- The 22 completed reactions averaged -0.1709%. The baseline has no average-move field, so there is
+  no like-for-like average-move deviation to quote.
+- `sufficientData` was `false` with `insufficientDataReason: "SAMPLE_BELOW_FLOOR"`. The sample had
+  24 classified events against the threshold of 30, so do not publish its rates as sufficient.
+
+### The NVDA reaction call
+
+`GET /api/v1/stocks/NVDA/earnings/reactions`
+
+- The latest measured print, reported 2026-08-26, moved +8.74%.
+- The last four moves were positive, negative, negative and negative, newest first.
+- All 12 of 12 rows carried hard `timing`, all `AMC`. No rows were dropped for inferred timing.
+
+### The ranked call
+
+`GET /api/v1/earnings/ranked?reportedDays=14&reportedLimit=12&upcomingDays=7&upcomingLimit=12`
+
+This illustrative row has `ticker: "NVDA"`, `reportDate: "2026-08-26"`,
+`fiscalPeriod: "Q2 FY2027"`, `surprisePct: 3.96`, `outcome: "BEAT"`, `movePct: 8.74`,
+`marketCap: 4400000000000`, `sentisenseScore7d: 12.4` and `importance: 0.93`.
+
+The skill would write: "NVDA's Q2 FY2027 report on 2026-08-26 ranked first. EPS beat consensus by
+3.96%, the next-session move was +8.74%, market cap was $4.4 trillion and the 7-day Score was
++12.4. The API assigned `importance: 0.93`."
 
 ---
 
@@ -344,6 +456,8 @@ applies and the absence gets a line.
    - Filings attached to this quarter: form, `filedAt`, `materialityScore`, and one line on what
      changed. `topNewTerms` is a useful compression when the diff is large.
    - The `earnings_pulse` signal for this quarter, if there is one, clearly labelled as a signal.
+   - Market context: the beat rate and average move from `earnings/statistics`, with the denominator
+     and `sufficientData` state.
 
 4. **Prior quarters.** One compact row each, reverse-chronological: `fiscalPeriod`, `reportDate`,
    `headline`, whether a call summary exists, guidance direction. This is a spine, not four repeats
@@ -432,10 +546,12 @@ For "how did the Street react?", hand off to the `analyst-ratings-tracker` skill
 - **One metric's trend.** Start from the quarter, then `GET /api/v1/stocks/{ticker}/kpis` for the
   series behind one `kpiHighlights` label. Enumerate what exists first with
   `GET /api/v1/stocks/{ticker}/kpis/types`.
-- **A weekly cadence.** Run workflow 2 every Friday with `days=7` and keep the same structure, so
-  consecutive briefs are comparable.
+- **A weekly cadence.** Run workflow 2 every Friday with `reportedDays=7` and keep the same
+  structure, so consecutive briefs are comparable.
 - **A sector sweep.** Workflow 2, filtered to a ticker list you already hold. The API has no sector
   filter on `earnings/recent`; do the filtering client-side rather than implying one exists.
+- **How it usually moves.** Use `earnings/reactions` for the measured history, and report how many
+  `timing: null` rows were excluded when session certainty matters.
 
 ---
 

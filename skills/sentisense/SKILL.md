@@ -168,7 +168,7 @@ Which way the market's tone leans, and how widely it's shared. Daily snapshots.
 ### Endpoints That Do NOT Exist
 Do not hallucinate these. They are not part of the SentiSense API:
 - `/api/v1/options/flow` or `/api/v1/dark-pool`: these exact paths do not exist. For end-of-day options analytics (IV rank, put/call percentile, 25-delta skew, open-interest walls, max pain, unusual-by-volume contracts) use the Options Intelligence endpoints instead: `/api/v1/options/overview` and `/api/v1/stocks/{ticker}/options/summary`. We do not attribute tick-level order flow (no buy/sell aggressor tagging) and we have no dark-pool data
-- `/api/v1/earnings` as a root: the only paths under it are `/api/v1/earnings/recent` (which covered companies already reported in a recent window) and `/api/v1/earnings/statistics` (market-wide beat rate joined to what the market did next). For the forward calendar use `/api/v1/calendar/earnings`; for a company's per-quarter earnings analysis report use `/api/v1/stocks/{ticker}/earnings-summaries`; for reported financials use `/api/v1/stocks/fundamentals` (single period) or `/api/v1/stocks/fundamentals/history` (multi-period trend, up to 40 quarters or 20 years)
+- `/api/v1/earnings` as a root: the only paths under it are `/api/v1/earnings/recent` (which covered companies already reported in a recent window), `/api/v1/earnings/ranked` (the importance-ranked view of recent reporters and upcoming reports) and `/api/v1/earnings/statistics` (market-wide beat rate joined to what the market did next). For the forward calendar use `/api/v1/calendar/earnings`; for a company's per-quarter earnings analysis report use `/api/v1/stocks/{ticker}/earnings-summaries`; for reported financials use `/api/v1/stocks/fundamentals` (single period) or `/api/v1/stocks/fundamentals/history` (multi-period trend, up to 40 quarters or 20 years)
 - `/api/v1/alerts` or `/api/v1/notifications`: alerts are user-facing only, not available via API
 - `/api/v1/chat` or `/api/v1/ask`: the AI chat is not accessible via API
 - `/api/v2/sentiment`: the correct path is `/api/v2/metrics/entity/{id}/metric/sentiment`
@@ -449,7 +449,7 @@ ETF tickers (e.g. `VTI`, `SPY`) return `400 ticker_is_etf` from this endpoint. U
 ### GET /api/v1/stocks/{ticker}/kpis
 Company-specific KPI time-series. Curated GAAP and non-GAAP metrics from earnings filings: iPhone unit sales, Tesla deliveries, AWS revenue, Netflix paid net adds, etc. **PRO (preview)** -- Free: metadata only with empty `kpis` list, PRO: full series. Returns 404 for tickers without curated coverage.
 
-Coverage today: near-complete for the S&P 500 plus extended universe (~500 tickers). Use `GET /api/v1/stocks/with-kpis` to enumerate.
+Coverage today: near-complete for the S&P 500 plus an extended universe of 900+ US-listed companies (970 tickers as of 2026-09-09). Use `GET /api/v1/stocks/with-kpis` to enumerate.
 
 Response wrapper: `{ isPreview, previewReason, data: CompanyKpis }`.
 
@@ -458,6 +458,8 @@ Response wrapper: `{ isPreview, previewReason, data: CompanyKpis }`.
 `KpiSeries` shape: `{ id, name, category, unit, displayFormat, chartType, values: KpiDataPoint[], sourceRef, discontinued, discontinuedNote }`. `id` is a stable per-ticker identifier (e.g. `iphone_revenue`). `category` is one of `product_revenue`, `segment_revenue`, `unit_economics`, etc. `chartType` is `bar` or `line`.
 
 `KpiDataPoint` shape: `{ period, date, value, isEstimate }`. `period` is the fiscal label (e.g. `Q2 FY2026`); `date` is the ISO close date.
+
+Pass ticker, selected KPI IDs and any fetched response to the `company-kpi-tracker` skill; return a dated card with matched deltas and source and estimate flags.
 
 ### GET /api/v1/stocks/with-kpis
 List every ticker with curated KPI coverage. Sorted alphabetically. Builder discovery: render a supported-tickers page or seed a watchlist without 404-probing one ticker at a time. **Discovery (no quota cost)** -- API key required for identity/abuse tracking, but the call does not consume your monthly quota. Rate-limit-per-minute still applies.
@@ -594,7 +596,7 @@ The SentiSense Rating is a daily score from 0 to 100 for a US stock, and the let
 
 **Not the same object as the SentiSense Score.** The Score is the continuous crowd-sentiment number and is one of the seven inputs here; the Rating is the composite grade. Do not use the two names interchangeably.
 
-Letter bands, on the **score**: `A` 90 and above, `B` 70 to 89.9, `C` 30 to 69.9, `D` 10 to 29.9, `F` below 10. The bands are not fixed shares of the market. Dimension weights: crowd sentiment 20%, smart money 20%, options positioning 12%, analysts 12%, fundamentals 12%, earnings 12%, technicals 12%.
+Letter bands, on the **score**: `A` 90 and above, `B` 70 to 89.9, `C` 30 to 69.9, `D` 10 to 29.9, `F` below 10. The bands are not fixed shares of the market. Dimension weights: fundamentals 20%, crowd sentiment 16%, smart money 16%, technicals 16%, options positioning 12%, analysts 12%, earnings 8%.
 
 **`score`, `percentile`, `penaltyPoints` and `riskAdjustments` are returned side by side so you can check the arithmetic.** A response reading `percentile: 100.0`, `penaltyPoints: 14.4`, `riskAdjustments: [{condition: "weak_dimension", points: 2.4}, {condition: "high_leverage", points: 12.0}]`, `score: 85.6`, `letter: "B"` is correct and internally consistent, not a data error; `bucketLetter` reports the `A` the rank alone would have given. **Most adjustments are graded**: 7 of the 11 conditions scale with how far past the threshold the stock sits, up to 12 points, and 4 are flat 12s. Read each cost from `riskAdjustments[].points`, never from `12 x riskConditions.length`.
 
@@ -1132,6 +1134,44 @@ Most tickers in one sweep share an `updatedAt` to the second, so it is a good ca
 
 **`currentPrice` on this endpoint is not the live quote.** It is the reference price captured when the analyst snapshot was written, dated by `updatedAt`, and `upsidePercent` is computed against that same reference so the band and the upside stay internally consistent. Expect it to drift from the traded price between snapshots (a few percent is normal). When you need the current regular-session price, read `currentPrice` from `/api/v1/stocks/price` or `/api/v1/stocks/{ticker}/quote` instead, where the field tracks the session and carries the standard 15-minute delay rather than a snapshot's age.
 
+### GET /api/v1/analyst/{ticker}/consensus/history
+Daily analyst consensus observations, ordered by `snapshotDate` ascending. **PRO (preview)** -- PRO receives the requested window and all fields. Free receives the last 30 days ending at `to`; `targetMedian`, `recommendationMean`, `strongBuy`, `buy`, `hold`, `sell` and `strongSell` are null in the preview, while `totalCount` remains the full requested-window count.
+
+| Param | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `ticker` | path | Yes | - | Stock ticker |
+| `from` | string | No | `to` minus 90 days | First observation date, `YYYY-MM-DD` |
+| `to` | string | No | Today in America/New_York | Last observation date, `YYYY-MM-DD` |
+| `limit` | int | No | 90 | Most recent rows in the window, capped at 366; below 1 returns `400 invalid_limit` |
+
+Response: `{ isPreview, previewReason, totalCount, data: { ticker, from, to, count, history: [...] } }`. Each history point is `{ snapshotDate, observedAt, observedAtEpoch, source, countsObserved, currentPrice, targetLow, targetMean, targetMedian, targetHigh, numberOfAnalysts, upsidePercent, recommendationMean, strongBuy, buy, hold, sell, strongSell, consensusLabel }`. `observedAt` is an ISO-8601 UTC instant with a `Z` suffix to whole seconds; `observedAtEpoch` is the same moment in epoch seconds.
+
+Rows are daily observations of the upstream current-month recommendation panel plus target fields as observed on `snapshotDate`. `countsObserved: false` means the panel did not return on that sweep and the counts are carried stored values, or zeros when no panel has ever been observed. It is not evidence of dropped coverage.
+
+
+### GET /api/v1/analyst/{ticker}/called-it
+
+Recorded large stock moves with the same-direction price-target revisions published beforehand.
+**PRO (preview)** -- PRO receives the requested moves and all calls. Free receives the newest
+move with up to 5 calls; move-level counts remain intact.
+
+| Param | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `ticker` | path | Yes | - | Stock ticker, including supported aliases |
+| `limit` | int | No | 10 | Moves to return, newest first by `moveEndDate`; capped at 50, below 1 returns `400 invalid_limit` |
+
+Response: `{ isPreview, previewReason, totalCount, data: { ticker, count, moves: [...] } }`.
+Each move is `{ insightId, generatedAt, moveStartDate, moveEndDate, movePct, moveWindowSessions,
+lookbackDays, coveringFirms, revisedWithMove, revisedAgainstMove, leftUnchanged, calls }`.
+`generatedAt` is epoch seconds. Each call is `{ firm, analystName, attribution, priceTarget,
+priorPriceTarget, publishedOn, daysBeforeMove }`. `analystName` may be null; attribute that call
+to its firm. `attribution` is `firm` or `analyst`. `totalCount` is the servable move count before
+the limit or preview. These are published revisions before recorded moves; report their dates
+and the full firm counts alongside any preview calls.
+
+A known stock with no qualifying move returns `200` with empty `moves` and `totalCount: 0`.
+An unknown symbol returns `404 entity_not_found` with suggestions; an ETF returns
+`404 ticker_is_etf` with `seeInstead` beginning at `/api/v1/etfs/{ticker}/aggregates/analyst`.
 
 ### GET /api/v1/analyst/{ticker}/actions
 Recent analyst upgrade/downgrade actions for a ticker, newest first. **PRO (preview)** -- Free: 3 most recent, PRO: full list.
@@ -1698,7 +1738,7 @@ for e in cal.earnings:
 
 ## Earnings Analysis API (`/api/v1/stocks`, `/api/v1/earnings`)
 
-The earnings lifecycle as one family: who reports (calendar), what management changed in its SEC filings (risk-factor diffs), the per-quarter analysis of what was actually reported, how the stock moved on each announcement (reactions), the reported numbers (fundamentals and KPIs), and the AI takeaway (insights). What Changed, the earnings analysis report, the reaction series, and the recently-reported feed are documented here; the rest live in their own sections above.
+The earnings lifecycle as one family: who reports (calendar), what management changed in its SEC filings (risk-factor diffs), the per-quarter analysis of what was actually reported, how the stock moved on each announcement (reactions), the reported numbers (fundamentals and KPIs), and the AI takeaway (insights). What Changed, the earnings analysis report, the reaction series, the recently-reported feed, the ranked view and the market-wide statistics are documented here; the rest live in their own sections above.
 
 **The quarter is the unit.** The analysis is organized by fiscal quarter, and everything else attaches to one: a filing diff belongs to the quarter it covers, and consensus EPS from the Calendar is the anchor a headline beats or misses. Pair `earnings-summaries` with the filings that fall near its `reportDate` rather than treating results and filings as two unrelated lists.
 
@@ -1760,7 +1800,19 @@ Four things to get right before you quote a number from this:
 
 Beat, miss and inline come from reported EPS against the estimate directly, never from a rounded surprise percentage. These are realized historical statistics, not forecasts.
 
-Reported by the earnings family alongside the four endpoints above:
+### GET /api/v1/earnings/ranked
+The prioritized cross-ticker view: which recently reported quarters mattered, and which upcoming reports are worth watching, both ordered by an `importance` score in `[0, 1]` rather than by date. Each reported row joins the EPS surprise, the measured next-session move, the issuer's market cap and its 7-day SentiSense Score; each upcoming row carries the scheduled date, session timing, consensus EPS, market cap and Score. **PRO (preview)** -- Free: the first 3 rows of each section with `totalInWindow` intact and `previewReason: "PRO_REQUIRED"`; PRO: every row the limits allow. Params, all optional: `reportedDays` (1 to 31, default 14), `reportedLimit` (1 to 50, default 12), `upcomingDays` (1 to 31, default 7), `upcomingLimit` (1 to 50, default 12). Above a bound is capped; below 1 returns `400 invalid_<param>`.
+
+Response: `{ isPreview, previewReason, data: { asOf, rankingVersion, reported: {...}, upcoming: {...} } }`. `asOf` is epoch seconds when the ranking was computed and `rankingVersion` names the ranking-rule revision, so a reordering under the same data is attributable to the rules moving. Each section is `{ windowStart, windowEnd, totalInWindow, rows }` with ISO date bounds and `totalInWindow` counted before any limit or preview cut. A reported row is `{ ticker, reportDate, fiscalPeriod?, headline?, hasTranscriptSummary?, estimateEps?, actualEps?, surprisePct?, outcome, movePct?, reactionPending?, liveReactionPct?, awaitingConsensus?, marketCap?, sentisenseScore7d?, scoreChange7d?, importance }`; an upcoming row is `{ ticker, companyName, earningsDate, earningsTime, confirmed, estimatedEps?, marketCap?, sentisenseScore7d?, scoreChange7d?, importance }`. Null fields are omitted, so read every optional field defensively.
+
+Three things to get right:
+- **Units are in the field names.** `surprisePct` and `movePct` are signed percents (`-2.14` is a 2.14% fall); `importance` is a fraction; `sentisenseScore7d` is the 7-day average Score, signed and unbounded, not a 0 to 100 scale; `scoreChange7d` is that 7-day average minus the 30-day average in score units, not a change since seven days ago; `marketCap` is US dollars.
+- **A missing move has two meanings.** `reactionPending: true` means the reacting session plausibly has not closed yet, and `liveReactionPct` then carries the in-session move while it trades. A missing `movePct` with `reactionPending` false or absent is a coverage gap that will not fill in; do not describe it as pending.
+- **`awaitingConsensus: true` means the print is in but the EPS consensus is not.** Render it as awaiting consensus, not as an unclassified beat or miss. `outcome` is `BEAT`, `MISS`, `INLINE` or `UNCLASSIFIED`, and `earningsTime` on upcoming rows is `before_open`, `after_close`, `during_market` or `unknown`.
+
+Reach for `/earnings/recent` when the reader wants every name in the window rather than the important ones, and for `/calendar/earnings` for the plain forward schedule. Rank comes from the API; explain why a row ranked (surprise, move, cap, Score) rather than re-ranking it.
+
+Reported by the earnings family alongside the five endpoints above:
 - **Calendar** -- `GET /api/v1/calendar/earnings?week=next` (who reports next week) or `?ticker={ticker}` (a single name's next date + consensus EPS). See the Calendar API section.
 - **Fundamentals + KPIs** -- `GET /api/v1/stocks/fundamentals` for statements; `GET /api/v1/stocks/{ticker}/kpis` for curated GAAP and non-GAAP metrics (PRO preview). See the Stocks API section.
 - **Analyst estimates** -- `GET /api/v1/analyst/{ticker}/estimates` for forward EPS and beat/miss history. See the Analyst Ratings API section.
