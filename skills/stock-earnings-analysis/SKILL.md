@@ -177,7 +177,8 @@ The response has `reported` and `upcoming` sections. Each carries `windowStart`,
 
 A reported row can carry `ticker`, `reportDate`, `fiscalPeriod`, `headline`,
 `hasTranscriptSummary`, `estimateEps`, `actualEps`, `surprisePct`, `outcome`, `movePct`,
-`reactionPending`, `liveReactionPct`, `awaitingConsensus`, `marketCap`, `sentisenseScore7d`,
+`reactionPending`, `liveReactionPct`, `afterHoursReactionPct`, `awaitingConsensus`,
+`marketCap`, `sentisenseScore7d`,
 `scoreChange7d` and `importance`. An upcoming row can carry `ticker`, `companyName`,
 `earningsDate`, `earningsTime`, `confirmed`, `estimatedEps`, `marketCap`, `sentisenseScore7d`,
 `scoreChange7d` and `importance`. Null optional fields are omitted.
@@ -186,9 +187,14 @@ A reported row can carry `ticker`, `reportDate`, `fiscalPeriod`, `headline`,
 `sentisenseScore7d` is signed and unbounded. `marketCap` is US dollars. `outcome` is `BEAT`,
 `MISS`, `INLINE` or `UNCLASSIFIED`. `scoreChange7d` is the 7-day average Score minus the 30-day average, in score units, not a change since seven days ago; positive means the Score is strengthening.
 
-Three flags control the sentence. `reactionPending: true` means the final reaction is missing and
+Four flags control the sentence. `reactionPending: true` means the final reaction is missing and
 the reacting session may still be open, so say the reaction is pending. `liveReactionPct` is the
 signed in-session move while that final measurement is pending, so label it live rather than final.
+`afterHoursReactionPct` is the signed extended-hours move against the report day's regular close.
+It appears on the report date itself, from 16:00 ET, only for a company the calendar marks as
+reporting after the close. Call it the after-hours move rather than the reaction, because the
+close-to-close measurement that replaces it covers a different interval, and expect
+`reactionPending` to stay true beside it. At most one of the three readings is ever present.
 `awaitingConsensus: true` means the estimate and actual EPS consensus row has not arrived, so do
 not state a beat, miss or inline result.
 

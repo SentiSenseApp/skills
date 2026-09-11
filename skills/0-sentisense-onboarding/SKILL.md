@@ -84,6 +84,8 @@ same secret.
 | "insider buying", "Form 4 filings", "is the CEO selling", "cluster buys" | `insider-trading-tracker` |
 | "who covers this stock", "analyst price targets", "any upgrades or downgrades today", "what has this analyst said before", "do analysts and the crowd agree", "which firms moved after earnings" | `analyst-ratings-tracker` |
 | "find me stocks that...", "screen for...", "which stocks are oversold but loved" | `stock-screener` |
+| "who moves this stock", "the people and products behind NVDA", "CEO sentiment vs the company", "is the iPhone's Score diverging from Apple", "which handle is this entity" | `stock-ontology` |
+| "segment revenue", "iPhone revenue by quarter", "Tesla deliveries", "subscriber counts", "non-GAAP operating metrics", "company KPIs" | `company-kpi-tracker` |
 | "just give me a shell command", "no install", "wire this into a script or a cron job" | `sentisense-cli` |
 | "full API reference", "build an integration", "endpoint documentation", "what is the response shape" | `sentisense` |
 | anything else: prices, news, financial statements, or a task no narrower skill covers | `sentisense` |
