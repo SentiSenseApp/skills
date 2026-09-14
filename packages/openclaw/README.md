@@ -1,4 +1,4 @@
-# All Market Data, One API Key
+# Stock Analysis: Sentiment, Insiders, 13F, Options
 
 Every SentiSense market-data skill in a single install. Ask your agent about a stock and it gets
 real prices, real filings, and real positioning data, with one free API key covering every endpoint.

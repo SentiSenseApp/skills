@@ -309,7 +309,33 @@ Aggregate metrics such as sentiment and mention counts incorporate signals from 
 
 
 ### GET /api/v1/stocks/{ticker}/entities
-Related ontology entities (CEO, products, partners). **Public.** Each entry carries a `urlSlug` (e.g. `Tim-Cook`) that plugs into the Metrics API `{entityId}` parameter.
+Related ontology entities (CEO, products, partners). **Public.** Each entry carries a `urlSlug` (e.g. `Tim-Cook`) that plugs into the Metrics API `{entityId}` parameter. It is a flat list: for the relationship behind each link, use the graph endpoint below.
+
+### GET /api/v1/stocks/{ticker}/graph
+One company's neighborhood in the SentiSense ontology as a typed graph: the people, products, product families, peer companies and organizations the knowledge base connects to that ticker, plus the named relationship between each pair. **Public** (API key required). One ticker per call; there is no listing or enumeration form.
+
+| Param | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `depth` | integer | No | `1` | `1` or `2`. `1` returns the company's own people, products and peers; `2` walks one hop further, which is how an organization behind a person appears. Anything else returns `400 invalid_depth`. Send it explicitly so the walk you describe is the walk you asked for |
+| `cap` | integer | No | `75` | `1` to `200`, the maximum number of non-root nodes returned. Anything else returns `400 invalid_cap`. Send it explicitly for the same reason |
+
+Response: a flat object, no `{isPreview, data}` wrapper.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `ticker` | string | The normalized ticker |
+| `root` | string | The root company's slug. The root is also the first entry in `nodes` |
+| `depth`, `cap` | integer | The values the walk was asked for, echoed back. `depth` is what you requested, not how far the walk reached |
+| `truncated` | boolean | `true` when `cap` cut the walk short. The survivors are ordered by node type then name, not by importance, so a truncated response can drop people and products while keeping peers |
+| `counts` | object | `{nodes, edges, byType}`, where `byType` maps a node type to how many of it came back |
+| `omitted` | integer | Nodes left out for carrying no slug, and so not addressable. Normally `0` |
+| `groups` | object | `people`, `products`, `productFamilies`, `peers`, `organizations`, `publishers`, `topics`. Every one is a list of **slugs** except `productFamilies`, which is a list of `{family, members}`. A slug is the same handle the Metrics API takes, so you can query one straight from `groups`; join it to `nodes` when you need its `displayName` or `type` |
+| `nodes` | array | `{slug, displayName, type}`. `type` is uppercase (`COMPANY`, `PERSON`, `PRODUCT_OR_SERVICE`, `ORGANIZATION`, `PUBLISHER`, `TOPIC`), and `slug` is the Metrics API `{entityId}` handle |
+| `edges` | array | `{source, target, type, direction, properties}`, both ends slugs. `type` is one of `LEADS`, `FOUNDED`, `PRODUCT_OF`, `VARIANT_OF`, `PEER`, `OWNS`, `SUBSIDIARY_OF`, `SUBTOPIC_OF`, `BELONGS_TO`, `AFFILIATED_WITH`. `direction` is `DIRECTED` or `BIDIRECTIONAL`; on a `BIDIRECTIONAL` edge the order carries no meaning. `properties` is a flat string map and is often empty |
+
+An unknown or unlisted ticker returns `404 entity_not_found` with up to three `suggestions`, which is a different answer from `/entities`, where an unknown ticker returns `200 []`. The response carries no sentiment, Score or mention counts: fetch those per handle from the Metrics API.
+
+`publishers` and `topics` are part of the response shape but are not reachable from a company root today, so treat an empty list there as the expected state rather than as missing theme coverage.
 
 ### GET /api/v1/stocks/{ticker}/ai-summary
 AI-generated stock analysis report. **PRO** (Free: `depth=basic` unlimited, `depth=deep` limited to 10/month). `depth=basic` returns a preheader summary. `depth=deep` returns a full multi-section report. Exhausting the `depth=deep` monthly view allowance returns `429` with `{error: "quota_exceeded", ...}`, the same contract as every other quota-gated endpoint.
@@ -514,7 +540,7 @@ Curated list of high-profile tracked entities (major CEOs, political figures, th
 
 Time series metrics for stocks and entities: mentions, sentiment, social dominance, and more. The `{entityId}` path segment accepts a stock ticker (e.g. `AAPL`) or an entity `urlSlug` (e.g. `Nancy-Pelosi`); both are case-insensitive, and a ticker-shaped identifier always means the listed company. Discover handles with `GET /api/v1/kb/entities/search?q=` or `GET /api/v1/stocks/{ticker}/entities`. An unknown identifier returns `404 entity_not_found` with up to three `suggestions`.
 
-Which handle to store: the `urlSlug` is the quick, memorable one and is what discovery hands you. For a long-lived reference, such as a tracker that must keep working if an entity is renamed, store the entity `id` in URL-safe dashed form instead (replace `/` with `-`, e.g. `kb-person-65`). Both forms resolve on every endpoint that takes an `{entityId}`.
+Which handle to store: the `urlSlug`, or the ticker for a listed company. It is the only identifier these paths accept. Internal KB ids, in any spelling (`kb/person/65`, `kb-person-65`, `p65`), are not part of the public API and resolve to nothing. If a rename ever breaks a stored handle, find the entity again by name with `GET /api/v1/kb/entities/search?q=`.
 
 Every metric type (`mentions`, `sentiment`, `sentisense`, `social_dominance`, `app_review_count`, `app_rating`) is available on the Free tier: no PRO subscription needed. All metrics endpoints are **Quota-gated**: an API key is required and each request counts against your monthly quota (Free: 1,000 requests/month; PRO: no monthly cap). Per-minute rate limits apply on every tier.
 
@@ -778,7 +804,7 @@ Documents within a date range. **Public.**
 | `limit` | int | No | Max results (capped at 200) |
 
 ### GET /api/v1/documents/entity/{entityId}
-Documents mentioning an ontology entity. **Public.** Use URL-safe format: `kb-person-67` instead of `kb/person/67`.
+Documents mentioning an ontology entity. **Public.** Address it by `urlSlug`, e.g. `Tim-Cook`, the same handle the Metrics API takes. Internal KB ids are not accepted.
 
 ### GET /api/v1/documents/search
 Smart search with natural language queries. **Public.**
@@ -1835,7 +1861,7 @@ hosts are Claude, ChatGPT, Grok, and local MCP clients such as Claude Code; othe
 are not supported. If you are an AI agent building a
 product or automation, use the REST API above instead: it is the complete surface with typed SDKs.
 
-Ten data tools, plus one utility tool:
+Eleven data tools, plus one utility tool:
 
 | Tool | What it answers |
 |------|-----------------|
@@ -1849,6 +1875,7 @@ Ten data tools, plus one utility tool:
 | `get_earnings_calendar` | `view=schedule` (default): next earnings report for a ticker (date, timing, confirmation, fiscal quarter, consensus EPS), or the full `week=this` or `week=next` schedule for every tier, with Monday-to-Sunday bounds anchored on US Eastern time. `view=ranked`: which recent and upcoming reports matter most, with a 14-day lookback, 7-day forward window, resolved bounds, ranking version, shown/total, EPS surprise and distinct measured, provisional live, after-hours or pending readings; FREE sees up to 3 rows per section, PRO up to 12, and ticker/week apply only to schedule. |
 | `get_financials` | Reported income statement, balance sheet, and cash flow per fiscal quarter or year, up to 40 quarters or 20 years, plus curated company KPIs on PRO |
 | `screen_stocks` | Screen and rank the tracked stock/ETF universe by SentiSense signals and market data |
+| `entity_brief` | Who and what sits behind one ticker from the curated knowledge graph: executives and founders with the relationship each has to the company, products and their families, peer companies, and organizations reached through a person, each with the handle that reads its SentiSense Score. One ticker per call; no sentiment or price data |
 | `sentisense_health` | Connection check; not a data tool, does not consume quota |
 
 Free: 1,000 tool calls/month at 30/min, sharing the same quota as REST API requests; most tools
