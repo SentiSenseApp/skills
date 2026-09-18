@@ -259,7 +259,7 @@ The current `sentisenseScore` can be null until the day's batch lands. In that c
 | E5  | Free cash flow                  | $__   | __                  | quarterly | P    | SS /fundamentals/history |
 | E6  | Cash & equivalents              | $__   | latest balance sheet| quarterly | P    | SS /fundamentals/history |
 | E7  | Total debt                      | $__   | latest balance sheet| quarterly | P    | SS /fundamentals/history |
-| E8  | Shares outstanding + 3y trend   | __ (up/down/flat __%) | __  | quarterly | P    | SS /fundamentals/history |
+| E8  | Diluted weighted-avg shares + 3y trend | __ (up/down/flat __%) | __  | quarterly | P    | SS /fundamentals/history |
 | E9  | P/E, P/S, P/B                   | __ / __ / __ | as-of __ (price-based) | derived | P | SS /fundamentals |
 | E10 | Sentiment polarity [-1,1] + 7d trend | __ (__)| as-of __ (batch) | batch  | D1   | SS /metrics sentiment |
 | E11 | SentiSense Score                | __    | as-of __ (batch)    | batch     | D1   | SS /metrics sentisense |
@@ -299,10 +299,29 @@ one entry per fiscal year (or quarter with `timeframe=quarterly`, up to 40). Eac
 `fiscalYear`, `fiscalPeriod`, `periodEndDate`, `filingDate` and the flat statement fields the
 ledger wants: `revenue`, `netIncome`, `operatingCashFlow`, `capitalExpenditure`, `freeCashFlow`
 (already computed, do not re-derive it), `cash`, `debt`, `longTermDebt`, `totalAssets`,
-`totalLiabilities`, `totalEquity`, `sharesOutstanding`, and the same-currency ratios
+`totalLiabilities`, `totalEquity`, `weightedAverageSharesDiluted`, and the same-currency ratios
 (`grossMargin`, `operatingMargin`, `netMargin`, `roe`, `roa`, `currentRatio`, `debtToEquity`).
-Four annual periods give E8 its trend directly: compare `sharesOutstanding` across them and say
-up, down or flat with the percentage.
+Four annual periods give E8 its trend directly: compare `weightedAverageSharesDiluted` across them
+and say up, down or flat with the percentage.
+
+Two things to say plainly when you report E8, because they change what the number means:
+
+- **It is a weighted average over each period, not a share count on a date.** That is the right
+  shape for a dilution trend, since it moves with buybacks and issuance, but it is NOT the
+  period-end shares outstanding. Do not use it for a market capitalisation or a book value per
+  share, and do not mix it in the same table with the EDGAR `dei/EntityCommonStockSharesOutstanding`
+  fallback below, which is a genuine point-in-time count. Pick one basis and name it.
+- **Null means the filer reported no diluted figure**, not zero and not "unchanged". Keep ONE
+  basis for the whole trend: if any period in the window has no diluted count, compute every
+  period on `weightedAverageSharesBasic` and label the row basic, or report the diluted trend as
+  unavailable. Never fill one year's gap with the other basis and still call the series diluted.
+
+Providers restate their own history inconsistently across splits, so a multi-year share trend can
+show a step change that is an accounting restatement rather than real dilution. If a year-over-year
+move looks like a clean multiple (4x, 1/2), check for a split before calling it dilution.
+
+Do not use `sharesOutstanding`. It is deprecated and stops being populated on 2026-12-15, and it
+was never a period-end count despite the name.
 
 Four field-level facts worth knowing before you read a null as a gap:
 

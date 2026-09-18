@@ -419,6 +419,30 @@ Response includes `count` (periods actually returned, can be less than `limit`),
 (non-null only when `periods` is empty, e.g. a recent listing), and `dataSource` (deprecated:
 always an empty string, kept for response-shape compatibility, slated for removal).
 
+**Earnings and share-count fields** (same on `/fundamentals`). These are reported independently by
+the data provider. They are NOT derived from one another and will NOT reconcile arithmetically:
+`netIncome / weightedAverageSharesDiluted` does not reproduce any EPS field, because the provider
+computes EPS from its own numerator on its own share basis. Do not "check" our data by dividing
+these, and do not present a computed per-share figure as if it were the reported one.
+
+| Field | Meaning |
+|---|---|
+| `epsBasic` | Basic EPS. Always basic, on every source. |
+| `epsDiluted` | Diluted EPS. Null when the provider reports no diluted figure. |
+| `eps` | EPS as the provider reports it, usually basic. Prefer `epsBasic`/`epsDiluted`, which name their basis. |
+| `netIncome` | Consolidated net income. Not the EPS numerator. |
+| `bottomLineNetIncome` | The provider's bottom-line income line, which can differ from `netIncome` in size and in sign. Null means the line was not supplied for that period, not that it equals `netIncome`. |
+| `weightedAverageSharesBasic` | Basic weighted-average shares for the period. Null when not reported. |
+| `weightedAverageSharesDiluted` | Diluted weighted-average shares for the period. Null when not reported. |
+| `sharesOutstanding` | **Deprecated, stops being populated 2026-12-15.** Not a period-end count despite the name. Use the weighted-average fields. |
+
+Both share fields are averages ACROSS the period, not counts at period end, so neither is a correct
+input to a market capitalisation or a book value per share; a share field is null when the provider
+reports no count on that basis or a count of zero or below. Income fields are in the filer's reporting
+currency (see `reportedCurrency`), EPS is that currency per share, share fields are a number of
+shares. Figures are served as the provider reports them, with no split adjustment applied by us; providers restate their own history inconsistently, so EPS and share
+counts can sit on different bases in older periods around a split.
+
 ### GET /api/v1/stocks/fundamentals/periods
 Available fiscal periods. **Public.**
 
@@ -620,11 +644,13 @@ The SentiSense Rating is a daily score from 0 to 100 for a US stock, and the let
 
 **Report the letter and the score; the percentile is the rank before penalties.** `score = percentile - sum(riskAdjustments[].points)`, each adjustment worth up to 12 points, floored at 10 when fewer than 6 of the 7 dimensions are available and at 0 otherwise, and `letter` is the band `score` falls in. Present it as "B, 85.6 out of 100, ranked in the 100th percentile with 14.4 points of risk adjustments". Never quote the percentile as though it were the grade, and never translate a letter into buy, sell, hold, long, short, avoid, or any other trade instruction: the grade does not carry that meaning and the response ships a `disclaimer` string for you to render alongside it. At most one stock in ten can carry an A, since only the top tenth of ranks reaches 90 before any adjustment, and in practice far fewer do.
 
+**Beta:** the response shape is stable, but the method is still being tuned and a stock's score can shift between `methodologyVersion` values. Every response carries a `betaNotice` string saying so while this holds, on both the rated and the not-rated shape; it disappears when the Beta ends, so treat it as optional.
+
 **Not the same object as the SentiSense Score.** The Score is the continuous crowd-sentiment number and is one of the seven inputs here; the Rating is the composite grade. Do not use the two names interchangeably.
 
-Letter bands, on the **score**: `A` 90 and above, `B` 70 to 89.9, `C` 30 to 69.9, `D` 10 to 29.9, `F` below 10. The bands are not fixed shares of the market. Dimension weights: fundamentals 20%, crowd sentiment 16%, smart money 16%, technicals 16%, options positioning 12%, analysts 12%, earnings 8%.
+Letter bands, on the **score**: `A` 90 and above, `B` 70 to 89.9, `C` 30 to 69.9, `D` 10 to 29.9, `F` below 10. The bands are not fixed shares of the market. Dimension weights: fundamentals 20%, crowd sentiment 16%, smart money 16%, technicals 16%, options positioning 12%, analysts 12%, earnings 8%. Fundamentals reads four inputs: trailing operating margin, return on equity, year-over-year revenue growth, and durability, the share of the last 20 fiscal quarters with positive operating income, positive free cash flow and revenue above the same quarter a year earlier.
 
-**`score`, `percentile`, `penaltyPoints` and `riskAdjustments` are returned side by side so you can check the arithmetic.** A response reading `percentile: 100.0`, `penaltyPoints: 14.4`, `riskAdjustments: [{condition: "weak_dimension", points: 2.4}, {condition: "high_leverage", points: 12.0}]`, `score: 85.6`, `letter: "B"` is correct and internally consistent, not a data error; `bucketLetter` reports the `A` the rank alone would have given. **Most adjustments are graded**: 7 of the 11 conditions scale with how far past the threshold the stock sits, up to 12 points, and 4 are flat 12s. Read each cost from `riskAdjustments[].points`, never from `12 x riskConditions.length`.
+**`score`, `percentile`, `penaltyPoints` and `riskAdjustments` are returned side by side so you can check the arithmetic.** A response reading `percentile: 100.0`, `penaltyPoints: 14.4`, `riskAdjustments: [{condition: "weak_dimension", points: 2.4}, {condition: "high_leverage", points: 12.0}]`, `score: 85.6`, `letter: "B"` is correct and internally consistent, not a data error; `bucketLetter` reports the `A` the rank alone would have given. **Most adjustments are graded**: 8 of the 12 conditions scale with how far past the threshold the stock sits, up to 12 points, and 4 are flat 12s. Read each cost from `riskAdjustments[].points`, never from `12 x riskConditions.length`.
 
 Recomputed once per trading day at 07:15 Eastern Time on the morning after each session, so the run lands Tuesday through Saturday. Cache on `asOf`; polling faster than daily returns the same values.
 
@@ -633,7 +659,7 @@ Today's Rating for one stock. **Quota-gated**, served in full on the Free tier (
 
 Response is a flat object, no `{isPreview, data}` wrapper. When the stock was graded: `ticker`, `kbEntityId`, `rated: true`, `score` (0-100 with one decimal, the headline), `letter` (the band `score` falls in, displayed beside it), `percentile` (0-100, the rank `score` was built from), `penaltyPoints` (what the risk adjustments took off, to one decimal), `riskAdjustments` (`{condition, points}` per adjustment, where each cost actually lives), `riskConditions` (the names that cost more than zero; empty when the stock carries none, in which case `score` equals `percentile`), `bucketLetter` (the band `percentile` alone would fall in), `composite` (the pre-rank blend, comparable within a day only), `ratedCount` (the denominator behind `percentile`), `asOf`, `methodologyVersion`, `dimensions`, `flags`, `disclaimer`.
 
-`riskConditions` is a closed vocabulary, each worth up to 12 points. Graded (the cost scales, read it from `riskAdjustments`): `thin_coverage` (currently 6 points per missing dimension once fewer than 6 of the 7 are available, so 5 dimensions cost 6 and 4 cost 12 while 6 or 7 cost nothing; below 6 it also floors the score at 10), `institutional_outflow` (scaled by how deep in the bottom quarter of net institutional change), `high_leverage` (currently 6 points per unit of debt to equity above 2), `weak_dimension` (weakest available dimension below the 20th percentile, currently 0.6 points per percentile below 20), `small_market_cap` (currently under 2 billion dollars, scaled by the shortfall), `thin_liquidity` (currently under 10 million dollars in the latest session, scaled by the shortfall), `extended_price` (currently within 5 percent of the 52-week high and more than 25 percent above the 200-day moving average, scaled by the excess above 25 percent). Flat 12: `insider_selling`, `unprofitable` (trailing twelve month operating or net margin not positive), `no_fundamentals`, `unseasoned_listing` (currently fewer than 250 trading sessions in the past 400 days). Thresholds and graded rates are tuned as calibration data accumulates; the constituents, their maximum and the formula are versioned. Treat an unrecognized value as a condition this client does not know about, costing whatever `riskAdjustments` says, not as an error.
+`riskConditions` is a closed vocabulary, each worth up to 12 points. Graded (the cost scales, read it from `riskAdjustments`): `thin_coverage` (currently 6 points per missing dimension once fewer than 6 of the 7 are available, so 5 dimensions cost 6 and 4 cost 12 while 6 or 7 cost nothing; below 6 it also floors the score at 10), `institutional_outflow` (scaled by how deep in the bottom quarter of net institutional change), `high_leverage` (currently 6 points per unit of debt to equity above 2), `weak_dimension` (weakest available dimension below the 20th percentile, currently 0.6 points per percentile below 20), `small_market_cap` (currently under 2 billion dollars, scaled by the shortfall), `thin_liquidity` (currently under 10 million dollars in the latest session, scaled by the shortfall), `extended_price` (currently within 5 percent of the 52-week high and more than 25 percent above the 200-day moving average, scaled by the excess above 25 percent), `rich_valuation` (the trailing price to earnings multiple is high in absolute terms and in the top tail of the day's cross section, scaled by how far into that tail it sits; a multiple we could not establish costs nothing, which covers a company with no trailing profit and a filer reporting in a currency its price is not quoted in). Flat 12: `insider_selling`, `unprofitable` (trailing twelve month operating or net margin not positive), `no_fundamentals`, `unseasoned_listing` (currently fewer than 250 trading sessions in the past 400 days). Thresholds and graded rates are tuned as calibration data accumulates; the constituents, their maximum and the formula are versioned. Treat an unrecognized value as a condition this client does not know about, costing whatever `riskAdjustments` says, not as an error.
 
 `dimensions` always carries all seven rows in a fixed order: `crowd`, `smart_money`, `options`, `analysts`, `fundamentals`, `earnings`, `technicals`. `technicals` reads where the price sits versus its own history: distance from its 200-day and 50-day averages, its twelve-month path, and how calm or violent its recent sessions have been, with calmer ranking higher. It is a description of the current trend state, not a forecast, and its `raw` is the distance from the 200-day average in percent. Each is `{ key, label, percentile, raw, rawLabel, present }`. **Branch on `present`, not on `raw != null`**: `smart_money` is `present` with a `null` raw because it has no single underlying number, and instead carries a `subLegs` array of `{ key, label, raw, unit }` for `inst_13f`, `insider` and `congress`.
 
@@ -1745,7 +1771,7 @@ Upcoming company earnings, sorted by date. **Public (preview)** -- Free: one wee
 | `week` | string | No | - | Shorthand window. `this` is the Monday-to-Sunday week containing the current US Eastern date; `next` is the seven days right after it. Rolls over at midnight ET, not local midnight; `metadata.windowStart`/`windowEnd` echo the resolved dates |
 | `from` | string | No | - | Inclusive lower bound, ISO `YYYY-MM-DD` (overrides `week`) |
 | `to` | string | No | - | Inclusive upper bound, ISO `YYYY-MM-DD` |
-| `confirmed` | bool | No | - | When `true`, only company-confirmed dates |
+| `confirmed` | bool | No | - | Two-sided. `true` returns only company-confirmed dates, `false` returns only the still-estimated ones. Omit it to get both |
 | `time` | string | No | - | `before_open`, `after_close`, `during_market`, `unknown` |
 
 Response: `{ isPreview, previewReason, totalCount?, data: { earnings: [...], metadata: {...} } }`. Each event: `{ ticker, companyName, earningsDate (ISO date), earningsTime, fiscalQuarter, confirmed, estimatedEps }`. Metadata: `{ generatedAt (epoch seconds), windowStart, windowEnd, count, source }`. On a FREE preview, `totalCount` is the full-window event count and `data.earnings` is limited to one week. `metadata.windowStart`/`windowEnd` always describe the window actually returned and `metadata.count` always equals `data.earnings.length`, so read the window off the response rather than assuming which week you got.
