@@ -14,13 +14,24 @@ Install just one skill:
 npx skills add SentiSenseApp/skills -s stock-terminal
 ```
 
+### Claude Code plugin
+
+In Claude Code the whole collection also installs as one plugin:
+
+```bash
+claude plugin marketplace add SentiSenseApp/skills
+claude plugin install sentisense@sentisense
+```
+
+Or from inside a session: `/plugin marketplace add SentiSenseApp/skills`, then `/plugin install sentisense@sentisense`. The plugin carries every skill in this repo, each available as `sentisense:<skill-name>`.
+
 ## Get a free API key
 
 Every skill runs on a free SentiSense API key. Create one at https://app.sentisense.ai/get-api-key and set it as `SENTISENSE_API_KEY`. Read-only access: no trading, no purchases, no write operations.
 
 ## The collection
 
-19 skills, one free key. Start with the first two.
+21 skills, one free key. Start with the first two.
 
 ### Start here
 
@@ -39,6 +50,7 @@ Every skill runs on a free SentiSense API key. Create one at https://app.sentise
 | `stock-market-dashboard` | A morning market briefing as one self-contained HTML file: fear-to-greed mood gauge, sentiment breadth, sector heat, and the day's leaders, from live data. |
 | `last-30-days-in-markets` | What happened over the last 30 days as one synthesized brief: the mood arc, the biggest story themes ranked by impact, and which tickers and sectors dominated. |
 | `stock-earnings-analysis` | Earnings the way a quarter actually reads: what was reported, marquee KPIs with year-over-year deltas, guidance language, and how analysts and the crowd reacted. |
+| `stock-ontology` | A company knowledge graph: the people and products behind a ticker, any tracked entity by name, and each one's SentiSense Score over the same window. |
 
 ### Signals and trackers
 
@@ -51,6 +63,7 @@ Every skill runs on a free SentiSense API key. Create one at https://app.sentise
 | `institutional-13f-tracker` | Quarterly 13F holdings by ticker or by manager: top holders, quarter-over-quarter buying and selling, and activist positions. |
 | `politicians-stock-tracker` | Congressional STOCK Act trades from House Clerk and Senate eFD filings, by member or by ticker. |
 | `unusual-options-activity` | End-of-day IV rank, options sentiment, put/call percentile, 25-delta skew, open-interest walls, and max pain, each ranked against the ticker's own history. |
+| `company-kpi-tracker` | Company KPIs from earnings filings: segment and product revenue, deliveries, subscribers and non-GAAP operating metrics, each with its filing citation and quarter-over-quarter and year-over-year changes. |
 
 ### Visual tools and calculators (pre-filled with live data)
 

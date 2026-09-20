@@ -1,0 +1,18 @@
+{
+  "name": "sentisense",
+  "owner": {
+    "name": "SentiSense",
+    "url": "https://sentisense.ai"
+  },
+  "metadata": {
+    "description": "SentiSense skills for Claude Code: US stock market data for AI agents."
+  },
+  "plugins": [
+    {
+      "name": "sentisense",
+      "source": "./",
+      "description": "US stock market data skills for AI agents: news and social sentiment, the SentiSense Rating, insider and congressional trades, institutional 13F holdings, options flow, analyst ratings, earnings, KPIs and screeners for the most-watched US stocks. One free API key covers every skill. Read-only: no trading, no purchases, no wallet access.",
+      "version": "1.0.0"
+    }
+  ]
+}

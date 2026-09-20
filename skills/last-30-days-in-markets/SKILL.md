@@ -134,6 +134,33 @@ Two details that decide whether the timeline is right:
   "biggest of the month" section, and sort by date for the timeline. Two different orderings of the
   same list, both needed.
 
+### The month in one subject
+
+When the ask names a subject rather than the whole market ("the month in NVDA", "the month in
+tariffs", "what happened with the fed decision", "AI capex over the last month"), search the story
+corpus directly instead of paging the whole feed and filtering it yourself:
+
+```bash
+curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
+  "https://app.sentisense.ai/api/v1/documents/stories/search?query=fed+decision&days=30"
+```
+
+`query` is free text and required; a blank one is a `400`. `days` is the lookback, 1 to 30, default
+7, so pass `days=30` for the month. `limit` defaults to 20 and caps at 50. The rows are the same
+slim story objects the feed returns, newest first, so the field table above and every rule in this
+skill apply to them unchanged.
+
+Write the query the way the parser reads it. Entities recognized in the text (tickers, company
+names, people, organizations, products, topics) are searched first, and whatever words are left
+over become keywords that must all appear in a story's own title or summary, at most four of them
+once stopwords are dropped. If the entity pass finds nothing, the search retries on keywords alone.
+So a short subject phrase beats a sentence, and two or three distinctive words beat five vague ones.
+
+Search narrows, it does not summarize. **Keep the paged feed as the spine of the brief**: the impact
+ranking, the ticker counts and the coverage line are built from it, while a search result set is a
+subset with no claim to cover the month. Use search to go deep on the subject the reader asked
+about, and report its own first and last observed dates in the coverage line like any other layer.
+
 ### Reading the arc
 
 `GET /api/v2/market-mood?days=30` returns the current score and phase, a `signals[]` breakdown of
@@ -358,11 +385,15 @@ grounding rules above.
   (default 5, capped 20) with **no lookback window**, so it cannot cover a month on its own. Build
   the month by filtering the market-wide pages you already fetched
   (`/documents/stories?filterHours=720`) to clusters whose `tickers` contain the symbol, and use
-  the per-ticker endpoint only as a top-up for that name's own clusters. Add
+  the per-ticker endpoint only as a top-up for that name's own clusters. One
+  `GET /api/v1/documents/stories/search?query={ticker}&days=30` call reaches the whole month for
+  that name on its own, so use it when the name is the question. Add
   `GET /api/v1/insights/stock/{ticker}` for the name's signals (Free returns the top 3; read
   `isPreview` and say so), and keep the market arc as the backdrop the name moved against.
 - **One theme's month.** Pick the index from `GET /api/v1/indexes`, lead with its history, and filter
-  the clusters to the tickers in that theme.
+  the clusters to the tickers in that theme. Where the theme is a subject rather than a basket
+  (`tariffs`, `fed decision`, `AI capex`), search it instead:
+  `GET /api/v1/documents/stories/search?query=tariffs&days=30`.
 - **A weekly cadence.** Run it every Friday with `filterHours=168` and keep the same structure, so
   consecutive briefs are comparable.
 

@@ -839,7 +839,7 @@ Smart search with natural language queries. **Public.**
 |-------|------|----------|---------|-------------|
 | `query` | string | Yes | - | e.g., `AAPL earnings`, `Elon Musk TSLA` |
 | `source` | string | No | all | Filter by source |
-| `days` | int | No | 7 | Lookback in days |
+| `days` | int | No | 7 | Lookback in days, 1 to 14. Larger values are capped at 14. |
 | `limit` | int | No | 200 | Max results (capped at 500) |
 
 ### GET /api/v1/documents/source/{source}
@@ -865,6 +865,9 @@ AI-curated news story clusters. **Public.**
 
 Response: Story objects with a top-level `id` AND `clusterId` (both equal to the cluster id -- pass either to `/documents/stories/{clusterId}`), plus `cluster.title`, `cluster.averageSentiment`, `tickers`, `displayTickers`, `impactScore` (0-10), `brokeAt` (epoch seconds, nullable), `cluster.clusteredAt` (epoch seconds). Each entry also carries `cluster.storySource` (`ORIGINAL` for an editorially authored SentiSense Original, `AI` for a pipeline-generated story, always one of the two) and `cluster.isLive` (true while we are actively updating a developing story). Use `tickers` (bare symbols, e.g. `["AAPL"]`) programmatically; `displayTickers` are human-formatted labels (e.g. `["Apple Inc (AAPL)"]`) for display only, do not parse symbols out of them. The `cluster.createdAt` field (epoch millis) is deprecated and will be removed on or after 2026-08-16; use `cluster.clusteredAt`.
 
+
+### GET /api/v1/documents/stories/search
+Search the curated stories by a free-text `query` (Required). **Public.** Parsed like `/documents/search`: explicit `kb/...` ids, then entities recognised in the text (tickers, company names, people, organizations, products, topics), then the leftover words as keywords that must all appear in the story's own title or summary. Entity-scoped first, keyword-only retry when the recognised entities match nothing. `days` is the lookback (1 to 30, default 7; stories archive at 30 days), `limit` defaults to 20 and caps at 50. Newest first. Response: the same Story objects as `/documents/stories`; pass an `id` to `/documents/stories/{clusterId}` for the narrative. This is the endpoint for "what was the news flow on X about Y last month"; the unfiltered feed cannot answer it.
 
 ### GET /api/v1/documents/stories/ticker/{ticker}
 News stories for a specific stock. **Public.** Takes `limit` only (default 5, capped at 20): there is no lookback window here, so `days` / `hours` / `filterHours` are ignored. Use `/documents/stories` with `filterHours` for a freshness window.
@@ -1894,7 +1897,7 @@ Eleven data tools, plus one utility tool:
 | `get_market_mood` | The 0 to 100 fear-to-greed composite for the US market, its phase, and signal components |
 | `get_stock_snapshot` | Price plus SentiSense sentiment, the SentiSense Score, and key stats for one ticker |
 | `get_rating` | The SentiSense Rating for one ticker and its composition: the daily score (0 to 100) and the letter that bands it (A, B, C, D or F), the rank percentile the score was built from, and the seven dimensions behind it (crowd sentiment, smart money, options positioning, analysts, fundamentals, earnings, and technicals: where the price sits versus its own history) with the anomaly flags evaluated. An informational rank of covered stocks against each other, not a recommendation; recomputed nightly, and not every stock is rated every day |
-| `get_news` | Recent sentiment-tagged market-moving news for a ticker |
+| `get_news` | `view=documents` (default): the documents we track for a ticker and/or a query, each as publisher or X author plus our sentiment and a link, no headlines. `view=stories`: curated story clusters with our own titles and summaries, searchable by ticker, by a topic query, or both, over up to 30 days. `view=story` with `story=<id>`: one story's full narrative (summary, body, bull and bear views, timeline, source links; 20 reads a month FREE, unlimited PRO) |
 | `get_analyst_ratings` | Buy/hold/sell consensus and price targets for a ticker, who covers it and what they said (`view=coverage`), one analyst's profile and recent calls (`view=analyst`, pass their name or slug), plus market-wide rating changes (`view=activity`: upgrades/downgrades/initiations, reiteration noise filtered out, tunable `days`/`limit`/`action`) |
 | `get_smart_money` | Institutional 13F holdings and flows |
 | `get_options` | Options intelligence for a ticker or the market-wide radar |

@@ -1,0 +1,12 @@
+{
+  "name": "sentisense",
+  "description": "US stock market data skills for AI agents: news and social sentiment, the SentiSense Rating, insider and congressional trades, institutional 13F holdings, options flow, analyst ratings, earnings, KPIs and screeners for the most-watched US stocks. One free API key covers every skill. Read-only: no trading, no purchases, no wallet access.",
+  "version": "1.0.0",
+  "author": {
+    "name": "SentiSense",
+    "url": "https://sentisense.ai"
+  },
+  "homepage": "https://sentisense.ai/docs/api/agent-skills",
+  "repository": "https://github.com/SentiSenseApp/skills",
+  "license": "MIT"
+}
