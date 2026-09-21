@@ -223,14 +223,19 @@ Historical OHLCV chart data. **Public.**
 dividends so the series is comparable end to end; shorter ranges (through `5Y`) are split-adjusted
 only, so the two bases differ on the same historical date by roughly the dividends paid since.
 `volume` is on the same adjusted basis as the prices in every range (pre-split bars report shares
-in today's share count), so the volume series has no split cliff either.
+in today's share count), so the volume series has no split cliff either. Every bar carries
+`adjusted: true` to mark that basis. Expect an old bar on a heavily-split stock to report a much
+larger share count than a recent one: AAPL has split 28-for-1 since 2013, so one share of 2008 is
+28 shares now and its raw turnover is counted 28 times over. On the monthly series that puts a 2008
+bar near 24 billion shares against roughly 1 billion for a recent month. That is the restatement,
+not an error.
 
 `10Y` and `MAX` may answer `202 Accepted` with an empty array and a `Retry-After` header, meaning
 that stock's deep history is still being assembled; retry and you get the full series. A `200`
 always carries the range you asked for, never a silently shortened one. An unrecognized
 `timeframe` value answers `400` with an `invalid_timeframe` error naming the valid values.
 
-Each bar includes `timestamp` (Unix ms), `date`, `open`, `high`, `low`, `close`, `volume`, and `session`. The `session` field is `pre` (04:00 to 09:30 ET), `regular` (09:30 to 16:00 ET), or `post` (16:00 to 20:00 ET) for intraday timeframes (`1D`, `5D`, `1W`, `1M`); it is `null` for daily, weekly, and monthly bars (`3M` and longer) that span whole sessions. The `1M` timeframe is filtered to `regular`-session bars only.
+Each bar includes `timestamp` (Unix ms), `date`, `open`, `high`, `low`, `close`, `volume`, `adjusted` (always `true`), and `session`. The `session` field is `pre` (04:00 to 09:30 ET), `regular` (09:30 to 16:00 ET), or `post` (16:00 to 20:00 ET) for intraday timeframes (`1D`, `5D`, `1W`, `1M`); it is `null` for daily, weekly, and monthly bars (`3M` and longer) that span whole sessions. The `1M` timeframe is filtered to `regular`-session bars only.
 
 ### GET /api/v1/stocks
 List all tracked ticker symbols. **Public.**
@@ -440,8 +445,7 @@ Both share fields are averages ACROSS the period, not counts at period end, so n
 input to a market capitalisation or a book value per share; a share field is null when the provider
 reports no count on that basis or a count of zero or below. Income fields are in the filer's reporting
 currency (see `reportedCurrency`), EPS is that currency per share, share fields are a number of
-shares. Figures are served as the provider reports them, with no split adjustment applied by us; providers restate their own history inconsistently, so EPS and share
-counts can sit on different bases in older periods around a split.
+shares. Per-period EPS is served as the provider reports it, and we restate it for a small list of named issuers and nowhere else: where a provider restated a company's share counts for a split but left older rows' EPS on the pre-split basis, and that has been checked against the company's own filing, we divide the EPS on the affected rows by the split ratio and mark each one with `epsBasisRepair` (`fields`, `multiplier`, `splitExecutionDates`). Share counts and net income are never changed. `epsBasisRepair` is null on almost every row, and null means we applied no EPS repair to that row: it is NOT a statement that the row's EPS and share count are on the same basis, since an unlisted issuer, a row that did not qualify, and a row whose split history we could not read all carry null. `epsBasisRepair` describes per-period EPS only: this repair never changes `epsTTM` or the other trailing-twelve-month figures, and the marker never describes a trailing adjustment. Trailing figures are assembled separately and whether they carry a split adjustment of their own depends on which source served them.
 
 ### GET /api/v1/stocks/fundamentals/periods
 Available fiscal periods. **Public.**
