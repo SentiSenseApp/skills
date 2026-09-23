@@ -578,7 +578,7 @@ Time series metric data for a stock or entity. **Quota-gated** -- all metric typ
 What each metric type means:
 
 - `mentions` -- count of documents that mentioned the entity that day, across news, social and other tracked sources.
-- `sentisense` -- the SentiSense Score, an unbounded composite of sentiment and attention (`sentisense_score` also resolves). **Prefer this over `sentiment` for any bullish-or-bearish read**: it weights tone by how actively the name is discussed, so a single post on a quiet day cannot swing it, and its points carry `metricValue.properties` (`bull`, `bear`, `directional`) so you can see the sample size.
+- `sentisense` -- the SentiSense Score, an unbounded composite of sentiment and attention (`sentisense_score` also resolves). **Prefer this over `sentiment` for any bullish-or-bearish read**: it weights tone by how actively the name is discussed, so a single post on a quiet day cannot swing it, and each point carries the counts behind it under `metricValue.properties` (see "Reading direction" below).
 - `sentiment` -- mean polarity of those documents, a float in [-1, 1], unweighted by volume and therefore thin-sample sensitive. Use it for raw tone, or with `mean-by/source` for per-source tone.
 - `social_dominance` -- the entity's share of the day's total conversation.
 - `sentisense_rating` -- the daily Rating score, 0 to 100 (not the percentile). Stocks only.
@@ -609,6 +609,17 @@ What each metric type means:
 ```
 
 Read the scalar from the flat `value` (the polarity for `sentiment`, the count for `mentions`). It saves you walking the nested `metricValue.value` (count metrics) or `metricValue.value.value` (value metrics), whose depth varies by metric type. A point with no reading omits `value`. To derive the current reading and its change: points are time-ascending, so the current value is the last point's `value`, and the change is the last point's `value` minus the prior point's (or minus the first point's for the whole window). A window with 0 or 1 point has no derivable trend, so widen `startTime` rather than reporting a change.
+
+**Reading direction from a `sentisense` point.** Each Score point carries three counts under `metricValue.properties`:
+
+```json
+{ "bull": 48.0, "bear": 17.0, "directional": 65.0 }
+```
+
+- `bull` / `bear`: mentions that day our models scored bullish / bearish for the entity.
+- `directional`: `bull` plus `bear`, the sample size behind that day's Score.
+
+Mention volume is direction-blind: a spike in `mentions` fires as hard on a crash as on a rally, so never call a name bullish or bearish from volume, or from a sector or rival's read. Settle direction from that entity's own `bull` against `bear`, and when the question is "is this spike good or bad news?", read those two counts on the spike day. Sum `bull` and `bear` across a window to state a run ("bull-led every day this week, 310 to 140"). Points are daily, one per New York calendar day, and the last point is the current day so far: do not compare it to full days.
 
 ### GET /api/v2/metrics/entity/{entityId}/distribution/{metricType}
 Distribution of a metric across a dimension (e.g., mentions by source). **Quota-gated**, available on the Free tier.
