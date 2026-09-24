@@ -593,7 +593,7 @@ What each metric type means:
 | `metricType` | path | Yes | - | `mentions`, `sentiment`, `sentisense`, `social_dominance`, `sentisense_rating`, `app_review_count`, `app_rating` |
 | `startTime` | long | No | 7 days ago | Epoch milliseconds |
 | `endTime` | long | No | now | Epoch milliseconds |
-| `maxDataPoints` | int | No | - | Downsample to N data points |
+| `maxDataPoints` | int | No | - | Return at most N of the window's points, unmerged, in ascending order, evenly spaced back from the latest point, which is always included. It caps the points and does not set the window, so pair it with `startTime` |
 
 **Response:** an array of points ordered ascending by `timestamp`. Each point exposes a flat `value` scalar alongside the full `metricValue` object:
 
