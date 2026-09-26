@@ -63,7 +63,7 @@ curl -X POST https://app.sentisense.ai/api/v1/screener/execute \
 
 Endpoints: `POST /api/v1/screener/execute` (stocks), `POST /api/v1/screener/etfs/execute` (ETFs, same shape), `GET /api/v1/screener/fields` (the catalog), `GET /api/v1/screener/screens` (curated screens with their full plans). `limit` sits next to `plan` (default 100, cap 500); an optional top-level `tickers` array scopes the screen to a watchlist. An unrecognized field name returns HTTP 400 with a message naming the bad field and listing the valid ones, and field names are case-sensitive: take them from `GET /api/v1/screener/fields`, never from guesswork.
 
-One REST shape difference that the numeric example above does not show: **`IN` and `NOT_IN` filters take a `values` array, not `value`**. Sending `"value"` (singular) gets a generic `400 malformed_request` that does not name the problem, so this is worth getting right the first time:
+One REST shape difference that the numeric example above does not show: **`IN` and `NOT_IN` filters take a `values` array, not `value`**. Sending `"value"` (singular) gets a `400 malformed_request` whose message names `values`, so the fix is quick, but it costs a round trip:
 
 ```json
 { "plan": { "filters": [ { "fieldName": "ISSUER", "op": "IN", "values": ["Vanguard", "iShares"] } ] } }

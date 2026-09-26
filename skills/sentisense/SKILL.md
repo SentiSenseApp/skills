@@ -296,7 +296,7 @@ Response: `{ isPreview, previewReason, data }`. Everything below lives under `da
 | `latestDirection` | string or null | Same three bands, from today's read. Null in lockstep with `sentisenseScore` |
 | `trend` | string | `UP`, `DOWN` or `FLAT` |
 | `scoreSparkline` | number[] | Daily Score series |
-| `mentions` / `mentionsAvg30d` | number | Today's mention volume, and the 30-day daily average |
+| `mentions` / `mentionsAvg30d` | number | Mention volume of the latest New York daily bucket with data (today's once it lands, otherwise an earlier day; `narrative` names which), and the 30-day daily average |
 | `socialDominance` | number | Latest share of voice, as a fraction (`0.021` = 2.1%) |
 | `bySource[]` | array | Per-source tone, loudest first: `source` (`News`, `Reddit`, `X`, `YouTube`, `Substack`), `direction`, `mentionShare` (whole-number percent, the array sums to 100), `value` (per-source polarity, -1 to +1) |
 | `relatedTickers[]` | array | Curated peers: `ticker`, `name` |
@@ -622,9 +622,9 @@ Read the scalar from the flat `value` (the polarity for `sentiment`, the count f
 Mention volume is direction-blind: a spike in `mentions` fires as hard on a crash as on a rally, so never call a name bullish or bearish from volume, or from a sector or rival's read. Settle direction from that entity's own `bull` against `bear`, and when the question is "is this spike good or bad news?", read those two counts on the spike day. Sum `bull` and `bear` across a window to state a run ("bull-led every day this week, 310 to 140"). Points are daily, one per New York calendar day, and the last point is the current day so far: do not compare it to full days.
 
 ### GET /api/v2/metrics/entity/{entityId}/distribution/{metricType}
-Share of a metric across a dimension (e.g., mentions by source). **Quota-gated**, available on the Free tier.
+A metric split across a dimension (e.g., mentions or sentiment by source). **Quota-gated**, available on the Free tier.
 
-Response: `{ metricType, dimension, distribution, ... }`, where `distribution` maps each dimension value to a percentage share summing to about 100, and is an empty map when there is no data. For count metrics such as `mentions`, a value is that source's share of the metric's total over the window. `sentiment` and `sentisense` cannot be summed, so for them it is the share of mention volume across the sources that have a reading; it says how much of the conversation each source is, never how positive it is (use `mean-by/{dimension}` for per-source tone). For "what share of the conversation is News", `/api/v1/stocks/{ticker}/sentiment` `data.bySource[].mentionShare` answers the same question over a fixed 30-day window.
+Response: `{ metricType, dimension, distribution, valueType, ... }`, where `distribution` maps each dimension value to a number and is an empty map when there is no data. `valueType` says what the number is. For count metrics such as `mentions` it is `SHARE_PERCENT`: that source's percentage share of the metric's total over the window, summing to about 100. For `sentiment` it is `MEAN`: that source's mean polarity over the window, in [-1, 1], the same numbers as `mean-by/{dimension}`. `sentisense` has no per-source split and returns an empty map; for where its conversation came from, read `distribution/mentions`. For "what share of the conversation is News", `/api/v1/stocks/{ticker}/sentiment` `data.bySource[].mentionShare` answers the same question over a fixed 30-day window.
 
 | Param | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
