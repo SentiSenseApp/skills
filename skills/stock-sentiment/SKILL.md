@@ -227,8 +227,9 @@ Answer "what is the market feeling about $T" in a few dense lines. Fire these in
 
 1. `GET /api/v2/metrics/entity/{T}/metric/sentiment` for the polarity trend (server default 7-day window; the latest scalar is `series[-1].value`, a float in [-1, 1]).
 2. `GET /api/v2/metrics/entity/{T}/metric/sentisense` for the composite score.
-3. `GET /api/v1/documents/ticker/{T}?limit=8` for mention volume (`totalCount`) and the sentiment-tagged feed.
-4. `GET /api/v1/insights/stock/{T}` for the top AI insight (`data[0].insightText`, with `generatedAt` for freshness).
+3. `GET /api/v2/metrics/entity/{T}/metric/mentions` for mention volume: one daily count per point, and each point's `metricValue.properties.bull` / `bear` for that day's direction.
+4. `GET /api/v1/documents/ticker/{T}?limit=8` for the sentiment-tagged feed only. Its `totalCount` counts the documents on this page (it equals `limit`), so never report it as mention volume.
+5. `GET /api/v1/insights/stock/{T}` for the top AI insight (`data[0].insightText`, with `generatedAt` for freshness).
 
 Synthesize as educational context, leading with the differentiated sentiment read, not the price: "$NVDA sentiment +0.42 over 7d and rising; SentiSense Score elevated; mention volume heavy; latest AI insight: 'Data-center demand commentary firming' (as of the batch time)." Show the `generatedAt` age so the reader knows these are batch metrics.
 
