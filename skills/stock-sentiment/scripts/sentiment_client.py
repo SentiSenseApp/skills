@@ -76,6 +76,26 @@ def rows(raw):
     return raw
 
 
+def get_all(path, page_size=500, **params):
+    """Walk a paged {isPreview, totalCount, data} feed to the end of its window.
+
+    One call is one page, not the window: keep requesting while
+    offset + len(data) < totalCount. A preview envelope stops after the first page,
+    since FREE keys cannot page past their slice. Returns the first envelope with
+    `data` holding every row."""
+    first = get(path, limit=page_size, offset=0, **params)
+    if not isinstance(first, dict) or "data" not in first or first.get("isPreview"):
+        return first
+    data, total = list(first["data"]), first.get("totalCount")
+    while isinstance(total, int) and len(data) < total:
+        page = get(path, limit=page_size, offset=len(data), **params)
+        batch = page.get("data", []) if isinstance(page, dict) else []
+        if not batch:
+            break
+        data.extend(batch)
+    return {**first, "data": data}
+
+
 def shaped(raw):
     """Like rows(), but preserve free-tier preview flags so callers can tag truncated
     data. When the envelope is a preview, keep isPreview/previewReason alongside data;
@@ -215,7 +235,7 @@ def main():
     elif a.cmd == "insider":
         out(shaped(get(f"/api/v1/insider/trades/{TE}", lookbackDays=days)))
     elif a.cmd == "congress":
-        out(shaped(get("/api/v1/politicians/activity", lookbackDays=days)))
+        out(shaped(get_all("/api/v1/politicians/activity", lookbackDays=days)))
     elif a.cmd == "filings":
         out(shaped(get(f"/api/v1/politicians/filings/{TE}", lookbackDays=days)))
     elif a.cmd == "holders":
@@ -227,7 +247,7 @@ def main():
     elif a.cmd == "estimates":
         out(shaped(get(f"/api/v1/analyst/{TE}/estimates")))
     elif a.cmd == "analyst-activity":
-        out(shaped(get("/api/v1/analyst/activity", lookbackDays=days,
+        out(shaped(get_all("/api/v1/analyst/activity", lookbackDays=days,
                        actionTypes=getattr(a, "action_types", None))))
     elif a.cmd == "earnings":
         out(shaped(get("/api/v1/calendar/earnings", ticker=T)))

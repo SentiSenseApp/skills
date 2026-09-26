@@ -32,7 +32,7 @@ Read this before presenting a number from this skill.
 - **The formula, stated plainly.** A one-standard-deviation move over a horizon is `spot * iv * sqrt(days / 365)`. Calendar days, because an option's life is wall-clock time to expiry and the served implied volatilities are annualized on that basis.
 - **One standard deviation is a band, not a boundary.** Under the model roughly two thirds of outcomes land inside it. Real distributions have fatter tails, and a stock can and does close outside the band. Never present the edges as targets, support, resistance, or a price prediction.
 - **The tilt is an assumption.** The 25-delta call and put implied volatilities are served for the near expiry only, so the template carries that skew shape forward to the 60 and 90 day horizons. The level of volatility changes across the term; the shape is held fixed. Say "modeled" rather than implying the tilt was measured at every horizon.
-- **This is end-of-day data.** `asOf` is the latest completed session and the options figures refresh the following morning. Prices are delayed, not live. The artifact stamps the session it describes; do not present it as an intraday read.
+- **This is end-of-day data.** `asOf` is the latest completed session and the figures describe that completed session; follow-ups compare the next session's open interest. Prices are delayed, not live. The artifact stamps the session it describes; do not present it as an intraday read.
 - **An earnings date inside the window is why the cone is wide.** When a report falls inside a horizon, the implied volatility for that horizon already carries the event. Point that out rather than treating a wide cone as a signal on its own.
 
 ## Prerequisites

@@ -20,6 +20,7 @@ Reach for this skill when the question is about perception, positioning, or sign
 - "What is the smart money doing this week?" (insider cluster-buys, congressional trades, 13F flows, and analyst upgrades converging on the same tickers).
 - "What is the overall market mood today, fear or greed?"
 - "Is sentiment diverging from price on $COIN?" (price up while sentiment falls, or the reverse).
+- "Mentions of $ZS just spiked: is that good or bad news for the stock?"
 - "What is the pre-earnings sentiment setup on $AAPL?"
 - "What is the AI insight on $MSFT, and what are people saying in the news?"
 
@@ -146,6 +147,11 @@ RESOLVE A NAME (only when the user typed a company or fund name, not a symbol)
         Bare array of {name, urlSlug, type, ticker}, best match first. Take the first match with a
         non-null ticker. Use type=etf for fund names (SPY resolves only there). See Pitfalls.
 
+PEERS (to test whether a mention spike is the ticker's own; see workflow 6)
+  GET /api/v1/stocks/{T}/graph?depth=1&cap=75
+        groups.peers[] is the curated comparable set, as entity slugs that the metric endpoints
+        accept in place of {T}; join a slug to nodes[] for its displayName. Peers from depth=1 only.
+
 SENTIMENT & MOOD
   GET /api/v2/metrics/entity/{T}/metric/sentiment?startTime={epochMs}&endTime={epochMs}
         Sentiment polarity time series. Omit params for the server default 7-day window.
@@ -154,8 +160,10 @@ SENTIMENT & MOOD
         whose depth differs between value metrics and count metrics.
   GET /api/v2/metrics/entity/{T}/metric/sentisense
         The SentiSense Score (unbounded composite; report as-is, never normalize to 0-100).
+        Each daily point also carries metricValue.properties.{bull, bear, directional}: that
+        day's bullish and bearish analyses and their sum. Direction lives here, not in mentions.
   GET /api/v2/metrics/entity/{T}/metric/mentions
-        Mention-volume time series (how much a ticker is being talked about).
+        Mention-volume time series (how much a ticker is being talked about). Direction-blind.
   GET /api/v2/metrics/entity/{T}/metric/social_dominance
         Share-of-conversation time series (a ticker's dominance of the chatter).
   GET /api/v2/metrics/entity/{E}/metric/app_review_count
@@ -237,12 +245,12 @@ The response is flat, but the composite is nested under `market`, not the root: 
 Find tickers where insider buying, congressional purchases, and analyst upgrades line up in the same window; convergence is the signal a quote feed cannot produce.
 
 1. `GET /api/v1/insider/cluster-buys?lookbackDays=30`.
-2. `GET /api/v1/politicians/activity?lookbackDays=30`, keeping rows with `transactionType == "PURCHASE"`.
-3. `GET /api/v1/analyst/activity?lookbackDays=30&actionTypes=UPGRADE` (server-side filter; also accepts a CSV like `UPGRADE,DOWNGRADE,INITIATE`).
+2. `GET /api/v1/politicians/activity?lookbackDays=30&limit=500`, keeping rows with `transactionType == "PURCHASE"`.
+3. `GET /api/v1/analyst/activity?lookbackDays=30&actionTypes=UPGRADE&limit=500` (server-side filter; also accepts a CSV like `UPGRADE,DOWNGRADE,INITIATE`).
 
-All three are wrapped: read `.data`. Intersect the three ticker lists and report names appearing in two or more buckets, ranked by total signal count, with a one-liner each: "$NVDA: 4 insiders bought, 1 congressional purchase, 2 analyst upgrades (30d)."
+All three are wrapped: read `.data`. **Steps 2 and 3 are paged feeds: one call is one page, not the window.** Both carry `totalCount` for the whole window on the envelope, so keep requesting with `offset` while `offset + len(data) < totalCount`. A 30-day congressional window runs to several hundred rows, which the default page (200) cuts short, and the analyst default page is 50. Reading one page silently drops most of the window and can turn a real overlap into an empty one. On a FREE key both feeds stop at a preview slice, so say the screen covered a partial window rather than reporting "no convergence". Intersect the three ticker lists and report names appearing in two or more buckets, ranked by total signal count, with a one-liner each: "$NVDA: 4 insiders bought, 1 congressional purchase, 2 analyst upgrades (30d)."
 
-**Start this one at `lookbackDays=30`, not 7.** A 7-day window is too narrow for three slow feeds to overlap: on a representative run it returned 1 cluster-buy ticker, 1 congressional purchase ticker and 21 upgraded tickers, which intersected to **zero** names in two or more buckets. The same three calls at 30 days returned 8, 65 and 45 tickers and produced 7 convergent names. The trap is that no individual bucket was empty at 7 days, so an "is this bucket empty" check passes on all three and you still report nothing found. **Widen when the INTERSECTION is thin, not when a bucket is empty**, and say which window you used. Also expect the three-way overlap to be empty even at 30 days: two-of-three is the working bar for this screen, and requiring all three will show a blank almost every time. A genuinely empty bucket (quiet week, disclosure lag) is `isPreview:false` and not an error either way. For one ticker's full flow, run `insider/trades/{T}`, `politicians/filings/{T}`, `institutional/quarters` then `institutional/holders/{T}?reportDate={Q}`, and `analyst/{T}/actions`. Present as observed positioning, never as advice.
+**Start this one at `lookbackDays=30`, not 7.** A 7-day window is too narrow for three slow feeds to overlap: on a representative run it returned 1 cluster-buy ticker, 1 congressional purchase ticker and 21 upgraded tickers, which intersected to **zero** names in two or more buckets. The same three calls at 30 days returned 8, 65 and 45 tickers and produced 7 convergent names. The trap is that no individual bucket was empty at 7 days, so an "is this bucket empty" check passes on all three and you still report nothing found. **Widen when the INTERSECTION is thin, not when a bucket is empty**, and say which window you used. Also expect the three-way overlap to be empty even at 30 days on a fully paged read: two-of-three is the working bar for this screen, and requiring all three will show a blank almost every time. A genuinely empty bucket (quiet week, disclosure lag) is `isPreview:false` and not an error either way. For one ticker's full flow, run `insider/trades/{T}`, `politicians/filings/{T}`, `institutional/quarters` then `institutional/holders/{T}?reportDate={Q}`, and `analyst/{T}/actions`. Present as observed positioning, never as advice.
 
 ### 4. Pre-earnings sentiment check
 
@@ -267,6 +275,56 @@ Surface names where perception and price disagree; a bullish gap (price down, se
 
 Frame the result as an observed divergence, not a signal to act: "Bullish divergence: $TSLA price -8% while sentiment +0.11 over 7d. Bearish divergence: $COIN price +14% while sentiment -0.09." Keep the delayed price and the batch sentiment labeled with their own freshness; do not blend them into one implied "now."
 
+### 6. Is this mention spike good or bad news?
+
+Answer "mentions of $T just jumped: is that good or bad for the stock?" in two separate steps, because size and direction live in different fields. **A mention spike is direction-blind: it fires just as hard on a crash as on a rally, so the size of a spike never tells you which way it points.** Step A settles whether the spike is real and belongs to $T; step B settles direction from $T's own numbers only.
+
+Step A, is it really a spike? Fire the first two calls in parallel, then the peer calls:
+
+1. `GET /api/v1/stocks/{T}/graph?depth=1&cap=75` and read `groups.peers[]`.
+2. `GET /api/v2/metrics/entity/{T}/metric/mentions?startTime={now-30d}&endTime={now}`, then the same call for three to five peer slugs from step 1.
+
+For each name, the spike ratio is its mentions on the spike day divided by its median daily mentions over the earlier points of the window (the median shrugs off older spikes and quiet weekends). The spike is $T's own when its ratio is roughly 2x or more AND clearly above the peers' median ratio; judge by that median, not by one busy peer. If the peers jumped too, it is a group story (sector news, a rival's print, a macro day): say so, then still read each name's direction from its own counts. Points are one per New York calendar day and the last is the current day so far, so test a finished day, or compare today-so-far only against the peers' today-so-far. An empty `groups.peers` means no curated comparables: ask the user for two or three, or say the spike was measured against $T's own history only.
+
+Step B, which way does it point? Read direction from $T alone:
+
+3. `GET /api/v2/metrics/entity/{T}/metric/sentisense?startTime={now-30d}&endTime={now}`: on the spike day's point read `metricValue.properties.bull` and `.bear`, the bullish and bearish analyses (each analysis is one news article or social post our models read as bullish or bearish for the ticker). Sum `bull` and `bear` over the earlier points for $T's usual lean: coverage leans bullish as a genre, so a day at 55% bullish on a name that normally runs 80% is a turn for the worse even with bulls still ahead.
+4. `GET /api/v1/stocks/price?ticker={T}` for `changePercent` (15-minute delayed) when the spike day is the latest session; for an older day, read that session from `stocks/chart`.
+
+Peers normalize volume only: never borrow a peer's, sector's or index's tone for $T, and never read direction from `mentions` or the spike ratio. Treat a thin day (under about 20 `directional` analyses) as unreadable rather than calling a 3-to-2 split. When the tone and the price disagree, report both and call it mixed. Budget: about eight requests with four peers.
+
+Worked example, live on a free key for the New York day of 2026-09-25. Response shapes, trimmed to the fields this workflow reads:
+
+```text
+GET /api/v1/stocks/ZS/graph?depth=1&cap=75
+  {"ticker": "ZS", "root": "Zscaler-Inc", "depth": 1, "truncated": false,
+   "groups": {"peers": ["Cloudflare-Inc", "CrowdStrike-Holdings-Inc", "Okta-Inc", "Palo-Alto-Networks-Inc"], ...},
+   "nodes": [{"slug": "Cloudflare-Inc", "displayName": "Cloudflare, Inc.", "type": "COMPANY"}, ...]}
+GET /api/v2/metrics/entity/ZS/metric/mentions  (spike-day point)
+  {"timestamp": 1790308800000, "metricType": "MENTIONS", "value": 49.0,
+   "metricValue": {"type": "CountMetricValue", "value": 49, "count": 49}}
+GET /api/v2/metrics/entity/ZS/metric/sentisense  (same day, metricValue.properties)
+  {"bear": 18.0, "bull": 14.0, "directional": 32.0}
+```
+
+```
+$ZS mention spike, New York day 2026-09-25
+Spike      49 mentions vs a 17/day median over the prior 28 days: 2.9x
+Peers      Cloudflare 1.0x, CrowdStrike 0.7x, Okta 2.0x, Palo Alto 0.7x (median 0.9x): ZS's own
+Direction  bearish analyses led 18 to 14 (44% bullish, against 72% over the prior 28 days)
+Price      -10.1% on the session (15-min delayed)
+Read       a real spike, and bad news by ZS's own numbers: coverage turned bearish, price fell
+
+$COST mention spike, New York day 2026-09-25
+Spike      160 mentions vs a 74/day median over the prior 28 days: 2.2x
+Peers      Walmart 1.0x, Kroger 0.8x, Target 0.6x, Dollar Tree 0.2x (median 0.7x): COST's own
+Direction  bullish analyses led 91 to 29 (76% bullish, in line with 76% over the prior 28 days)
+Price      +2.9% on the session (15-min delayed)
+Read       a real spike, and good news by COST's own numbers: coverage stayed bullish, price rose
+```
+
+Two spikes of about the same size on the same day, pointing opposite ways: any rule that reads direction off the spike itself gets one of them wrong. Report what the coverage and the price did, not what the stock does next.
+
 ## Pitfalls
 
 - **Company names are not tickers.** When the user names the company ("sentiment on tesla", "is the mood on alphabet bullish") instead of typing a symbol, resolve it first with `GET /api/v1/kb/entities/search?q={name}&type=company&limit=5`: a bare array of `{name, urlSlug, type, ticker}`, best match first (`type=etf` for a fund, since `SPY` resolves only there). Take the first match with a non-null `ticker`; a tracked subsidiary or private company can outrank its listed parent ("google" returns Google LLC with `ticker: null` before Alphabet `GOOGL`). Several plausible ticker-bearing matches means ask a one-line clarification; an empty array means say so. Never uppercase the word and hope: `$TESLA` fails the metric series with `404 entity_not_found` (that error carries up to three `suggestions`, which is a resolution hint, not data), while the smart-money feeds return an empty `data: []` that reads like a quiet name when the real failure was the identifier. An exact ticker the user typed skips this step, and one resolution call per name covers the whole session.
@@ -275,6 +333,7 @@ Frame the result as an observed divergence, not a signal to act: "Bullish diverg
 - **Preview gating is data, not failure.** On the free tier, preview-gated endpoints return `isPreview:true` with a real truncated slice (for example the top 3 insights, the current earnings week, a sliced holder list). Render the slice as the answer and tag it `(preview)`. Mention PRO only when the truncation is materially limiting the answer.
 - **Wrap versus flat differs by endpoint.** Reading `.data` on a flat endpoint (or the reverse) yields nothing. Flat: `stocks/price`, `stocks/prices`, `stocks/chart`, `stocks/popular`, `stocks/{T}/profile`, `market-mood`, the `sentiment`, `sentisense`, `mentions`, and `social_dominance` series, and `institutional/quarters`. Wrapped under `.data`: `insider/*`, `politicians/*`, `institutional/holders`, `analyst/*`, `insights/*`, and `calendar/earnings`. When unsure, accept both.
 - **Read the metric scalar from the flat `value`.** Every point in a metric series carries a top-level `series[i].value` alongside the nested `metricValue`, and it holds the reading: the polarity for `sentiment`, the composite for `sentisense`, the count for `mentions`, the share for `social_dominance`. Prefer it, because the nested depth is **not** the same for every metric. A value metric (`sentiment`, `sentisense`, `social_dominance`) nests at `metricValue.value.value` because `metricValue.value` is itself a dict; a count metric (`mentions`) is `{"type":"CountMetricValue","value":36,"count":36}`, so `metricValue.value` is already the integer and `metricValue.value.value` throws. The flat field spares you the branch. A point with no reading omits `value`; skip that point rather than reading it as zero.
+- **A mention spike is direction-blind.** `mentions` counts every mention whatever its tone, so it fires as hard on a crash as on a rally. Never call a spike good or bad from its size, and never borrow a peer's, sector's or index's tone: direction comes from the ticker's own `bull` against `bear` and its own price move. Workflow 6 is the full recipe.
 - **Congress and insider use different verbs.** Insider rows carry `transactionType` BUY or SELL; congressional rows carry PURCHASE or SALE. Filter each with its own vocabulary.
 - **Not every insider SELL is a sale.** `transactionType` is a simplified rollup of the SEC's one-letter codes, and code `F` lands on `SELL`: those are shares the company withheld to cover the insider's taxes when a grant vested. Nobody chose to sell and no shares reached the market. On companies that grant heavily this is the majority of the reported "sold" dollars, so a bearish read built on a raw `SELL` filter is describing a vesting schedule. Read `transactionCode` and drop `F` before you tally selling. The market-wide `/insider/activity` rollup already excludes it for you; `/insider/trades/{T}` returns every filed row, so there you filter yourself.
 - **Always fetch quarters first.** Call `institutional/quarters` and pass the `reportDate` of the first quarter whose `pending` is not true to `institutional/holders`; skip any `pending:true` entry (within ~45 days of a quarter close the most-recent quarter is still filing and holds almost no holders), and fall back to `[0]` only if every entry is `pending:true`. Never hardcode a quarter.

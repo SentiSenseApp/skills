@@ -93,6 +93,13 @@ line rather than pretending they came back.
 `days` is not the lookback control on `/documents/stories`. **Set the window with `filterHours`**:
 `720` is 30 days, `336` is 14, `168` is a week. Then page with `offset`, `limit=50` per page.
 
+**De-duplicate by `id` across pages before you count or rank anything.** On wide windows the pages
+can overlap: three pages at `filterHours=720` have returned 150 rows but only 107 distinct
+clusters, which inflates every ticker count built on them and can list one cluster twice in a
+top-N. Keep a set of seen `id`s, and stop paging when a page comes back short or empty. A
+30-day window holds several hundred clusters, so expect around ten full pages before that
+happens. Report fetched versus unique in the coverage line ("400 rows, 357 unique clusters").
+
 **Identify your client.** Send a `User-Agent` naming your agent runtime and this skill, for
 example `OpenClaw/1.4 (last-30-days-in-markets)` or `ClaudeCode/2.1 (last-30-days-in-markets)`. Substitute your own runtime and
 version if neither matches. You can also volunteer what your agent is called by adding an
@@ -294,7 +301,7 @@ details. Fixed order, and every section is required unless its data layer came b
    three themes if the tickers and titles genuinely cluster; leave them chronological if they do not.
    **A theme is an observation about the data, not a thesis you supply.**
 
-5. **Names and sectors of the month.** Count ticker appearances across all fetched clusters and rank
+5. **Names and sectors of the month.** Count ticker appearances across all distinct clusters (de-duplicated by `id`) and rank
    them, with each name's mean cluster sentiment beside its count. This is the most useful table in
    the brief and it costs no extra calls: it is derived entirely from data you already have.
    Say plainly that it counts *attention*, not performance.

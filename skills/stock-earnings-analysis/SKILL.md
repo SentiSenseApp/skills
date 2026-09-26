@@ -106,7 +106,7 @@ changes.
 | `headline` | One-line editorial summary of the quarter |
 | `summaryMd` | Markdown body summarizing the reported results |
 | `kpiHighlights` | `[{label, value, yoy}]`; `value` and `yoy` are display strings, `yoy` may be absent |
-| `guidance` | Forward-guidance language as prose; absent when the quarter carries none |
+| `guidance` | Forward-guidance language from the press release, as prose; absent when the release carries none (the call may still have guided) |
 | `hasTranscript` | `true` when a summary of the earnings call exists for this quarter |
 | `transcriptSummaryMd` | Markdown body summarizing the call; absent when `hasTranscript` is false |
 | `transcriptHighlights` | Call-specific `[{label, value, yoy}]`; absent when there is no call summary |
@@ -143,8 +143,14 @@ raised. Check for no-guidance and withdrawal language first (`no guidance`, `did
 issued"**, which is a finding worth printing, not a null to hide. Only then look for direction, and
 match on whole words so "increasingly" and "discounting" cannot false-positive.
 
-When a quarter has no `guidance` field at all, say the quarter carried no guidance language. Do not
-infer a direction from the headline or from the numbers.
+**An absent `guidance` field means the press release carried none, not that the company issued
+none.** Many companies guide only on the call: AAPL's September-quarter revenue outlook and JPM's
+raised net-interest-income guide both live in the call summary with no `guidance` field on the
+quarter. So when `guidance` is absent and `hasTranscript` is true, read `transcriptSummaryMd` and
+`transcriptHighlights` for outlook language and apply the same negation-first rule to it, citing it
+as call guidance. Say "no guidance was issued" only when the press release and the call summary
+both lack it; with no call summary yet, say the release carried none and the call summary is
+pending. Do not infer a direction from the headline or from the numbers.
 
 ### Attaching filings to a quarter
 
@@ -414,7 +420,7 @@ line:
 - no call summary yet for this quarter (`hasTranscript: false`),
 - no stored quarter for this ticker at all (empty `data`),
 - no filings attached to this quarter,
-- no guidance language, or guidance explicitly withheld by management.
+- no guidance language in either the release or the call summary, or guidance explicitly withheld by management.
 An empty section that renders as nothing tells the reader the data does not exist. Saying "no call
 summary yet, this one often lands after the press-release content" tells them to check back.
 
@@ -458,7 +464,8 @@ applies and the absence gets a line.
    - `headline`, verbatim.
    - The call summary, when `hasTranscript` is true. This is the crown jewel; it goes near the top.
    - The KPI highlights table: `label`, `value`, `yoy`. The provided subset, nothing added.
-   - Guidance: the language, plus your derived direction, or the explicit "no guidance was issued".
+   - Guidance: the language (release `guidance`, else the call summary's outlook), plus your derived
+     direction and which source it came from, or the explicit "no guidance was issued".
    - Filings attached to this quarter: form, `filedAt`, `materialityScore`, and one line on what
      changed. `topNewTerms` is a useful compression when the diff is large.
    - The `earnings_pulse` signal for this quarter, if there is one, clearly labelled as a signal.
