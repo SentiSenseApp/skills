@@ -203,7 +203,7 @@ Several of these are preview-gated and return `{isPreview, previewReason, data}`
 read `isPreview` too:
 
 - `insights/latest` returns the top 5 on Free, the full list on PRO.
-- `calendar/earnings` returns one week on Free, about a 30-day forward window on PRO. `metadata.windowStart` and `metadata.windowEnd` describe the window you actually got, so read them rather than assuming.
+- `calendar/earnings` returns one week on Free, about a 60-day forward window on PRO. `metadata.windowStart` and `metadata.windowEnd` describe the window you actually got, so read them rather than assuming.
 - `insights/market` returns the top 5 on Free.
 
 When `isPreview` is true, the brief says so in the coverage line. It does not quietly present the

@@ -1,6 +1,6 @@
 ---
 name: stocks-analysis
-description: "US stocks analysis by an adversarial investment committee. Legendary-investor personas independently research a thesis, attack each other's cases against a shared evidence ledger (sentiment, smart money, SEC fundamentals), and reconcile into a verdict with recorded dissents. Structured rubrics keep every number sourced, on any model. Includes five quick data workflows. Use for stock research, investment thesis, bull case vs bear case, due diligence on a ticker, should I buy this stock, deep dive on a company. Read-only. No trading, no purchases, no write operations, no wallet access."
+description: "US stocks analysis by an adversarial investment committee. Legendary-investor personas independently research a thesis, attack each other's cases against a shared evidence ledger (sentiment, smart money, SEC fundamentals), and reconcile into a plain-English verdict: the bottom line first, then who disagrees and why. Structured rubrics keep every number sourced, on any model. Includes five quick data workflows. Use for stock research, investment thesis, bull case vs bear case, due diligence on a ticker, should I buy this stock, deep dive on a company. Read-only. No trading, no purchases, no write operations, no wallet access."
 license: MIT
 metadata:
   homepage: https://sentisense.ai
@@ -9,7 +9,7 @@ metadata:
 
 # US Stocks Analysis: The Investment Committee - SentiSense
 
-> Adversarial investment-committee analysis for US equities. For quick data asks, five expert workflows synthesize price, sentiment, smart money, analyst ratings, and AI insights into terminal-grade briefs. For thesis-grade questions ("should I own NVDA for 3 years?"), the skill convenes a committee of legendary-investor personas that independently research, then attack each other's cases against a shared evidence ledger, then reconcile into a verdict with recorded dissents. The structure is designed so that even a small local model, following the templates literally, produces grounded, multi-perspective analysis instead of consensus mush. Read-only API. No trading, no purchases, no write operations, no wallet access.
+> Adversarial investment-committee analysis for US equities. For quick data asks, five expert workflows synthesize price, sentiment, smart money, analyst ratings, and AI insights into terminal-grade briefs. For thesis-grade questions ("should I own NVDA for 3 years?"), the skill convenes a committee of legendary-investor personas that independently research, then attack each other's cases against a shared evidence ledger, then reconcile into a plain-English verdict that opens with the bottom line and says who disagrees and why. The structure is designed so that even a small local model, following the templates literally, produces grounded, multi-perspective analysis instead of consensus mush. Read-only API. No trading, no purchases, no write operations, no wallet access.
 
 **Base URL:** `https://app.sentisense.ai`
 **Website:** https://sentisense.ai
@@ -180,12 +180,38 @@ STEP 0  SCOPE       Restate the question as one falsifiable thesis; identify tic
 STEP 1  GATHER      Fill the Evidence Ledger. Every number from a source. Unsourceable = [NOT AVAILABLE]. Do NOT analyze yet.
 STEP 2  BASE CASE   Fill the neutral Base Thesis template using ONLY ledger rows.
 STEP 3  CONVENE     Pick the panel (default 5, or the user's named investors). Load each persona's worksheet.
-STEP 4  DEBATE      Run rounds R1-R3 (sealed theses, cross-examination, rebuttals).
+STEP 4  DEBATE      Run rounds R1-R3 (opening cases, challenges, replies).
 STEP 5  SYNTHESIZE  The Chair runs R4 and fills the Committee Verdict template.
 STEP 6  GATE        Run the Pre-Flight Checklist. Fail closed on fabrication.
 ```
 
 Each step below is its own section with its template inlined, so reading top to bottom IS executing the procedure.
+
+## How the result reads: plain English, bottom line first
+
+The method is rigorous; what the user reads must not sound like a method. A retail investor should understand the result in one read and know what the committee is telling them. Four rules bind everything you print:
+
+1. **Open with the bottom line.** The first thing the reader sees is two or three plain sentences: what the committee concluded about the thesis, the main reason, and the main risk. No row ids, no stance tokens, no method words. Votes, cases, challenges and evidence come after it as the supporting detail. You still run the steps in pipeline order; this rule is about what you print. Your final reply starts with the verdict, bottom line first, then the opening cases, the challenges and replies, and the evidence table last. If your working already appeared earlier in the conversation, the final reply still starts with the bottom line and points back to the working instead of repeating it.
+2. **Say the fact, then cite it.** Every claim states its fact in words: "insiders sold 7 times and bought none in the last 90 days [E12]". A row id is a small citation at the end of a sentence, never the explanation. "Per E12" or "E5 tracks E3" on its own is a defect; write "free cash flow tracks net income [E3][E5]".
+3. **Print the reader's labels, not the protocol's.** The tokens in this file (stance codes, challenge types, round numbers) are how you run the method. When you print, use the right-hand column:
+
+| Protocol term (you) | What the reader sees |
+|---|---|
+| R1 case | Opening case |
+| R2 objection | Challenge |
+| R3 rebuttal | Reply |
+| STEELMAN | Their best point |
+| SUPPORT / LEAN-SUPPORT / LEAN-OPPOSE / OPPOSE / PASS | For / Leaning for / Leaning against / Against / Pass |
+| EVIDENCE / LOGIC / BLINDSPOT / FRAME | The facts say otherwise / Doesn't follow / Blind spot / Wrong question |
+| FATAL / MATERIAL / MINOR | Breaks the case / Serious / Minor |
+| CONCEDE / DEFEND / PARTIAL | Concedes / Stands firm / Partly concedes |
+| FALSIFIER | What would change my mind |
+| ALWAYS-ASK | Signature question |
+| Invert pass | How this could be wrong |
+| UNRESOLVED | Unsettled |
+| Evidence Ledger | Evidence |
+
+4. **Name each seat by its lens once.** The first time a seat speaks, say what it looks for in a few words ("the Short-Seller, who hunts for what could go wrong"). After that the seat name is enough.
 
 ---
 
@@ -249,10 +275,10 @@ The current `sentisenseScore` can be null until the day's batch lands. In that c
 ### The ledger template
 
 ```
-### EVIDENCE LEDGER: {TICKER}   (filled {date})
+### EVIDENCE: {TICKER}   (filled {date}; each claim later cites a row by its ID)
 | ID  | Fact                            | Value | As-of / Period      | Class     | Tier | Source |
 |-----|---------------------------------|-------|---------------------|-----------|------|--------|
-| E1  | Price + day change              | $__ / __% | 15-min delayed  | realtime  | D1   | SS /stocks/price |
+| E1  | Price + day change              | $__ / __% | 15-min delayed  | delayed   | D1   | SS /stocks/price |
 | E2  | Revenue (TTM or latest FY)      | $__   | __ (state FY end)   | quarterly | P    | SS /fundamentals/history |
 | E3  | Net income (TTM or latest FY)   | $__   | __                  | quarterly | P    | SS /fundamentals/history |
 | E4  | Operating cash flow             | $__   | __                  | quarterly | P    | SS /fundamentals/history |
@@ -516,7 +542,7 @@ MANDATORY CHALLENGE: the seat that ignored the rate environment entirely.
 ```
 
 ```
-PERSONA: The Forensic Short-Seller (Chanos/Block archetype). THE NON-NEGOTIABLE BEAR SEAT.
+PERSONA: The Short-Seller (Chanos/Block archetype). THE NON-NEGOTIABLE BEAR SEAT.
 ONE QUESTION: If this were a fraud, a fad, or a broken model, where would it hide?
 BEFORE YOU SPEAK, CHECK IN ORDER:
   [ ] Cash conversion: multi-period gap between E3 earnings and
@@ -581,10 +607,10 @@ Resolve by path:
                                                      each tied to a ledger row.
 ```
 
-Worked example, Michael Burry (deep-value + forensic hybrid):
+Worked example, Michael Burry (deep-value investor who also digs through the filings for problems):
 
 ```
-PERSONA: The Contrarian Forensic (Burry archetype)
+PERSONA: The Contrarian (Burry archetype)
 ONE QUESTION: What is the crowd refusing to see in the filings?
 BEFORE YOU SPEAK, CHECK IN ORDER:
   [ ] Read the numbers backwards: does tangible value + FCF
@@ -607,48 +633,51 @@ Two more archetype anchors, one line each: **Cathie Wood archetype** = innovatio
 
 **Path C: made-up or joke names.** Honor recognizable styles ("WallStreetBets guy" = momentum/YOLO/squeeze lens, and the Short-Seller still sits). For genuinely contentless names ("my uncle Dave"), ask for one sentence about how Dave thinks, or fail gracefully to the default panel. Never invent.
 
-**Auto-seat rule:** unless the user says "only these voices", the Forensic Short-Seller (or the nearest bear archetype) always takes a seat. Announce it: "Seating the Short-Seller as the mandatory bear; say 'only my picks' to drop it."
+**Auto-seat rule:** unless the user says "only these voices", the Short-Seller (or the nearest bear archetype) always takes a seat. Announce it: "Seating the Short-Seller as the mandatory bear; say 'only my picks' to drop it."
 
 ---
 
 ## STEP 4: The Debate (rounds R1-R3)
 
-Identical across execution modes. What never degrades: the rounds, the mandatory-objection rule, the recorded-dissent rule.
+Identical across execution modes. What never degrades: the rounds, the rule that every seat must challenge another, and the rule that disagreement is always shown.
 
-### R1: Sealed theses (independent, no cross-talk)
+### R1: Opening cases (each seat writes alone, no cross-talk)
 
 Each seat, in isolation (Mode A: parallel sub-agents; Mode B: hard context reset per seat), fills:
 
 ```
-R1 / {SEAT}: STANCE: <one of the five>
-CASE (max 5 lines, every number cites a row):
+OPENING CASE / {SEAT}: STANCE: <one of the five; printed as For / Leaning for / Leaning against / Against / Pass>
+WHY (max 5 lines; state each fact in words, then cite its row):
   1. ___ [E_]
   2. ___ [E_]
   3. ___ [E_]
-ALWAYS-ASK ANSWERED: <one line, for THIS ticker>
-FALSIFIER: "I flip my stance if ___" <specific and checkable, name the row or source>
+SIGNATURE QUESTION, ANSWERED (the ALWAYS-ASK): <one line, for THIS ticker>
+WHAT WOULD CHANGE MY MIND (the FALSIFIER): "I flip my stance if ___" <specific and checkable, name the row or source>
 ```
 
 Rules: worksheet boxes checked in order before writing; only this turn's ledger rows may be cited; missing data = "I cannot assess X without E_", which weakens the stance, not the honesty. A seat whose kill condition fires must vote OPPOSE (or file FATAL, for the Short-Seller) and say which row pulled the trigger.
 
-### R2: Cross-examination (mandatory, typed, severity-scored)
+### R2: Challenges (mandatory, typed, graded by how serious)
 
-Each seat files **at least one** objection against a DIFFERENT seat. Self-objections do not count. Format:
+Each seat files **at least one** challenge (an objection) against a DIFFERENT seat. Challenging yourself does not count. Format:
 
 ```
-R2 / {FROM} vs {TO}: [TYPE] [SEVERITY]
-  "<the objection, max 3 lines, citing rows>"
-TYPE:      EVIDENCE (your row says otherwise) | LOGIC (non sequitur) |
-           BLINDSPOT (your lens cannot see this) | FRAME (you answered the wrong question)
-SEVERITY:  FATAL (kills the case) | MATERIAL (changes the stance) | MINOR (weakens it)
+CHALLENGE / {FROM} challenges {TO}: [TYPE] [SEVERITY]
+  "<the challenge, max 3 lines, the fact in words, citing rows>"
+TYPE:      EVIDENCE (the facts say otherwise: your row shows something else) |
+           LOGIC (doesn't follow) | BLINDSPOT (blind spot: your lens cannot see this) |
+           FRAME (wrong question: you answered a different one)
+SEVERITY:  FATAL (breaks the case) | MATERIAL (serious: changes the stance) | MINOR (weakens it)
 ```
+
+Print the type and severity with their plain labels (see "How the result reads"), not the capitalized tokens.
 
 Forcing functions, all hard:
 
-- **Objection quota:** zero objections = failed run. Rerun R2 with the header "you are paid to disagree".
-- **Severity floor:** at least one objection across the table must be MATERIAL or FATAL. All-MINOR = theater; rerun R2.
-- **Steelman-before-rebuttal** (applies in R3, declared here): no seat may rebut an objection without first restating its strongest form in one line and citing a row. A rebuttal without a steelman is invalid and is struck.
-- **Staleness is a first-class axis:** "your E14 is a quarter old" or "your E10 as-of predates the earnings report" are legitimate MATERIAL objections. Check the As-of column before trusting a row in a fight.
+- **Challenge quota:** zero challenges = failed run. Rerun R2 with the header "you are paid to disagree".
+- **Severity floor:** at least one challenge across the table must be MATERIAL or FATAL. All-MINOR means the debate was for show; rerun R2.
+- **Their best point before any reply** (applies in R3, declared here; the method's name for it is the steelman): no seat may answer a challenge without first restating the challenger's strongest version of it in one line and citing a row. A reply without it is invalid and is struck.
+- **Staleness is a first-class axis:** "your E14 is a quarter old" or "your E10 as-of predates the earnings report" are legitimate MATERIAL challenges. Check the As-of column before trusting a row in a fight.
 - **Escalate down the tiers to settle evidence fights.** When two seats disagree about a fact, the tiebreak is a lower tier, appended as a new row:
 
 ```
@@ -659,57 +688,64 @@ Escalation 2  "Revenue is accelerating" (press narrative) vs the filings:
               call the quarterly revenue series (/fundamentals/history?timeframe=quarterly, [E2 source]);
               is the LATEST reported quarter accelerating? Append. EDGAR only if the dispute is about a line item.
 Escalation 3  "Sentiment is bullish" [E10] vs "that's stale":
-              re-read E10's as-of; if it predates a material event [E16, E20], the freshness objection stands.
+              re-read E10's as-of; if it predates a material event [E16, E20], the freshness challenge stands.
 ```
 
-SentiSense gives the read, including signals and reported statements. Supplied EDGAR material can provide the audit trail underneath it; without that material, the Chair records the dispute as UNRESOLVED and caps confidence.
+SentiSense gives the read, including signals and reported statements. Supplied EDGAR material can provide the audit trail underneath it; without that material, the Chair records the dispute as UNRESOLVED (printed as "unsettled") and caps confidence.
 
-### R3: Rebuttals
+### R3: Replies (their best point first, then the answer)
 
-Every seat answers every MATERIAL and FATAL objection against it:
+Every seat answers every MATERIAL and FATAL challenge against it:
 
 ```
-R3 / {SEAT} answers {FROM}: [CONCEDE | DEFEND | PARTIAL]
-  STEELMAN: "<their strongest form, one line, cited>"
-  ANSWER:   "<max 3 lines, cited>"
+REPLY / {SEAT} answers {FROM}: [CONCEDE | DEFEND | PARTIAL]   (printed: Concedes / Stands firm / Partly concedes)
+  THEIR BEST POINT (the STEELMAN): "<the challenger's strongest version, one line, cited>"
+  ANSWER:     "<max 3 lines, the fact in words, cited>"
   STANCE NOW: <same or moved, one of the five>
 ```
 
-**Concession is scored as a win.** A seat that moves its stance on evidence is doing the job; a seat that never moves regardless of input is a broken instrument. (This is Bayesian updating taught by structure.) MINOR objections may be answered in one line or accepted silently.
+**Conceding is scored as a win.** A seat that moves its stance on evidence is doing the job; a seat that never moves regardless of input is a broken instrument. (This is Bayesian updating taught by structure.) MINOR challenges may be answered in one line or accepted silently.
 
 ---
 
-## STEP 5: Synthesis (R4, the Chair) and the Committee Verdict
+## STEP 5: The verdict (R4, the Chair)
 
-The Chair is **neutral and is not one of the investor personas**. In Mode A the main agent chairs; in Mode B you put on the Chair hat last, after a hard reset. Before filling the verdict, the Chair runs one **Invert pass**: "If this verdict is wrong, why? Which cited row is weakest or stalest? Is the committee pattern-matching a story? Overweighting the latest quarter?" One paragraph, kept in the transcript.
+The Chair is **neutral and is not one of the investor personas**. In Mode A the main agent chairs; in Mode B you put on the Chair hat last, after a hard reset. Before filling the verdict, the Chair runs one **Invert pass** (printed as "How this could be wrong"): "If this verdict is wrong, why? Which cited row is weakest or stalest? Is the committee pattern-matching a story? Overweighting the latest quarter?" One paragraph, kept in the transcript.
 
 **Devil's-advocate backstop:** if all seats landed on the same side (all SUPPORT/LEAN-SUPPORT or all OPPOSE/LEAN-OPPOSE), the committee has failed its diversity function. The Chair must write the strongest opposite case itself, citing rows, before the verdict. Unanimity without a written counter-case is an invalid run.
 
+The verdict opens with the bottom line and puts the detail after it. The BOTTOM LINE is the committee's center of gravity written for a first-time investor: two or three plain sentences saying what the committee concluded about the thesis, the main reason, and the main risk. No row ids, no stance tokens, no method words inside it; its citations go on the line below.
+
 ```
-### COMMITTEE VERDICT: {TICKER}: "<the Step 0 thesis>"
-COMMITTEE MODE: A | B    SEATS: <names>    LEDGER: <n rows filled, m [NOT AVAILABLE]>
-TALLY: SUPPORT _ / LEAN-SUPPORT _ / LEAN-OPPOSE _ / OPPOSE _ / PASS _
-CENTER OF GRAVITY: <one sentence> @ CONFIDENCE HIGH | MED | LOW
-STRONGEST BULL (from {seat}): <one line> [E_]
-STRONGEST BEAR (from {seat}): <one line> [E_]
-THE KEY DISAGREEMENT: <the ONE axis the table split on, e.g. "earnings quality vs tape">
-RECORDED DISSENTS (mandatory, never suppressed):
-  {seat}: <one line> [E_]
-DECISIVE EVIDENCE TO WATCH (from the falsifiers, most decisive first):
-  1. <what, where to get it, when it lands (e.g. next 10-Q, E16 date)>
+### COMMITTEE VERDICT: {TICKER}
+BOTTOM LINE: <2-3 plain sentences: the conclusion on the thesis, the main reason, the main risk>
+  (rests on: [E_][E_])
+CONFIDENCE: HIGH | MED | LOW, because <one plain reason, e.g. "4 of 5 seats lean the same way">
+THE THESIS WE TESTED: "<the Step 0 thesis>"
+HOW THEY VOTED: For _ / Leaning for _ / Leaning against _ / Against _ / Pass _
+BEST CASE FOR (from {seat}): <one line, the fact in words> [E_]
+BEST CASE AGAINST (from {seat}): <one line, the fact in words> [E_]
+WHERE THEY SPLIT: <the ONE question the table disagreed on, in plain words, e.g. "whether today's price already pays for the growth">
+WHO DISAGREES AND WHY (mandatory, never left out):
+  {seat}: <one line, the fact in words> [E_]
+WHAT TO WATCH (what would settle it, from the seats' change-my-mind lines, most decisive first):
+  1. <what, where it comes from, when it lands (e.g. the next quarterly report, due around the next earnings date [E16])>
   2. ...
-WHAT WE DON'T KNOW: <the [NOT AVAILABLE] rows that mattered + UNRESOLVED escalations>
+WHAT WE DON'T KNOW: <the missing facts that mattered, plus any unsettled disputes>
+RUN NOTES: mode A | B; seats <names>; evidence <n rows filled, m not available>
 This is educational analysis of a thesis, not investment advice.
 ```
 
+A bottom line that reads well: "The committee leans against the idea that {T} is a good 3-5 year holding at today's price. The business turns its profits into real cash, but the price already assumes several more years of fast growth. The main risk is that growth slows while the stock is still priced for it." One that fails: "Center of gravity: superb cash engine vs multiple [E5][E9], LEAN-OPPOSE 3-2."
+
 **Confidence is deterministic, not vibes:**
 
-- **HIGH**: at least 2/3 of voting seats on the same side AND the center-of-gravity case rests on at least two Tier P or D1 hard rows.
-- **MED**: a split table, or key support rows are soft, stale, or secondary-sourced.
-- **LOW**: split on THE key axis, or the ledger is thin on the rows the thesis needs.
+- **HIGH**: at least 2/3 of voting seats on the same side AND the bottom line rests on at least two Tier P or D1 hard rows.
+- **MED**: a split vote, or key support rows are soft, stale, or secondary-sourced.
+- **LOW**: split on THE key question, or the ledger is thin on the rows the thesis needs.
 - **Caps:** most Tier P statement rows `[NOT AVAILABLE]` caps at MED (with a key this should be rare: the two fundamentals calls fill E2-E9, so a capped run means coverage genuinely came back empty). An UNRESOLVED evidence escalation on a load-bearing fact caps at MED. Both caps get named in WHAT WE DON'T KNOW.
 
-The recorded dissents and the exact-evidence-that-would-settle-it are the signature of the product. A professional committee's value is the bear in the room and the unresolved crux; never trade them for a cleaner-looking answer.
+Who disagrees and why, and the exact evidence that would settle it, are the signature of the product. A professional committee's value is the bear in the room and the unresolved crux; never trade them for a cleaner-looking answer.
 
 ---
 
@@ -723,9 +759,12 @@ Run last, before showing the user anything:
 [ ] Every fundamental row states its fiscal period (watch FY ends: NVDA Jan, AAPL Sep).
 [ ] Every row shows its as-of; nothing is called "real time", including price.
 [ ] Every seat voted from the single stance vocabulary and cited at least one row.
-[ ] At least one MATERIAL+ objection was filed; dissents are recorded, not smoothed away.
-[ ] Every rebuttal opened with a steelman.
-[ ] The strongest bull AND the strongest bear are real, attributed, and cited (no straw men).
+[ ] At least one MATERIAL or FATAL challenge was filed; who disagrees is shown, not smoothed away.
+[ ] Every reply opened with the challenger's best point.
+[ ] The best case for AND the best case against are real, attributed, and cited (no straw men).
+[ ] The output opens with the plain bottom line: 2-3 sentences, no row ids, no method words.
+[ ] Every claim states its fact in words; row ids appear only as trailing citations.
+[ ] Printed labels are the reader's (For / Against, Challenge, Reply, Their best point), not protocol tokens.
 [ ] No buy/sell instruction, no price target, no allocation advice, anywhere.
 [ ] The educational disclaimer line is present. No em dashes in the output.
 ```
@@ -764,9 +803,9 @@ A (parallel, 5 seats)  ->  B full (sequential, 5 seats)  ->  B lite (3 seats + C
                                                           ->  minimum (1 bull + 1 bear + Chair)
 ```
 
-**What degrades: seat count and parallelism. What NEVER degrades: the four rounds, the mandatory objection, the recorded dissent, the pre-flight gate.** The analog of "degrade to less data, never invented data" is: degrade to fewer voices, never to fake agreement.
+**What degrades: seat count and parallelism. What NEVER degrades: the four rounds, the mandatory challenge, the "who disagrees and why" section, the pre-flight gate.** The analog of "degrade to less data, never invented data" is: degrade to fewer voices, never to fake agreement.
 
-**The lite path (small context windows, local models).** 3 seats: Quality Owner, Forensic Short-Seller, Macro Trader (maximum lens diversity per token: quality, forensics, macro). Trim the ledger to E1-E12 + E18. One objection per seat in R2, one-line steelmans in R3. Keep every template otherwise intact. Rough budget: full committee runs ~2.5-3.5k output tokens across rounds; lite runs ~1.2-1.5k. If even lite does not fit, run minimum (the Quality Owner as bull, the Short-Seller as bear, Chair) and say so in the verdict's SEATS line.
+**The lite path (small context windows, local models).** 3 seats: Quality Owner, Short-Seller, Macro Trader (maximum lens diversity per token: business quality, red flags in the numbers, macro). Trim the ledger to E1-E12 + E18. One challenge per seat in R2, a one-line "their best point" in each R3 reply. Keep every template otherwise intact. Rough budget: full committee runs ~2.5-3.5k output tokens across rounds; lite runs ~1.2-1.5k. If even lite does not fit, run minimum (the Quality Owner as bull, the Short-Seller as bear, Chair) and say so in the verdict's RUN NOTES line.
 
 **API cost:** a full ledger is ~10-14 SentiSense calls (the 8-12 D1 calls plus the two fundamentals calls). Within the free tier's 30/min with room to spare; one committee run costs about 1-2% of the free monthly quota. Supplied FRED or EDGAR material adds no SentiSense calls.
 
@@ -774,13 +813,33 @@ A (parallel, 5 seats)  ->  B full (sequential, 5 seats)  ->  B lite (3 seats + C
 
 ## Worked example (abbreviated; all numbers illustrative)
 
-A compressed excerpt showing the shape. Every number below is marked (ill.) = illustrative; never reuse them as facts.
+A compressed excerpt showing the shape, in the order the reader sees it: the verdict first, then the working. Every number below is marked (ill.) = illustrative; never reuse them as facts.
 
 ```
-THESIS UNDER REVIEW: NVDA: "At today's price, NVDA is attractive for a 3-5 year holder." FRAME: own, 3-5y.
+### COMMITTEE VERDICT: NVDA
+BOTTOM LINE: The committee is split on whether NVDA is a good 3-5 year holding at today's price.
+  The business turns its profits into real cash, but the price already assumes years of fast
+  growth, and company insiders have been selling, not buying. The main risk is that growth slows
+  while the stock is still priced for it.
+  (rests on: [E5][E9][E12])
+CONFIDENCE: MED, because the vote is split 2-2 and one dispute about the insider sales is unsettled.
+THE THESIS WE TESTED: "At today's price, NVDA is attractive for a 3-5 year holder."
+HOW THEY VOTED: For 0 / Leaning for 2 / Leaning against 2 / Against 0 / Pass 1
+BEST CASE FOR (Quality Owner): free cash flow of $60.9B (ill.) closely tracks reported profit, so the earnings are real. [E3][E5]
+BEST CASE AGAINST (Short-Seller): at about 21 times sales (ill.), the company must keep growing very fast just to justify today's price. [E2][E9]
+WHERE THEY SPLIT: nobody doubts the earnings are real; they disagree on how much future growth the price already pays for.
+WHO DISAGREES AND WHY:
+  Short-Seller: insiders sold 7 times and bought none in 90 days (ill.), which it reads as a warning sign. [E12]
+WHAT TO WATCH: 1. The filing codes on those insider sales, to see whether they were scheduled pay or
+  real selling. 2. Whether cash flow keeps pace with profit in the next quarterly report (due
+  around the next earnings date [E16]). 3. What big funds did last quarter, once that data settles. [E14]
+WHAT WE DON'T KNOW: last quarter's fund holdings are still pending; the insider-sales dispute is unsettled
+  (confidence capped at MED).
+RUN NOTES: mode B; seats Quality Owner, Inverter, Story Checker, Macro Trader, Short-Seller; evidence 17 filled, 3 not available (ill.)
+This is educational analysis of a thesis, not investment advice.
 
-EVIDENCE LEDGER (excerpt)
-| E1  | Price + day    | $172.40 / +1.1% (ill.) | live       | D1 | SS /stocks/price |
+EVIDENCE (excerpt)
+| E1  | Price + day    | $172.40 / +1.1% (ill.) | 15-min delayed | D1 | SS /stocks/price |
 | E2  | Revenue FY     | $130.5B (ill.)  | FY2025, ended Jan 2025 | P | SS /fundamentals/history |
 | E5  | FCF            | $60.9B (ill.)   | FY2025             | P  | SS /fundamentals/history |
 | E9  | P/E, P/S       | 46x / 21x (ill.)| derived            | P  | derived |
@@ -788,40 +847,31 @@ EVIDENCE LEDGER (excerpt)
 | E12 | Insider 90d    | 0 buys / 7 sells, $48M (ill.) | 90d  | D1 | SS |
 | E14 | 13F motion     | [NOT AVAILABLE] (quarter pending)    | D1 | SS |
 
-R1 / Quality Owner: STANCE: LEAN-SUPPORT
-  1. FCF conversion is real: E5 tracks E3 closely. [E3][E5]
-  2. Multiple is rich for a 5% 10Y world. [E9][E18]
-  ALWAYS-ASK: comfortable for 10 closed-market years? Yes on cash engine, uneasy on price.
-  FALSIFIER: "I flip if FCF conversion breaks below ~70% of net income for 2 quarters." [E3][E5]
+OPENING CASE / Quality Owner (is this a durable business at a sensible price?): Leaning for
+  1. Free cash flow closely tracks net income, so the profits are real cash. [E3][E5]
+  2. The price is rich for a world with a 5% ten-year Treasury yield (ill.). [E9][E18]
+  SIGNATURE QUESTION: comfortable owning it if the market closed for 10 years? Yes on the business, uneasy on the price.
+  WHAT WOULD CHANGE MY MIND: "I flip if free cash flow falls below ~70% of net income for 2 quarters." [E3][E5]
 
-R1 / Short-Seller: STANCE: LEAN-OPPOSE
-  1. 7 insider sells, zero buys in 90d into strength. [E12]
-  2. At 21x sales the REQUIRED growth just to hold the multiple is extreme. [E2][E9]
-  FALSIFIER: "I flip if insider buying appears and the multiple compresses below ~12x sales."
+OPENING CASE / Short-Seller (hunts for what could go wrong): Leaning against
+  1. Insiders sold 7 times and bought none in 90 days while the stock was rising. [E12]
+  2. At 21 times sales, the growth REQUIRED just to hold today's price is extreme. [E2][E9]
+  WHAT WOULD CHANGE MY MIND: "I flip if insiders start buying and the price falls below ~12 times sales."
 
-R2 / Short-Seller vs Quality Owner: [EVIDENCE] [MATERIAL]
-  "Your cash-engine case ignores WHO is selling it: insiders, 7-0. [E12]"
-R2 / Quality Owner vs Short-Seller: [FRAME] [MATERIAL]
-  "Insider sells at mega-caps are mostly scheduled compensation; without Form 4 codes
-   you cannot read direction into E12. Escalate or withdraw."
-  -> Escalation: Form 4 pull [NOT AVAILABLE on this host]. Recorded UNRESOLVED. Caps confidence at MED.
+CHALLENGE / Short-Seller challenges Quality Owner: the facts say otherwise, serious
+  "Your cash-machine case ignores who is selling: insiders, 7 sales to 0 buys. [E12]"
+CHALLENGE / Quality Owner challenges Short-Seller: wrong question, serious
+  "Insider sales at giant companies are mostly scheduled pay; without the filing codes you cannot
+   read a direction into those sales. [E12] Check the codes or drop the point."
+  -> Checking the filing codes: not available on this host. Recorded as unsettled; confidence capped at MED.
 
-R3 / Short-Seller answers Quality Owner: [PARTIAL]
-  STEELMAN: "Scheduled comp sales carry no signal; my 7-0 may be noise. [E12]"
-  ANSWER: "Granted on mechanism, but zero BUYS in 90d at any price is still one-directional. [E12]"
-  STANCE NOW: LEAN-OPPOSE (unchanged).
-
-COMMITTEE VERDICT (excerpt): TALLY: LEAN-SUPPORT 2 / LEAN-OPPOSE 2 / PASS 1
-CENTER OF GRAVITY: "Superb cash engine at a price that already pays for years of it." @ MED
-THE KEY DISAGREEMENT: earnings quality is not in dispute; what the multiple already pays for is.
-RECORDED DISSENTS: Short-Seller: one-directional insider flow. [E12]
-DECISIVE EVIDENCE TO WATCH: 1. Form 4 codes on recent sells (EDGAR, anytime). 2. Next quarterly
-  FCF conversion (10-Q, ~E16 date). 3. 13F motion when the pending quarter settles [E14].
-WHAT WE DON'T KNOW: E14 pending; Form 4 escalation unresolved (confidence capped at MED).
-This is educational analysis of a thesis, not investment advice.
+REPLY / Short-Seller answers Quality Owner: partly concedes
+  THEIR BEST POINT: "Scheduled pay sales say nothing about the outlook; my 7-to-0 count may be noise. [E12]"
+  ANSWER: "Granted on how the sales work, but zero open-market buys in 90 days at any price is still one-directional. [E12]"
+  STANCE NOW: Leaning against (unchanged).
 ```
 
-Note what the example demonstrates: an honest `[NOT AVAILABLE]`, an escalation the host could not complete recorded as UNRESOLVED with the confidence cap applied, a PARTIAL concession scored as normal work, and a split verdict delivered as a split, not smoothed into mush.
+Note what the example demonstrates: the bottom line comes first and reads without the evidence table, every claim says its fact in words before citing a row, an honest `[NOT AVAILABLE]`, an escalation the host could not complete recorded as unsettled with the confidence cap applied, a partial concession scored as normal work, and a split verdict delivered as a split, not smoothed into mush.
 
 ---
 
@@ -845,6 +895,8 @@ Note what the example demonstrates: an honest `[NOT AVAILABLE]`, an escalation t
 | DEF 14A | Proxy statement: executive compensation and incentives live here |
 | Dilution | Share count rising; each share owns less of the business |
 | Basis point | 0.01%. 50bp = half a percent |
+| Short-seller | An investor who profits when a stock falls, so the seat that hunts hardest for what could go wrong |
+| Thesis | The one claim the committee votes on, for example "at today's price, this stock is attractive for a 3-5 year holder" |
 
 ---
 
@@ -924,7 +976,7 @@ the missing fact is load-bearing.
 | Divergence screen | Against `/popular` (~50 tickers, ~101 calls/run: 1 `/popular` + 2 per ticker, about 10% of the Free 1,000/month quota) | Full universe |
 | Monthly quota | ~30 committee runs + daily quick reads | Unlimited |
 
-PRO at $15/month: https://app.sentisense.ai/pricing?coupon=AGENTS26 (apply coupon AGENTS26 at checkout for a builder launch discount)
+PRO at $15/month: https://app.sentisense.ai/pricing?coupon=AGENTS (apply coupon AGENTS at checkout for a builder launch discount)
 
 ---
 

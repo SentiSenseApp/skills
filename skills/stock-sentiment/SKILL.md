@@ -203,6 +203,7 @@ NEWS & STORIES
   GET /api/v1/documents/stories?limit=N             Pre-clustered stories; cluster.title is SentiSense-authored and safe to show.
   GET /api/v1/documents/stories/ticker/{T}?limit=N  Stories for one ticker.
   GET /api/v1/documents/stories/{id}                Story detail (PublicStoryDetailDto; aspectPerspectives[], bullishView/bearishView).
+                                                   An empty view ("" or blank hook/conclusion, no bullets) = no case on that side; never null.
   GET /api/v1/documents/search?query=...            Topical document search.
 
 SUPPORTING  (price, prices, chart are 15-minute delayed; profile, popular, calendar, market-summary are reference or batch)

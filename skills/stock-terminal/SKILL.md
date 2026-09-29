@@ -276,6 +276,7 @@ Fetch `GET /api/v1/documents/stories/{clusterId}` only for a user-selected story
 The list's `id` and `clusterId` both identify that detail. The list has no narrative body.
 The detail is flat; top-level `bullishView` and `bearishView` are strings,
 while those names inside `aspectPerspectives[]` are structured objects. Type-check them.
+An empty side (`""`, or a view with blank `hook` and `conclusion` and no bullets) means the sources hold no case: say so, never write one.
 Detail `createdAt` and nullable `lastUpdatedAt` are epoch milliseconds, unlike the list's cluster dates.
 The latter dates a content update, not when the underlying event happened.
 

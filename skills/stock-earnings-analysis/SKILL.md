@@ -277,7 +277,7 @@ Three rules follow, and they are the difference between an honest brief and a mi
   is one line and it keeps a one-quarter view from reading as the whole record.
 
 Elsewhere: `what-changed` gives FREE the per-filing summary without `diff`; `insights/stock` gives
-FREE the top 3; `calendar/earnings` gives FREE one week and PRO about a 30-day forward window, with
+FREE the top 3; `calendar/earnings` gives FREE one week and PRO about a 60-day forward window, with
 `metadata.windowStart` and `metadata.windowEnd` describing the window you actually got;
 `stocks/{ticker}/kpis` gives FREE metadata with an empty `kpis` list.
 
