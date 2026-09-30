@@ -215,7 +215,7 @@ Fetch `GET /api/v1/screener/screens` for the full plans, then post the selected 
 | `losers` | Losers | Stocks down today |
 | `high-sentiment` | High Sentiment | 7-day SentiSense Score of +13 or higher, our strongly bullish band |
 | `sentiment-divergence` | Sentiment Divergence | 7-day SentiSense Score has jumped 8 or more points above a 1-month baseline that is still neutral |
-| `rising-share-of-voice` | Rising Share of Voice | Largest share of social conversation across the tracked universe |
+| `rising-share-of-voice` | Top Share of Voice | Largest share of social conversation across the tracked universe |
 | `mag-7` | Mag 7 | Mega-cap tech leaders |
 | `large-caps-positive` | Large Caps Positive | $10B+ market cap with a bullish 7-day SentiSense Score |
 | `high-volume` | High Volume | Stocks trading the most shares today |
