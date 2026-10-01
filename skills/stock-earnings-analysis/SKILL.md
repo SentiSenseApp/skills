@@ -63,7 +63,7 @@ Two consequences that follow, and are not optional:
 | **The takeaway signal** | `GET /api/v1/insights/stock/{ticker}?insightType=earnings_pulse` | A short AI signal around an earnings event, when one is live |
 | **The anchor** | `GET /api/v1/calendar/earnings?ticker={ticker}` | Next report date, session timing, consensus EPS |
 | **The series** | `GET /api/v1/stocks/{ticker}/kpis` | Curated GAAP and non-GAAP KPI time series, when depth is asked for |
-| **Who reported** | `GET /api/v1/earnings/recent?days=7` | Cross-ticker: which covered companies reported in a window |
+| **Who reported** | `GET /api/v1/earnings/recent?days=7` | Cross-ticker: which companies with a stored earnings analysis reported in a window |
 | **The ranked layer** | `GET /api/v1/earnings/ranked` | Cross-ticker: recent reporters and upcoming reports ordered by importance, each with EPS surprise, next-session move, market cap and the 7-day Score |
 | **The market baseline** | `GET /api/v1/earnings/statistics` | How the market's reported quarters landed: beat, miss and inline counts, average move, baseline and deviation |
 | **The reaction series** | `GET /api/v1/stocks/{ticker}/earnings/reactions` | How the stock moved on each of its last twelve announcements, with the session it traded |
@@ -83,14 +83,6 @@ uppercase the name into a symbol: `/stocks/TESLA/earnings-summaries` answers `20
 `data: []`, which reads like a company that never reported when the real failure was the
 identifier. An exact ticker the user typed skips this step.
 
-### The earnings analysis report
-
-`GET /api/v1/stocks/{ticker}/earnings-summaries` returns `{isPreview, previewReason, totalCount?,
-data: [...]}` with quarters newest first. `limit` accepts 1 to 40 and defaults to 12; values above
-40 are capped, values below 1 return `400 invalid_limit`.
-
-Each PRO quarter carries:
-
 **Identify your client.** Send a `User-Agent` naming your agent runtime and this skill, for
 example `OpenClaw/1.4 (stock-earnings-analysis)` or `ClaudeCode/2.1 (stock-earnings-analysis)`. Substitute your own runtime and
 version if neither matches. You can also volunteer what your agent is called by adding an
@@ -98,6 +90,19 @@ version if neither matches. You can also volunteer what your agent is called by 
 `OpenClaw/1.4 (stock-earnings-analysis; agent/research-desk)`. All of it is optional, and it is what tells
 us this skill has real integrations behind it, so it gets prioritized and you get notice before it
 changes.
+
+### The earnings analysis report
+
+`GET /api/v1/stocks/{ticker}/earnings-summaries` returns `{isPreview, previewReason, totalCount?,
+data: [...]}` with quarters newest first. `limit` accepts 1 to 40 and defaults to 12; values above
+40 are capped, values below 1 return `400 invalid_limit`.
+
+**`limit` is a ceiling, not a promise of history.** Stored history is still accumulating, and
+most tickers currently return only their latest one or two quarters even at `limit=40`. A PRO response carries no `totalCount`, so the number of quarters you have is the
+length of `data`: count it, say it (LAW 7), and send a multi-quarter trend question to
+`GET /api/v1/stocks/{ticker}/kpis` (PRO), which holds curated series by fiscal period.
+
+Each PRO quarter carries:
 
 | Field | What it is |
 |---|---|
@@ -109,7 +114,7 @@ changes.
 | `guidance` | Forward-guidance language from the press release, as prose; absent when the release carries none (the call may still have guided) |
 | `hasTranscript` | `true` when a summary of the earnings call exists for this quarter |
 | `transcriptSummaryMd` | Markdown body summarizing the call; absent when `hasTranscript` is false |
-| `transcriptHighlights` | Call-specific `[{label, value, yoy}]`; absent when there is no call summary |
+| `transcriptHighlights` | Call-specific `[{label, value, yoy}]`; `yoy` is usually absent because the delta is written into `value` (e.g. `$109.4B (+16% YoY)`); the whole field is absent when there is no call summary |
 | `transcriptGeneratedAt` | Epoch seconds the call summary was generated |
 | `sources` | `[{title, url}]` citations backing the quarter |
 | `generatedAt` | Epoch seconds the quarter summary was generated |
@@ -140,8 +145,15 @@ it has exactly one trap that matters:
 visibility remains increasingly difficult" contains "increasingly" and must never be read as
 raised. Check for no-guidance and withdrawal language first (`no guidance`, `did not provide`,
 `declined to provide`, `withdrew`, `suspended`), and if it hits, the answer is **"no guidance was
-issued"**, which is a finding worth printing, not a null to hide. Only then look for direction, and
-match on whole words so "increasingly" and "discounting" cannot false-positive.
+issued"**, which is a finding worth printing, not a null to hide. Apply it per sentence or per
+metric: a refusal about one item (buybacks) does not cancel guidance on another (net interest
+income).
+
+**Reaffirmation comes before direction words too.** "Reaffirmed FY2026 guidance: organic revenue to
+increase 2-4%" is guidance held, not raised: "increase" describes the metric's growth inside an
+unchanged range, not a change to the guidance. Check `reaffirm`, `maintain`, `reiterate` and
+`unchanged` before any direction word. Only then look for direction, and match on whole words so
+"increasingly" and "discounting" cannot false-positive.
 
 **An absent `guidance` field means the press release carried none, not that the company issued
 none.** Many companies guide only on the call: AAPL's September-quarter revenue outlook and JPM's
@@ -156,8 +168,11 @@ pending. Do not infer a direction from the headline or from the numbers.
 
 `GET /api/v1/stocks/{ticker}/what-changed` returns filing comparisons newest first, each with a
 `reportDate` (the fiscal period the filing covers), a `materialityScore` from 0 to 1, a
-`noMaterialChanges` flag, an `edgarUrl`, and, for PRO, a `diff` object of added, removed and
-modified passages plus `topNewTerms`.
+`noMaterialChanges` flag, an `edgarUrl`, and, for PRO, a `diff` object: `blocks` as
+`[{op, similarity, oldExcerpt, newExcerpt, oldParagraphs, newParagraphs}]`, the added, removed and
+modified paragraph and character counts, `changedRatio`, `noveltyRatio` and `topNewTerms`. Read
+`noMaterialChanges` as the verdict; a `materialityScore` of 0.0 can sit beside
+`noMaterialChanges: false` when the change is small.
 
 Join each filing to the quarter whose `reportDate` is nearest, within about **75 days**. Filings
 outside that window of any quarter are residual. Two details:
@@ -193,12 +208,25 @@ A reported row can carry `ticker`, `reportDate`, `fiscalPeriod`, `headline`,
 `sentisenseScore7d` is signed and unbounded. `marketCap` is US dollars. `outcome` is `BEAT`,
 `MISS`, `INLINE` or `UNCLASSIFIED`. `scoreChange7d` is the 7-day average Score minus the 30-day average, in score units, not a change since seven days ago; positive means the Score is strengthening.
 
+Reported rows are built from the consensus EPS feed, and `fiscalPeriod` and `headline` join on
+only when a stored earnings analysis exists for that exact report date. Two checks follow:
+
+- **A row with no `fiscalPeriod` and no `headline` rests on the consensus feed alone.** Before
+  writing that the company reported, look for corroboration: a Calendar event for the same ticker
+  dated in the future, or EPS far out of line with its other quarters, means the row may not be a
+  real report. Say it is unconfirmed rather than narrating it.
+- **Prefer `surprisePct` and `outcome` to the raw EPS dollars.** If you quote `estimateEps` or
+  `actualEps`, cross-check them against the `headline` when it states EPS. A row off from the
+  headline by a factor of 100 carries a scale error that leaves `surprisePct` intact, so quote the
+  headline figure and the percent and say the raw values disagree.
+
 Four flags control the sentence. `reactionPending: true` means the final reaction is missing and
 the reacting session may still be open, so say the reaction is pending. `liveReactionPct` is the
 signed in-session move while that final measurement is pending, so label it live rather than final.
 `afterHoursReactionPct` is the signed extended-hours move against the report day's regular close.
-It appears on the report date itself, from 16:00 ET, only for a company the calendar marks as
-reporting after the close. Call it the after-hours move rather than the reaction, because the
+It appears during the report night, from 16:00 ET on the report date until the reacting session
+opens at 09:30 ET (across the weekend for a Friday report), only for a company the calendar marks
+as reporting after the close. Call it the after-hours move rather than the reaction, because the
 close-to-close measurement that replaces it covers a different interval, and expect
 `reactionPending` to stay true beside it. At most one of the three readings is ever present.
 `awaitingConsensus: true` means the estimate and actual EPS consensus row has not arrived, so do
@@ -214,7 +242,8 @@ Its `data` carries `calculationVersion`, `asOf`, `window`, `eventsInWindow`, `cl
 `unclassifiedEvents`, `distinctTickers`, `completedReactions`, `pendingReactions`,
 `coverageRatio`, `beat`, `miss`, `inline`, `averageMovePct`, `baseline`, `deviation`, `thresholds`,
 `sufficientData` and, when false, `insufficientDataReason`. The `beat`, `miss` and `inline` objects
-carry `count`, `rate`, `withReaction`, `fell`, `rose`, `flat`, `fellRate` and `averageMovePct`.
+carry `count`, `rate`, `withReaction`, `fell`, `rose`, `flat`, `fellRate` and `averageMovePct`;
+`fellRate` and `averageMovePct` are omitted when `withReaction` is 0.
 `baseline` and `deviation` are absent for `trailing_52w` and `all_time`.
 
 **Check `sufficientData` before quoting a rate, and always quote the denominator.**
@@ -223,6 +252,11 @@ carry `count`, `rate`, `withReaction`, `fell`, `rose`, `flat`, `fellRate` and `a
 newest first. Each row carries `reportDate`, `timing`, `priorClose`, `nextClose` and `movePct`.
 `priorClose` is the close before the reaction session. `nextClose` is the reaction-session close.
 `movePct` is their signed percent change.
+
+Join a reaction row to a quarter within one day of that quarter's `reportDate`, not on an exact
+match. For a company that releases around the open, the reaction row can be dated the evening
+before with `timing: AMC` while earnings-summaries and the Calendar carry the next morning, and
+both describe the same session.
 
 `timing` is `AMC`, `BMO` or `null`. `AMC` means the next trading session carried the reaction.
 `BMO` means the report-date session carried it. `null` means the session was inferred rather than
@@ -259,27 +293,58 @@ and that analysis never substitutes for it.
 
 Read `isPreview` on every response and shape the output to what you actually received.
 
+**A preview slice is not the window.** When a response has `isPreview: true` and a `totalCount`
+(on `ranked`, a `totalInWindow`) larger than the rows returned, the rows are a slice (the latest or
+top N), not the whole set. Label it ("top 3 of 15 reporters, free preview") and never infer
+absence from it.
+
 On the earnings analysis report, a FREE key receives **the latest quarter only, shaped rather than
 truncated**, plus `totalCount` of the quarters that exist. The shaped quarter carries
 `fiscalPeriod`, `reportDate` and `headline` in full, up to two `kpiHighlights` as `{label, value}`
 cards, `kpiHighlightCount` for how many the full quarter holds, `summaryTopics` and
-`transcriptTopics` (section titles only, never body text), `hasTranscript`, `hasGuidance`,
-`guidanceDirection` (`RAISED`, `CUT`, `HELD`, `MIXED` or `null`), `generatedAt` and `source`.
-There is no body, no KPI history and no guidance figure.
+`transcriptTopics`, `hasTranscript`, `hasGuidance`, `guidanceDirection` (`RAISED`, `CUT`, `HELD` or
+`MIXED`, and omitted when no direction can be read), `generatedAt` and `source`. There is no body,
+no KPI history and no guidance language or figure.
 
-Three rules follow, and they are the difference between an honest brief and a misleading one:
+- `summaryTopics` and `transcriptTopics` are titles only, never body text or figures. They come from
+  the body's markdown headings and bold bullet labels; when a body has neither (most summaries are
+  plain bullet lists), they fall back to the labels of that section's highlight cards, the quarter's
+  KPI cards for `summaryTopics` and the call highlights for `transcriptTopics`. A label carrying a
+  figure is dropped, so the list can be shorter than `kpiHighlightCount`. An empty list means no
+  titles could be extracted, not that the section is empty.
+- `hasGuidance` reads the press-release `guidance` only. It does not look at the call.
+- `guidanceDirection` is a keyword classification of that same press-release text, computed by the
+  API. It is not management's own label, and PRO responses do not carry it at all.
 
-- **A shaped quarter is written as a shaped quarter.** Print the section titles as topics covered,
-  not as if you had read the sections. Never narrate a `summaryMd` you did not receive.
-- **On FREE, `guidanceDirection` is given to you.** Report it as the direction; do not also claim to
+Four rules follow, and they are the difference between an honest brief and a misleading one:
+
+- **A shaped quarter is written as a shaped quarter.** The FREE preview is the headline, up to two
+  KPI cards and the flags. When topic titles are present, print them as topics covered, not as if
+  you had read the sections; when the lists are empty, say the full summary is not in the preview.
+  Never narrate a `summaryMd` you did not receive.
+- **On FREE, present `guidanceDirection` as a classification, not as a fact.** Write "the release
+  guidance is classified as RAISED", never "the company raised guidance". A direction word inside a
+  reaffirmed range can tip the classifier: a release that reaffirmed full-year guidance for revenue
+  "to increase 2-4%" can come back `RAISED`. If the headline or anything else you received says
+  guidance was reaffirmed or maintained, report that wording and note the conflict. Do not claim to
   have read the guidance language, because you did not receive it.
+- **On FREE, an absent guidance flag is not evidence of no guidance.** `hasGuidance: false` means
+  the press release carried none, and many companies guide only on the call. When `hasGuidance` is
+  false, write "guidance: not available on the free preview" (and, when `hasTranscript` is true,
+  that the call summary may hold it). Never write "no guidance was issued" from a FREE preview.
 - **State the history you did not get.** "Latest quarter only; `totalCount` quarters are available"
   is one line and it keeps a one-quarter view from reading as the whole record.
 
-Elsewhere: `what-changed` gives FREE the per-filing summary without `diff`; `insights/stock` gives
-FREE the top 3; `calendar/earnings` gives FREE one week and PRO about a 60-day forward window, with
-`metadata.windowStart` and `metadata.windowEnd` describing the window you actually got;
-`stocks/{ticker}/kpis` gives FREE metadata with an empty `kpis` list.
+Elsewhere: `what-changed` gives FREE the per-filing summary without `diff`, plus a
+`materialityLabel` (`NO_MATERIAL_CHANGES` when the flag is set, otherwise `MAJOR_REWRITE` at a
+`materialityScore` of 0.6 or more, `NOTABLE_CHANGES` at 0.3 or more, else `MINOR`); `insights/stock`
+gives FREE the top 3; `stocks/{ticker}/kpis` gives FREE metadata with an empty `kpis` list.
+
+`calendar/earnings` gives PRO about a 60-day forward window and FREE one Monday-to-Sunday week: the
+week containing the start of the window you asked for (by default the current US Eastern week),
+with `totalCount` counting matches across the full window. `metadata.windowStart` and
+`metadata.windowEnd` describe the window you actually got. An empty FREE calendar with
+`totalCount` above zero means the date falls outside the free week, not that nothing is scheduled.
 
 `GET /api/v1/earnings/recent` has no tier gate. Every key receives the full window it asks for.
 
@@ -308,10 +373,18 @@ The default. "Analyze the latest AAPL earnings", "how did NVDA's quarter go".
 
 0. If the user named the company rather than typing a symbol, resolve it through
    `kb/entities/search` first (see The fan-out); the calls below assume a canonical ticker.
-1. `GET /api/v1/stocks/{ticker}/earnings-summaries?limit=4` for the quarter and its recent history.
+1. `GET /api/v1/stocks/{ticker}/earnings-summaries?limit=4` for the latest quarter and whatever
+   prior quarters are stored (often none yet; count what came back).
 2. `GET /api/v1/stocks/{ticker}/what-changed?limit=4` for the filing diffs, joined to quarters.
 3. `GET /api/v1/insights/stock/{ticker}?insightType=earnings_pulse` for the takeaway signal.
 4. `GET /api/v1/calendar/earnings?ticker={ticker}` for the next report date and consensus EPS.
+   The default window starts on Monday of the current US Eastern week, so it can return a report
+   that already happened this week. An event dated within a day of the latest quarter's
+   `reportDate` is that quarter, and its `estimatedEps` is the consensus LAW 5 can use. An event
+   earlier this week that matches no stored quarter is a report whose analysis has not landed yet;
+   say so. The next report is the first event dated after the latest quarter and not before today.
+   When none comes back, the next report is "not in the returned window", never "none scheduled"
+   (see the closing block).
 5. Optionally `GET /api/v1/stocks/{ticker}/kpis` when the reader asked about a specific metric's
    trend rather than the quarter as a whole.
 
@@ -323,9 +396,10 @@ Then assemble by quarter, latest first, per the Structure section below.
 
 1. `GET /api/v1/earnings/ranked?reportedDays=7&reportedLimit=12` and read the `reported` section.
    The API has already ordered the rows by `importance`.
-2. Explain the API's order from surprise, move, market cap and Score. Do not re-rank it. Use
-   `GET /api/v1/earnings/recent?days=7&limit=100` instead when the reader wants every covered name
-   rather than the important ones.
+2. Explain the API's order from surprise, move, market cap and Score. Do not re-rank it. When the
+   reader wants every reporter rather than the important ones, raise `reportedLimit` to 50 (PRO;
+   FREE receives the top 3 whatever the limit) and quote `totalInWindow`; if `totalInWindow` is
+   above 50, shorten `reportedDays` rather than presenting 50 rows as everyone.
 3. `GET /api/v1/earnings/statistics?window=last_completed_week` when the requested window is the
    last closed week. Use `week_to_date` for a still-open week and say that it is partial.
 4. Fan out `earnings-summaries` on the bounded shortlist only.
@@ -334,8 +408,16 @@ Then assemble by quarter, latest first, per the Structure section below.
 
 The reported window is bounded by `reportDate`, so a company that reported inside it appears even
 if its call summary lands later. Empty `rows` means nobody in the covered set reported in that
-window, not an error. `earnings/recent` remains the exhaustive backward-looking fallback. The
-Calendar remains forward-only.
+window, not an error.
+
+`GET /api/v1/earnings/recent` (`days` 1 to 31, default 7; `limit` 1 to 100, default 50) lists the
+quarters that have a **stored earnings analysis**, newest first, each with `ticker`,
+`fiscalPeriod`, `reportDate`, `headline`, `hasTranscriptSummary` and `generatedAt`. It is the
+cheap way to find names you can follow up on with earnings-summaries, not a complete roster of
+reporters: a company known only from the consensus feed is in `ranked` but not here. Compare its
+row count with `ranked`'s `totalInWindow` for the same days before calling it everyone. The
+Calendar is forward-looking by default (its window starts on Monday of the current week); an
+explicit `from` date or `week=last` reaches earlier dates.
 
 ### 3. Pre-earnings positioning
 
@@ -345,7 +427,10 @@ Calendar remains forward-only.
    the reports the API ranks as most important.
 2. `GET /api/v1/calendar/earnings?week=next` for the broader schedule, or `?ticker={ticker}` for one
    name. Each event carries `earningsDate`, `earningsTime`, `fiscalQuarter`, `confirmed` and
-   `estimatedEps`.
+   `estimatedEps`. `fiscalQuarter` is currently null on most events (it is filled mainly on
+   confirmed, imminent reports), and where it is set it reads `Q3 2026` while earnings-summaries
+   writes `Q3 FY2026` or `Q2 2026` in the company's own fiscal labelling, so never string-match the
+   two. Identify the quarter by date instead.
 3. For each name worth a closer look, pull the **prior** quarter from `earnings-summaries` and read
    its guidance. Guidance from the last quarter is the most direct statement of what this quarter is
    supposed to look like, and the comparison it invites is the whole point of a preview.
@@ -392,11 +477,11 @@ These live fixtures were captured on 2026-09-09.
 `GET /api/v1/earnings/ranked?reportedDays=14&reportedLimit=12&upcomingDays=7&upcomingLimit=12`
 
 This illustrative row has `ticker: "NVDA"`, `reportDate: "2026-08-26"`,
-`fiscalPeriod: "Q2 FY2027"`, `surprisePct: 3.96`, `outcome: "BEAT"`, `movePct: 8.74`,
+`fiscalPeriod: "Q2 FY2027"`, `surprisePct: 6.22`, `outcome: "BEAT"`, `movePct: 8.74`,
 `marketCap: 4400000000000`, `sentisenseScore7d: 12.4` and `importance: 0.93`.
 
 The skill would write: "NVDA's Q2 FY2027 report on 2026-08-26 ranked first. EPS beat consensus by
-3.96%, the next-session move was +8.74%, market cap was $4.4 trillion and the 7-day Score was
+6.22%, the next-session move was +8.74%, market cap was $4.4 trillion and the 7-day Score was
 +12.4. The API assigned `importance: 0.93`."
 
 ---
@@ -420,7 +505,9 @@ line:
 - no call summary yet for this quarter (`hasTranscript: false`),
 - no stored quarter for this ticker at all (empty `data`),
 - no filings attached to this quarter,
-- no guidance language in either the release or the call summary, or guidance explicitly withheld by management.
+- no guidance language in either the release or the call summary, or guidance explicitly withheld by management
+  (on FREE with `hasGuidance: false` the call cannot be checked, so this line is "guidance: not
+  available on the free preview").
 An empty section that renders as nothing tells the reader the data does not exist. Saying "no call
 summary yet, this one often lands after the press-release content" tells them to check back.
 
@@ -430,7 +517,9 @@ cannot be attached goes in one clearly labelled residual section at the end.
 
 **LAW 5: Never assert a beat or a miss you were not given.** The quarter's `headline` is editorial
 and may characterize the quarter. Consensus EPS comes from the Calendar. If you have both and they
-are for the same fiscal quarter, you may state the comparison and name both sources. If you have
+are for the same report (the event's `earningsDate` within a day of the quarter's `reportDate`;
+the Calendar's `fiscalQuarter` is usually null and labelled differently), you may state the
+comparison and name both sources. If you have
 only one of them, report what you have and say the other side is not in hand. Do not derive a
 beat-or-miss verdict from a KPI display string.
 
@@ -465,7 +554,9 @@ applies and the absence gets a line.
    - The call summary, when `hasTranscript` is true. This is the crown jewel; it goes near the top.
    - The KPI highlights table: `label`, `value`, `yoy`. The provided subset, nothing added.
    - Guidance: the language (release `guidance`, else the call summary's outlook), plus your derived
-     direction and which source it came from, or the explicit "no guidance was issued".
+     direction and which source it came from, or the explicit "no guidance was issued". On FREE,
+     the API's `guidanceDirection` labelled as its classification of the release, or "not
+     available on the free preview".
    - Filings attached to this quarter: form, `filedAt`, `materialityScore`, and one line on what
      changed. `topNewTerms` is a useful compression when the diff is large.
    - The `earnings_pulse` signal for this quarter, if there is one, clearly labelled as a signal.
@@ -474,7 +565,8 @@ applies and the absence gets a line.
 
 4. **Prior quarters.** One compact row each, reverse-chronological: `fiscalPeriod`, `reportDate`,
    `headline`, whether a call summary exists, guidance direction. This is a spine, not four repeats
-   of section 3. Expand a prior quarter only when the reader asked for a trend.
+   of section 3. Expand a prior quarter only when the reader asked for a trend. When the response
+   held only the latest quarter, this section is one line saying no prior quarter is stored yet.
 
 5. **What changed across quarters.** Optional, and only when the spine actually shows something: a
    guidance direction that flipped, a KPI whose year-over-year delta reversed, filing materiality
@@ -536,7 +628,8 @@ from the data.
 > reported [reportDate][, free preview: latest quarter only of [totalCount] available]. Filings:
 > [N] comparisons, [N] attached to a quarter. Signals: [N] earnings signals. Call summary: [present
 > as of transcriptGeneratedAt / not yet available for this quarter]. Next scheduled report:
-> [date, confirmed or unconfirmed / none scheduled].
+> [date, confirmed or unconfirmed / not in the returned window (through windowEnd) / outside the
+> free one-week window (totalCount N)].
 >
 > Built with SentiSense (https://sentisense.ai). Earnings analysis reports, SEC filing risk-factor
 > diffs, curated company KPIs, AI signals and the earnings calendar via the SentiSense API.
@@ -555,7 +648,8 @@ For "how did the Street react?", hand off to the `analyst-ratings-tracker` skill
 
 - **Two-ticker comparison.** Pull both companies at `limit=4` and compare the same fiscal period
   side by side, guidance against guidance. Fiscal calendars differ between companies, so align on
-  `reportDate` and label the fiscal periods rather than assuming Q2 means the same months.
+  `reportDate` and label the fiscal periods rather than assuming Q2 means the same months. With
+  only the latest quarter stored for each, compare those two and say no history is in hand.
 - **One metric's trend.** Start from the quarter, then `GET /api/v1/stocks/{ticker}/kpis` for the
   series behind one `kpiHighlights` label. Enumerate what exists first with
   `GET /api/v1/stocks/{ticker}/kpis/types`.

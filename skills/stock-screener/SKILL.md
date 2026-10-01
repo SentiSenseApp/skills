@@ -61,7 +61,7 @@ curl -X POST https://app.sentisense.ai/api/v1/screener/execute \
 
 **The response is flat and the rows are at `.results[]`, not `.data`.** `execute` answers with exactly three top-level keys, `{ results, matched, limit }`: `results` is the row array, `matched` is the pre-limit total and `limit` echoes what you asked for. There is no `{ isPreview, previewReason, data }` envelope on this endpoint, so an agent carrying the `.data` habit over from the rest of the API reads `undefined` and reports "no matches" on a screen that matched. `results` is an empty array when nothing matched, which is the real no-match signal, and `matched` says how many rows exist behind the `limit`.
 
-Endpoints: `POST /api/v1/screener/execute` (stocks), `POST /api/v1/screener/etfs/execute` (ETFs, same shape), `GET /api/v1/screener/fields` (the catalog), `GET /api/v1/screener/screens` (curated screens with their full plans). `limit` sits next to `plan` (default 100, cap 500); an optional top-level `tickers` array scopes the screen to a watchlist. An unrecognized field name returns HTTP 400 with a message naming the bad field and listing the valid ones, and field names are case-sensitive: take them from `GET /api/v1/screener/fields`, never from guesswork.
+Endpoints: `POST /api/v1/screener/execute` (stocks), `POST /api/v1/screener/etfs/execute` (ETFs, same shape), `GET /api/v1/screener/fields` (the catalog), `GET /api/v1/screener/screens` (curated screens with their full plans). `limit` sits next to `plan` (default 100, cap 500); an optional top-level `tickers` array scopes the screen to a watchlist. An unrecognized field name returns HTTP 400 with a message naming the bad field and listing the valid ones, and field names are case-sensitive: take them from `GET /api/v1/screener/fields`, never from guesswork. The catalog lists each field under `name`; in a plan that same string goes in `fieldName`.
 
 One REST shape difference that the numeric example above does not show: **`IN` and `NOT_IN` filters take a `values` array, not `value`**. Sending `"value"` (singular) gets a `400 malformed_request` whose message names `values`, so the fix is quick, but it costs a round trip:
 
@@ -97,14 +97,15 @@ execute endpoint, or the ETF endpoint for an `etf-` id. Custom plans below use c
 | "most bullish stocks right now", "high sentiment stocks" | curated `high-sentiment` |
 | "small caps people are talking about", "small cap buzz" | curated `small-cap-buzz` |
 | "golden cross stocks with bullish sentiment" | curated `golden-cross-bullish` |
-| "stocks under $20 with bullish sentiment", "cheap stocks the crowd likes" | `PRICE:LTE:20`, `SENTIMENT_DIRECTION:EQ:1`, sort `SCORE_CHANGE_7D:DESC` (a handful of names on a typical day; `PRICE:LTE:10` often returns none, say so rather than loosening silently) |
-| "large caps near their 52-week low with analyst upside" | `MARKET_CAP:GTE:10000000000`, `PCT_OFF_52W_LOW:LTE:10`, `ANALYST_TARGET_UPSIDE_PCT:GTE:20`, sort `ANALYST_TARGET_UPSIDE_PCT:DESC` (use the numeric JSON value `10000000000`; do not send the shorthand string `10B`) |
+| "stocks under $20 with bullish sentiment", "cheap stocks the crowd likes" | `PRICE:LTE:20`, `SENTIMENT_DIRECTION:EQ:1`, sort `SCORE_CHANGE_7D:DESC` (the count swings with the day's mood, and `PRICE:LTE:10` returns far fewer; quote `matched`, and when a cut returns none say so rather than loosening silently) |
+| "large caps near their 52-week low with analyst upside" | `MARKET_CAP:GTE:10000000000`, `PCT_OFF_52W_LOW:LTE:10`, `ANALYST_TARGET_UPSIDE_PCT:GTE:20`, sort `ANALYST_TARGET_UPSIDE_PCT:DESC` (a plain JSON number such as `10000000000` always works; numeric fields also accept a compact string such as `"10B"`) |
 | "stocks analysts just upgraded", "recent analyst upgrades" | `ANALYST_RATING_MOMENTUM_30D:GTE:1`, sort `ANALYST_RATING_MOMENTUM_30D:DESC` (2 narrows to about a dozen names) |
 | "strong buy consensus with upside left" | `ANALYST_BUY_RATIO_PCT:GTE:80`, `ANALYST_TARGET_UPSIDE_PCT:GTE:15`, sort `ANALYST_TARGET_UPSIDE_PCT:DESC` |
 | "low volatility stocks the crowd likes", "calm names with bullish sentiment" | `VOLATILITY_30D:LTE:25`, `SENTIMENT_DIRECTION:EQ:1`, sort `SENTI_SCORE_7D:DESC` |
 | "stocks 30% off their highs", "deep pullbacks" | `PCT_OFF_52W_HIGH:LTE:-30`, sort `PCT_OFF_52W_HIGH:ASC` |
 | "mentions spiking", "unusual social volume" | `MENTION_VELOCITY:GTE:100`, sort `MENTION_VELOCITY:DESC`; for share of the whole conversation, curated `rising-share-of-voice` |
 | "best performers this month that analysts still back" | `RETURN_1M:GTE:10`, `ANALYST_BUY_RATIO_PCT:GTE:70`, sort `RETURN_1M:DESC` |
+| "the Magnificent 7", "Mag 7 stocks" | no filter needed: a top-level `tickers` array `["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA"]` with any plan (for example sort `MARKET_CAP:DESC`). The curated `trillion-club` screen ("$1 Trillion+ Club"; the older id `mag-7` still resolves to it) is not this list: its plan is every stock with a market cap of $1 trillion or more, which returns more than seven names and includes non-tech companies, so describe it as "trillion-dollar market caps" when you run it |
 | "top rated stocks", "A rated stocks", "best SentiSense Rating" | `SENTISENSE_RATING:IN:A`, sort `SENTISENSE_RATING:DESC` (only about the top tenth of ranks can reach an A, and far fewer do after risk adjustments; the small-company adjustment already keeps most names under about 10 billion dollars out of A, so a `MARKET_CAP` floor there rarely changes the list, but keep it when the user asked for a size cut) |
 | "highly rated but the street is cold on it" | `SENTISENSE_RATING:IN:A,B`, `ANALYST_BUY_RATIO_PCT:LTE:40`, sort `SENTISENSE_RATING:DESC` |
 
@@ -118,7 +119,7 @@ These four are the known traps; getting them wrong yields a screen that runs fin
 
 - **`SENTISENSE_RATING` is a letter, and the letter is a band of a score.** Values `A`, `B`, `C`, `D`, `F`; operators `IN` and `NOT_IN` only, with the letters in a `values` array (`{ "fieldName": "SENTISENSE_RATING", "op": "IN", "values": ["A", "B"] }`). The score runs 0 to 100: the stock's percentile rank on a seven-dimension blend among rated stocks, less its risk adjustments. A is a score of 90 or more, B 70 to 89.9, C 30 to 69.9, D 10 to 29.9, F below 10. The bands are not fixed shares of the market: only about the top tenth of ranks can reach an A, far fewer do after adjustments, and an A never means "a stock to buy". Sorting the field resolves to that score rather than the letter's alphabetical order, so `DESC` puts the highest score first. Rows come back with `ratingLetter`, `ratingScore` and `ratingPercentile`. Report the letter with its score ("B, 85.6 out of 100"). `ratingPercentile` is the rank before the risk adjustments, so a B can sit at the 100th percentile; if you quote it, say it is the rank before adjustments, never as the letter's own number. Stocks with too little data are unrated and match no letter, so `NOT_IN ["F"]` is not the complement of `IN ["F"]`.
 - **`ANALYST_RATING_MEAN` is inverted.** Vendor 1-to-5 scale where **1.0 is strong buy**. Bullish is `LTE 2.5`, not `GTE`. Prefer `ANALYST_BUY_RATIO_PCT`, which runs the intuitive direction.
-- **Score fields are banded, not [-1, 1].** The SentiSense Score is unbounded (roughly -30 to +45 across the universe) with bands at 5, 13, and 23 either side of zero: above +5 bullish lean, +13 bullish, +23 strong. Filter on band edges; `GTE:0.5` is a polarity-scale habit that silently means "any positive score". `SENTI_SCORE_7D` and `SENTI_SCORE_1M` are window averages; `SCORE_CHANGE_7D` is the 7-day minus the 1-month baseline, so positive means strengthening.
+- **Score fields are banded, not [-1, 1].** The SentiSense Score is unbounded (most of the universe sits between about -30 and +45, and the strongest names read above that) with bands at 5, 13, and 23 either side of zero: above +5 bullish lean, +13 bullish, +23 strong. Filter on band edges; `GTE:0.5` is a polarity-scale habit that silently means "any positive score". `SENTI_SCORE_7D` and `SENTI_SCORE_1M` are window averages; `SCORE_CHANGE_7D` is the 7-day minus the 1-month baseline, so positive means strengthening.
 - **Nulls never match, in either direction.** `RETURN_1Y >= 0` and `RETURN_1Y < 0` do not partition the universe: a recently listed stock is in neither. Sorting puts nulls last regardless of direction.
 
 Two enum fields are used with `EQ`: `MA_CROSS_STATE` (`1` golden cross, `-1` death cross, `0` neither) and `SENTIMENT_DIRECTION` (`1` above +5, `-1` below -5, `0` the neutral band, where most of the universe sits on a typical day). The catalog lists `EQ` as their operator; stick to it even where other operators happen to evaluate.
@@ -139,7 +140,11 @@ Two enum fields are used with `EQ`: `MA_CROSS_STATE` (`1` golden cross, `-1` dea
 
 ## Reading results
 
-Rows arrive in `results[]` (see How to Run: this endpoint is flat, with no `.data` envelope). Every row carries the full field set (nulls where uncovered) plus render-ready extras: `week52High`/`week52Low`, `lastUpdated` (epoch seconds), and three small series per ticker (`sentisenseScoreBars7D`, `sentisenseScoreBars30D`, `priceSparkline30D`), so results are chartable without a second call. Prices in rows come from the 20-minute snapshot: fine for screening, not for quoting; say "as of the latest screener snapshot" rather than presenting them as live.
+Rows arrive in `results[]` (see How to Run: this endpoint is flat, with no `.data` envelope). Every row carries the stored fields (nulls where uncovered) plus render-ready extras: `week52High`/`week52Low`, `lastUpdated` (epoch seconds), and three small series per ticker (`sentisenseScoreBars7D`, `sentisenseScoreBars30D`, `priceSparkline30D`), so results are chartable without a second call. Prices in rows come from the 20-minute snapshot: fine for screening, not for quoting; say "as of the latest screener snapshot" rather than presenting them as live.
+
+**Row keys are camelCase and do not always mirror the filter name.** `SENTI_SCORE_7D` reads as `sentiSenseScore7D`, `SENTI_SCORE_1M` as `sentiSenseScore1M`, `PRICE` as `currentPrice`, `PCT_OFF_52W_HIGH` as `pctOff52wHigh`, `PCT_OFF_200D_MA` as `pctOff200dMa`, and `SENTISENSE_RATING` as `ratingLetter`, `ratingScore` and `ratingPercentile`; the rest follow the same pattern (`ANALYST_BUY_RATIO_PCT` is `analystBuyRatioPct`, `RETURN_1M` is `return1M`). Read the first row's keys when unsure. ETF rows carry every ETF catalog field in the same style (`CURRENT_PRICE` is `currentPrice`, `CONSTITUENTS_WEIGHTED_SENTISENSE` is `constituentsWeightedSentisense`).
+
+**Four stock fields filter and sort but are not returned on rows:** `SENTI_SCORE_TREND_7D`, `SENTI_SCORE_TREND_30D`, `SENTI_SCORE_RISING_STREAK_30D` and `PRICE_TREND_30D`. The server derives them at query time from the row's own series (`sentisenseScoreBars7D`, `sentisenseScoreBars30D`, `priceSparkline30D`), so the keys are absent, not null. A row that matched passed the threshold you set: report that ("Score trend above 0 over 7 days") and show the series, rather than printing a trend value the response does not carry.
 
 <!-- screener-appendix:start -->
 ## Appendix: every field and every curated screen (snapshot)
@@ -216,7 +221,7 @@ Fetch `GET /api/v1/screener/screens` for the full plans, then post the selected 
 | `high-sentiment` | High Sentiment | 7-day SentiSense Score of +13 or higher, our strongly bullish band |
 | `sentiment-divergence` | Sentiment Divergence | 7-day SentiSense Score has jumped 8 or more points above a 1-month baseline that is still neutral |
 | `rising-share-of-voice` | Top Share of Voice | Largest share of social conversation across the tracked universe |
-| `mag-7` | Mag 7 | Mega-cap tech leaders |
+| `trillion-club` | $1 Trillion+ Club | Every US-listed stock worth $1 trillion or more, ranked by market cap |
 | `large-caps-positive` | Large Caps Positive | $10B+ market cap with a bullish 7-day SentiSense Score |
 | `high-volume` | High Volume | Stocks trading the most shares today |
 | `small-cap-buzz` | Small-Cap Buzz | Under $2B market cap with a bullish 7-day SentiSense Score |
@@ -240,7 +245,7 @@ Fetch `GET /api/v1/screener/screens` for the full plans, then post the selected 
 | `etf-mega-funds` | Mega Funds | $100B+ in assets under management |
 | `etf-high-volume` | High Volume | ETFs trading the most shares today |
 | `etf-near-52w-high` | Near 52w High | Within 5% of the 52-week high |
-| `etf-dip-bullish` | Dip + Bullish | Down today while the holdings-weighted SentiSense Score stays bullish |
+| `etf-dip-bullish` | Dip + Bullish | Down more than 1% today while the holdings-weighted SentiSense Score stays bullish |
 | `etf-broad-funds` | Broad Funds | Diversified funds with 500+ holdings |
 | `etf-low-cost-core` | Low-Cost Core | Expense ratio 0.15% or less with $10B+ in assets |
 | `etf-direct-sentiment` | Direct Sentiment | Positive SentiSense Score from chatter about the fund itself, not its holdings |
@@ -248,7 +253,7 @@ Fetch `GET /api/v1/screener/screens` for the full plans, then post the selected 
 
 ## Going further
 
-**PRO ($15/mo)** lifts the monthly request cap (no monthly limit, just a 300/min rate) and unlocks full depth across the SentiSense API: institutional flows, insider detail, full congressional history, and AI insights. Apply coupon `AGENTS26` at checkout for a builder launch discount: https://app.sentisense.ai/pricing?coupon=AGENTS26
+**PRO ($15/mo)** lifts the monthly request cap (no monthly limit, just a 300/min rate) and unlocks full depth across the SentiSense API: institutional flows, insider detail, full congressional history, and AI insights. Apply coupon `AGENTS` at checkout for a builder launch discount: https://app.sentisense.ai/pricing?coupon=AGENTS
 
 For the full REST reference, install the `sentisense` skill; for the complete CLI command set, install `sentisense-cli`.
 

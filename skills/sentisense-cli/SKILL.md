@@ -1,6 +1,6 @@
 ---
 name: sentisense-cli
-description: "The official SentiSense CLI: quotes, sentiment, and market data in one npx command."
+description: "The official SentiSense CLI: US stock quotes, the SentiSense Score and sentiment, market mood, analyst ratings, earnings dates, insider and congressional trades, institutional 13F flows, end-of-day options positioning and stock screening, each as one npx command with plain-text or JSON output and stable exit codes. Use for stock market CLI, stock quotes from the command line, stock sentiment in the terminal, market data in a shell script, npx stock data. Read-only. No trading, no purchases, no write operations, no wallet access."
 license: MIT
 metadata:
   homepage: https://sentisense.ai

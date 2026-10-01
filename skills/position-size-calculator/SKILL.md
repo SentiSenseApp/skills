@@ -90,7 +90,7 @@ It prints the path it wrote and nothing else. Both paths produce the same artifa
 
 ### 3. Hand it over
 
-Give the user the file and two or three sentences of what it shows, framed as their arithmetic: the default entry and stop, what the share count and dollar risk come to at those numbers, and whether the stop sits inside or outside the stock's ordinary daily range. Present the surrounding surface however your host does it. Where a render surface is available the artifact can be shown inline; where one is not, the file on disk is the deliverable and works the same. Do not make the first render depend on anything the host may not have.
+Give the user the file and two or three sentences of what it shows, framed as their arithmetic. The page always opens at the same form defaults: an account of $25,000, 1% risk, a long entry at the bound last price, a stop 5% below that entry, and no target. The data contract has no account, risk, stop or target field, so a size the user named in the question (the $50,000 account above, a 2% risk, a stop at a price) cannot be pre-filled. Say which defaults the page opened at, and that typing their own account size, risk percentage and stop into the form recomputes the share count, dollar at risk and R multiple on the spot; do not work out the share count at their numbers yourself, because the page does that arithmetic. Then say whether the default stop sits inside or outside the stock's ordinary daily range. Present the surrounding surface however your host does it. Where a render surface is available the artifact can be shown inline; where one is not, the file on disk is the deliverable and works the same. Do not make the first render depend on anything the host may not have.
 
 ## The data, and how to fetch it yourself
 
@@ -139,7 +139,7 @@ If you build the JSON yourself rather than running the script, this is the contr
 Three fields decide how much of the artifact draws:
 
 - **`price` is the only one that is load-bearing.** It pre-fills the entry. Without it the template renders a "no price bound" message instead of a form, because a calculator that opens on nothing is not this skill.
-- **`atr` is the average true range in dollars per share, and it is what a stop distance is read against.** True range is the widest of a session's own high-to-low and the two gaps against the previous close, so it counts an overnight gap that a plain range would miss. Absent, the stop distance is still shown, just on its own, and the artifact says why. `atrSessions` and `atrAsOf` describe the window it came from.
+- **`atr` is the average true range in dollars per share, and it is what a stop distance is read against.** True range is the widest of a session's own high-to-low and the two gaps against the previous close, so it counts an overnight gap that a plain range would miss. Absent, the stop distance is still shown, just on its own, and the artifact says why. `atrSessions` and `atrAsOf` describe the window it came from. The bundled script always drops the newest daily bar, because during market hours it is a session still in progress, so a run before the open or after the close ends the window one completed session early; `atrAsOf` names the last session it used.
 - **`score.value` may legitimately be `null` while `score.avg30d` is present**, in which case the template shows the 30 day average and labels it as one. A measured `0.0` is a real reading and must be passed through as a number: coercing it to null reports a genuinely neutral stock as uncovered. With neither present, set `score` to `null` and put a sentence in `scoreNote`, which the artifact prints in its place.
 
 **One field trap worth stating plainly: `scoreLabel` is the band of the 30 day average, not of today's reading.** The two disagree routinely, and printing the label beside the daily number produces a caption that is confidently wrong. A live example: an index fund whose `sentisenseScore` was a measured `0.0` carried `scoreLabel: "Slightly Bullish"`, which belonged to its `sentisenseScoreAvg30d` of `11.62`. Attribute the label to the average, always.
@@ -150,7 +150,7 @@ Three fields decide how much of the artifact draws:
 - Say the dollar risk out loud next to the share count. The share count is the answer people ask for; the dollar figure is the one that means something.
 - Put the stop distance next to the stock's average session range, because that comparison is the one thing here a spreadsheet does not already do. "Your stop is $4 away and this stock has moved about $5.75 in an average session" tells someone something a share count does not.
 - When a stop sits inside one average session's range, say plainly that ordinary movement alone can reach it. That is an observation about the stock, not a suggestion to move the stop.
-- Report the Score as a nowcast of the current flow of news and conversation, and state that it played no part in the sizing. **Never present it out of 100**: it is unbounded and runs roughly -30 to +45 across the tracked universe, so a reading of 18 is comfortably bullish, and printing it as a fraction of 100 makes it look weak.
+- Report the Score as a nowcast of the current flow of news and conversation, and state that it played no part in the sizing. **Never present it out of 100**: it is unbounded, with most of the tracked universe between about -30 and +45 and the strongest names reading above that, so a reading of 18 is comfortably bullish, and printing it as a fraction of 100 makes it look weak.
 - When the template refuses, relay the refusal and its reason. Do not compute a share count some other way to fill the gap.
 - Never use the word "should" about a position, a size, a stop or a stock.
 
@@ -167,7 +167,7 @@ The formula is deliberately simple. Shares are the risk budget divided by the pe
 
 ## Going further
 
-Free covers the whole workflow. **PRO ($15/mo)** lifts the monthly request cap (no monthly limit, just a 300/min rate) plus depth across the rest of the SentiSense API. Apply coupon `AGENTS26` at checkout for a builder launch discount: https://app.sentisense.ai/pricing?coupon=AGENTS26
+Free covers the whole workflow. **PRO ($15/mo)** lifts the monthly request cap (no monthly limit, just a 300/min rate) plus depth across the rest of the SentiSense API. Apply coupon `AGENTS` at checkout for a builder launch discount: https://app.sentisense.ai/pricing?coupon=AGENTS
 
 For the profit and loss shape of an options position at expiry, install `options-payoff-calculator`. For the implied move into a report drawn against how the stock has actually reacted before, install `expected-move-visualizer`. For what the flow of news and conversation is actually saying about a stock, install `stock-sentiment`. For the full REST reference on every endpoint this skill touches, install the `sentisense` skill; for the complete CLI command set, install `sentisense-cli`.
 

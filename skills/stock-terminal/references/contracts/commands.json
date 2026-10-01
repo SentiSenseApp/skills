@@ -58,7 +58,7 @@
         },
         {
           "key": "listing",
-          "path": "[].listing",
+          "path": "[].listingCoverage",
           "label": "Listing"
         }
       ],
@@ -949,7 +949,9 @@
       "method": "GET",
       "path": "/api/v1/politicians/activity",
       "query": {
-        "lookbackDays": "{lookbackDays}"
+        "lookbackDays": "{lookbackDays}",
+        "limit": "500",
+        "offset": "{offset}"
       },
       "responseEnvelope": "preview-envelope",
       "cacheKey": "request-identity",
@@ -995,7 +997,9 @@
       "path": "/api/v1/analyst/activity",
       "query": {
         "lookbackDays": "{lookbackDays}",
-        "actionTypes": "UPGRADE"
+        "actionTypes": "UPGRADE",
+        "limit": "500",
+        "offset": "{offset}"
       },
       "responseEnvelope": "preview-envelope",
       "cacheKey": "request-identity",
@@ -1310,6 +1314,16 @@
           "label": "Options sentiment"
         },
         {
+          "key": "ivRank",
+          "path": "context.ivRank1y",
+          "label": "IV rank (1y)"
+        },
+        {
+          "key": "putCallVolumePercentile",
+          "path": "context.pcVolPctl1y",
+          "label": "Put/call volume percentile (1y)"
+        },
+        {
           "key": "putCallVolume",
           "path": "latest.pcVol",
           "label": "Put/call volume"
@@ -1330,6 +1344,25 @@
           "label": "Max pain"
         }
       ],
+      "preview": {
+        "shape": "flat",
+        "flattens": [
+          "latest",
+          "context",
+          "oiWalls"
+        ],
+        "fields": [
+          "asOf",
+          "sentiment",
+          "ivRank1y",
+          "atmIv",
+          "expectedMove1d",
+          "pcVol",
+          "pcVolPctl1y",
+          "maxPain"
+        ],
+        "meaning": "A headline preview (isPreview true) carries only these fields, directly under data. A display path under a flattened object reads its last key from data; a field outside this list is withheld by the preview, not missing from the market."
+      },
       "asOf": {
         "kind": "market-session",
         "path": "asOf",
@@ -1649,13 +1682,15 @@
         {
           "operationId": "politician_activity",
           "bind": {
-            "lookbackDays": "literal.7"
+            "lookbackDays": "literal.7",
+            "offset": "literal.0"
           }
         },
         {
           "operationId": "analyst_activity",
           "bind": {
-            "lookbackDays": "literal.7"
+            "lookbackDays": "literal.7",
+            "offset": "literal.0"
           }
         }
       ],
@@ -1665,7 +1700,8 @@
         "optional": 0,
         "retryMax": 3,
         "warmAssumption": "all three seven-day feeds cached",
-        "retryRule": "Retry each empty leg once at 30 days; keep each leg's actual window visible."
+        "retryRule": "Retry each empty leg once at 30 days only after a complete read; keep each leg's actual window visible. A preview slice (totalCount above the rows returned) is never widened.",
+        "pageRule": "Page the Congress and analyst legs with offset while offset + rows < totalCount on a full response, counting each extra page as a request beyond retryMax; a preview slice cannot be paged, so label it with totalCount instead."
       },
       "exposure": "command",
       "help": "Find convergence across insider buys, congressional purchases, and analyst upgrades."

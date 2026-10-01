@@ -33,7 +33,7 @@ Ask in plain language. The bundle routes to whichever skill fits:
 
 ## What is inside
 
-Fourteen skills, each also published on its own if you want just one:
+Twenty-one skills, each also published on its own if you want just one:
 
 | Skill | What it covers |
 |---|---|
@@ -41,14 +41,21 @@ Fourteen skills, each also published on its own if you want just one:
 | `stock-sentiment` | News and social sentiment per ticker, and the SentiSense Score |
 | `stock-screener` | Filter stocks and ETFs on Score, analyst, technical, and price fields, or run 28 curated screens |
 | `stock-market-dashboard` | Writes a self-contained HTML dashboard you keep |
+| `market-heatmap` | An interactive treemap of an index, coloured by today's move, sentiment, Score or options interest |
 | `unusual-options-activity` | Options flow, unusual activity, positioning |
 | `institutional-13f-tracker` | Quarterly 13F holdings, top holders, buying and selling deltas |
 | `politicians-stock-tracker` | Congressional STOCK Act disclosures by member or ticker |
 | `insider-trading-tracker` | SEC Form 4 insider buys and sells, market-wide activity, cluster buy signals |
+| `analyst-ratings-tracker` | Wall Street ratings, price targets, upgrades and downgrades, analyst coverage |
 | `stock-earnings-analysis` | Per-quarter earnings analysis, call summaries, and the forward calendar |
+| `company-kpi-tracker` | Segment revenue, deliveries, subscribers and other reported operating KPIs |
+| `stock-ontology` | The people and products behind a ticker, typed relationships, peers, and each one's SentiSense Score |
 | `last-30-days-in-markets` | One synthesized brief of the market's last 30 days |
 | `us-stocks-analysis` | Agentic research workflows for US equities |
 | `stock-terminal` | A terminal-style command set for market research |
+| `expected-move-visualizer` | Draws the 30, 60 and 90 day implied expected move as an offline HTML chart |
+| `options-payoff-calculator` | Profit and loss at expiry for common options strategies, pre-loaded with the ticker's data |
+| `position-size-calculator` | Share count and dollar risk from your account size, risk percentage and stop |
 | `sentisense-cli` | The official CLI: quotes, sentiment, and market data as single npx commands |
 | `sentisense` | The full API reference, for anything the others do not cover |
 

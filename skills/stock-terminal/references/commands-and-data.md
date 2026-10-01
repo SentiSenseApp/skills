@@ -139,8 +139,8 @@ adds one request. Local tools add zero API requests.
 | `market_insights` | `GET /api/v1/insights/market` | `preview-envelope` |
 | `index_prices` | `GET /api/v1/stocks/prices`<br>query {"tickers":"SPY,QQQ,IWM,DIA"} | `bare-array` |
 | `insider_cluster_buys` | `GET /api/v1/insider/cluster-buys`<br>query {"lookbackDays":"{lookbackDays}"} | `preview-envelope` |
-| `politician_activity` | `GET /api/v1/politicians/activity`<br>query {"lookbackDays":"{lookbackDays}"} | `preview-envelope` |
-| `analyst_activity` | `GET /api/v1/analyst/activity`<br>query {"actionTypes":"UPGRADE","lookbackDays":"{lookbackDays}"} | `preview-envelope` |
+| `politician_activity` | `GET /api/v1/politicians/activity`<br>query {"limit":"500","lookbackDays":"{lookbackDays}","offset":"{offset}"} | `preview-envelope` |
+| `analyst_activity` | `GET /api/v1/analyst/activity`<br>query {"actionTypes":"UPGRADE","limit":"500","lookbackDays":"{lookbackDays}","offset":"{offset}"} | `preview-envelope` |
 | `screener_fields` | `GET /api/v1/screener/fields` | `direct-object` |
 | `screener_execute` | `POST /api/v1/screener/execute`<br>body {"limit":"{limit}","plan":"{plan}","tickers":"{tickers}"} | `direct-object` |
 | `politician_filings` | `GET /api/v1/politicians/filings/{ticker}`<br>query {"lookbackDays":"90"} | `preview-envelope` |
@@ -151,9 +151,16 @@ adds one request. Local tools add zero API requests.
 | `earnings_calendar` | `GET /api/v1/calendar/earnings`<br>query {"ticker":"{ticker}","week":"{week}"} | `preview-envelope` |
 <!-- terminal-operations:end -->
 
-The smart-money screen starts with three seven-day feeds. Retry each empty leg once with a 30-day
-window, so the retry maximum is three requests. Label the actual window for every leg. Do not imply
-that widening the window leaves the screen at seven days.
+The smart-money screen starts with three seven-day feeds. Congress and analyst activity are paged:
+the recipe binds `offset` to 0 with the largest page, 500 rows, and `totalCount` counts the whole
+window. On a full response, re-bind `offset` while `offset + rows < totalCount`; each extra page is a
+request beyond the retry maximum, or label the leg as a slice dated by its oldest row. Cluster buys
+take no paging parameters; a full response has no `totalCount` and currently stops at 50 clusters.
+A preview whose `totalCount` exceeds its rows is a slice that `offset` cannot page past: label it with
+`totalCount` and never read an empty filtered slice as absence or disclosure lag. Retry each empty
+leg once with a 30-day window only after a complete read, so the retry maximum is three requests.
+Label the actual window for every leg. Do not imply that widening the window leaves the screen at
+seven days.
 
 ## Response shapes
 
@@ -165,7 +172,11 @@ a valid result unless the endpoint documents a different error.
 
 The command manifest records the envelope next to each operation. Do not apply one global unwrap
 rule. Story detail is a direct object while story lists are arrays. The options summary is a preview
-envelope and may carry `data:null` when the ticker is outside coverage.
+envelope and may carry `data:null` when the ticker is outside coverage. Its free headline preview is
+flat: the fields it keeps sit directly under `data` instead of under `latest`, `context`, or `oiWalls`.
+The manifest records this as the operation's `preview` contract, and the snapshot adapter applies it
+when the snapshot carries `isPreview: true`, returning `withheldByPreview` for a field the preview
+omits. Render that as withheld, not as a building baseline or zero.
 
 Each API operation also declares non-exhaustive `displayFields` and explicit `asOf` semantics.
 These are host adapter instructions, not additional fields claimed to exist in API responses.

@@ -75,7 +75,7 @@ The REST recipe in this file is the primary path. A maintained command-line clie
 
 Resolve a company name before spending requests on a ticker:
 `GET /api/v1/kb/entities/search?q={name}&type=company&limit=5`.
-The response is a bare array of `{name, urlSlug, type, ticker}`.
+The response is a bare array of `{name, urlSlug, type, ticker, listingCoverage}`.
 Select a non-null ticker; a subsidiary with no ticker can precede its listed parent.
 Clarify multiple plausible listed matches, state an empty result, and do not uppercase a company name into a symbol.
 An exact ticker provided by the user skips name resolution. Name resolution adds one request per name.
@@ -92,6 +92,8 @@ Source date and fetch time are separate. Fetching an old filing now does not mak
 The aggregate quote `timestamp` is response serve time, not the delayed trade observation time.
 Use optional `priceAsOf` (epoch milliseconds) for the underlying price observation when returned;
 its absence means unknown age, including outside regular hours. The price and ETF quote routes use the same rule.
+Outside regular hours, price, quote, and batch price rows can carry `extendedHours` (`session`, `price`, `change`, `changePercent`);
+`currentPrice` stays the regular-session price, and the extended-hours price is delayed too.
 Market mood has no supplied as-of; story lists have only per-story dates, not a list-wide as-of.
 Say "observation time not supplied" where appropriate; never substitute fetch or serve time.
 
@@ -147,7 +149,8 @@ Insights are `.data[]`; the first ranked item's text is `insightText`, not `head
 Count insider buys/sells by `transactionType == BUY|SELL`.
 Exclude `AWARD`, `GIFT`, and `EXERCISE`; nonzero `totalValue` does not make them market trades.
 Exclude `transactionCode == "F"` tax-withholding rows from sells and dollar sums.
-When a feed is previewed, label counts as counts in the returned slice.
+A preview (`isPreview: true`) whose `totalCount` exceeds the rows returned is the newest slice, not the 90-day window.
+Label it (`newest 5 of 34 trades, free preview`) and never infer absence, such as no insider buying, from it.
 
 Use this output structure, populated only from returned observations:
 
@@ -198,20 +201,32 @@ Do not collapse different signal windows into an invented composite winner.
 
 Lead with date/session, four index prices and changes, composite mood, summary headline, and up to three insights.
 The summary is flat: `headline`, `expandedContent`, `generatedAt`, `lastUpdated`.
-Market insight rows have `insightText` and no standalone `ticker`; render their text directly.
+Render each market insight's `insightText` directly; rows can also carry a `ticker` for linking.
 Separate a batch summary's age from the newer index prices.
 
 ### `screen smart-money`
 
 1. `GET /api/v1/insider/cluster-buys?lookbackDays=7`
-2. `GET /api/v1/politicians/activity?lookbackDays=7`
-3. `GET /api/v1/analyst/activity?lookbackDays=7&actionTypes=UPGRADE`
+2. `GET /api/v1/politicians/activity?lookbackDays=7&limit=500&offset=0`
+3. `GET /api/v1/analyst/activity?lookbackDays=7&actionTypes=UPGRADE&limit=500&offset=0`
 
 Filter Congress rows to `transactionType=PURCHASE` client-side; that is not a server filter here.
 Group by ticker, show each signal count and its window, and rank convergence before single-feed runners-up.
 Keep the shortlist bounded to ten. Do not add duplicate disclosures as independent conviction.
-An empty insider or Congress bucket may be genuine disclosure lag.
-Widen each empty bucket to 30 days at most once, for at most three additional requests in total.
+
+Legs 2 and 3 are paged: one call is one page, and `totalCount` counts the whole window. 500 is the largest page.
+On a full response, while `offset + data.length < totalCount`, request the next page with `offset`.
+Count each extra page as a request beyond the table's retry maximum. If the turn budget stops paging,
+label the bucket as a slice dated by its oldest row (`first 500 of 599 disclosures, disclosed since 2026-09-07`).
+Cluster buys take no `limit` or `offset`. A full cluster-buy response has no `totalCount` and currently
+returns at most 50 clusters ranked by insider count, so treat exactly 50 rows as possibly capped.
+
+A preview (`isPreview: true`) whose `totalCount` exceeds the rows returned is a slice, and `offset` cannot page past it.
+Label it (`free preview: newest 5 of 80 disclosures, none purchases`); an empty filtered slice is not disclosure lag or absence.
+Do not widen a sliced leg: a wider window still returns only a preview-sized slice. A preview holding every row of `totalCount` is complete.
+
+An empty bucket on a complete read may be genuine disclosure lag.
+Widen each such bucket to 30 days at most once, for at most three additional requests in total, then page or label it as above.
 Count each extra request and label each bucket's actual window.
 If there is no convergence, say so and show dated runners-up rather than forcing agreement.
 Trade dates can be much older than filing dates; a recent disclosure does not mean a recent purchase.
@@ -245,7 +260,7 @@ Reuse a session-cached quarter list. Always pass `limit`; the unrestricted holde
 A holders-only question uses steps 3 and 4; add other legs only when requested.
 Read `data.holders[]`: `filerName`, `shares`, `changeType`, and `sharesChangePct`.
 `data.holderCount` is the full denominator; `returnedCount` describes the slice.
-Use the insider filters from `open`, and report Congress value ranges as ranges.
+Use the insider filters and preview-slice labels from `open` on every leg, and report Congress value ranges as ranges.
 For analyst direction use `actionType`; an initiation is a new rating, not a change from a prior grade.
 Render actual grade transitions only when both grades exist and differ. Attribute actions to firms.
 Keep 90-day transactions and quarterly positions separately dated; neither proves current ownership.
@@ -256,12 +271,17 @@ Call `GET /api/v1/stocks/{T}/options/summary` once. ETFs use the same route.
 Read envelope `.data`; `data:null` means not covered.
 Present `asOf` and say end-of-day positioning.
 Use `context.ivRank1y`, `context.pcVolPctl1y`, `context.skewPctl1y`, `latest.pcVol`, and `latest.skew25d`.
-An absent percentile means unavailable or a building baseline, never percentile zero.
+In a full summary, an absent percentile means unavailable or a building baseline, never percentile zero.
 `oiWalls` has `expiry`, `maxPain`, `callWalls[]`, `putWalls[]`; wall entries have `strike` and `oi`.
 This summary does not answer a contract's current executable price, spread, or probability of profit.
 Do not invent a raw chain, live sweeps, aggressor tagging, or a contract recommendation.
-The first ten ticker dossiers per month are full on Free, then headline previews; retain the preview label.
-Do not imply a preview's missing detail means zero activity.
+
+The first ten ticker dossiers per month are full on Free, then headline previews (`isPreview: true`).
+A headline preview is flat: `asOf`, `sentiment`, `ivRank1y`, `atmIv`, `expectedMove1d`, `pcVol`, `pcVolPctl1y`,
+and `maxPain` sit directly under `data`, with no `latest`, `context`, or `oiWalls` object.
+Read `data.context ?? data`, `data.latest ?? data`, and `data.oiWalls ?? data` so one reader handles both shapes.
+The preview omits `skewPctl1y`, `skew25d`, `pcOi`, the walls and their expiry, and unusual contracts.
+Label those as withheld by the preview, not as a building baseline, and never as zero activity. Retain the preview label.
 
 ### `news <TICKER>` and `stories`
 
@@ -271,12 +291,13 @@ Use the returned SentiSense cluster titles with `cluster.averageSentiment`, `clu
 `cluster.clusteredAt` and nullable `brokeAt` are epoch seconds; display the corresponding dates.
 Ticker stories take `limit`, not a lookback window. For an explicit window, use the market stories route
 with `ticker={T}&filterHours={hours}`; do not claim ignored `days` parameters enforce coverage.
+That window counts from when a story started breaking, not from its latest article, so an ongoing story can fall outside a short window.
 
 Fetch `GET /api/v1/documents/stories/{clusterId}` only for a user-selected story needing detail.
 The list's `id` and `clusterId` both identify that detail. The list has no narrative body.
 The detail is flat; top-level `bullishView` and `bearishView` are strings,
 while those names inside `aspectPerspectives[]` are structured objects. Type-check them.
-An empty side (`""`, or a view with blank `hook` and `conclusion` and no bullets) means the sources hold no case: say so, never write one.
+An empty side (`""`, or a view with blank `hook` and `conclusion` and an empty `risksOrCatalysts` array) means the sources hold no case: say so, never write one.
 Detail `createdAt` and nullable `lastUpdatedAt` are epoch milliseconds, unlike the list's cluster dates.
 The latter dates a content update, not when the underlying event happened.
 
@@ -295,7 +316,9 @@ Read `.data.earnings[]`, group by date, and show `earningsDate`, `earningsTime`,
 Map `before_open` to BMO, `after_close` to AMC, `during_market` to MID, and leave unknown sessions blank.
 Mark `confirmed:true`; projected dates remain explicitly unconfirmed.
 A calendar is forward-looking, not proof of what the company reported.
-An empty ticker window is not proof no report is scheduled anywhere.
+Read the served window from `data.metadata.windowStart` and `windowEnd`; an empty window is not proof no report is scheduled.
+A Free key sees only the first Monday-to-Sunday week of the requested window (`isPreview: true`), while `totalCount` counts the full window.
+An empty preview with `totalCount > 0` means the report falls outside the free week, not that nothing is scheduled.
 On a preview, describe the returned window and full `totalCount` separately; never imply all rows are visible.
 
 ### `help` and natural requests

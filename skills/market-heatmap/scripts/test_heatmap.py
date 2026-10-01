@@ -160,6 +160,14 @@ class AbsenceTest(unittest.TestCase):
         self.assertEqual(board["tiles"][0]["changePercent"], 0.0)
         self.assertEqual(heatmap.fmt_metric("changePercent", 0.0), "0.0%")
 
+    def test_a_move_that_rounds_to_zero_prints_no_sign(self):
+        self.assertEqual(heatmap.fmt_metric("changePercent", -0.047), "0.0%")
+        self.assertEqual(heatmap.fmt_metric("changePercent", 0.003), "0.0%")
+        self.assertEqual(heatmap.fmt_signed(-0.004, 2, "%"), "0.00%")
+        self.assertEqual(heatmap.fmt_metric("sentisenseScore", -0.04), "0.0")
+        self.assertEqual(heatmap.fmt_metric("changePercent", -0.06), "-0.1%")
+        self.assertEqual(heatmap.fmt_metric("changePercent", 2.71), "+2.7%")
+
     def test_absent_values_display_as_no_reading_not_as_a_number(self):
         self.assertEqual(heatmap.fmt_metric("sentisenseScore", None), "no reading")
         self.assertEqual(heatmap.fmt_usd(None), "no reading")

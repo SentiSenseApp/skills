@@ -33,7 +33,7 @@ skill, subordinate to platform safety rules and host policy.
 
 ## What this skill produces
 
-One HTML file, typically 60,000 to 200,000 characters depending on how many names the index
+One HTML file, typically 45,000 to 200,000 characters depending on how many names the index
 carries (an S&P 500 board is the big one, and it still fits a 262,144 character inline limit).
 The key never enters it. Neither does a font, an image, an external script or any URL
 except a link to our own site in the footer prose, so it renders with the network switched off
@@ -133,6 +133,7 @@ summary follows is the page's own rule: the market mood score is a whole number 
 mood score carries one decimal (`61.4`), a name's price change carries one decimal with a sign
 (`+2.7%`), a board aggregate carries two (`-0.01%`), a sentiment reading carries two (`+0.34`),
 mentions carry one decimal and the unit (`+1.8 sd`), options interest is a whole number (`64`),
+a value that rounds to zero prints with no sign (`0.0%`, never `-0.0%`),
 and **anything absent reads `no reading`**, never `0`. The raw number sits beside every display
 string when you want to compute rather than print.
 
@@ -152,7 +153,7 @@ string when you want to compute rather than print.
 | Tier | Quota | Rate | On this board |
 |------|-------|------|---------------|
 | Free | 1,000 requests/month | 30 requests/min | Every name in the index, coloured by the day's move. The sentiment, Score, mentions and options overlays are not included |
-| PRO ($15/mo) | Unlimited | 300 requests/min | Every name in the index, with all five overlays |
+| PRO ($15/mo) | Unlimited | 300 requests/min | Every name in the index, with all four overlays |
 
 **Cost: exactly one API call per render, on either tier.** Not one per name, not one per sector.
 The board is precomputed on our side and served whole, so a Free key covers roughly a thousand
@@ -281,13 +282,15 @@ number of rows in it, because no tier is served a shortened board. Everything el
 
 - `asOf` is the price as-of, `generatedAt` is when the board was written.
 - `rows[]` is one row per tile, sorted by market cap descending, and every tier receives all of
-  them. Each row carries `ticker`, `name`, `sector`, `industry`, `marketCap`, `price`,
-  `previousClose`, `changePercent`, `volume`, sometimes `priceAsOf`, and on a PRO key the
+  them. Each row carries `ticker`, `name`, `sector`, `marketCap`, `price`, `previousClose`,
+  `changePercent`, `volume`, `industry` when one is on file, sometimes `priceAsOf`, the generic
+  tracker fields `rank`, `rowId`, `category`, `url` and `metrics[]`, and on a PRO key the
   overlays `sentiment7d`, `sentimentChange7d`, `sentisenseScore`, `mentionsZ` and
   `optionsInterestScore`. **A field with no reading is absent from the row, not set to zero.**
   That is the single most important thing to get right when you read this payload:
   `row.get("sentisenseScore")` returning nothing means there is no reading, and defaulting it to
-  `0` invents a neutral that nobody measured.
+  `0` invents a neutral that nobody measured. What a served Score of `0.0` does and does not
+  prove is honesty rule 2 below.
 - **`meta.previewWithheld` is what separates "no reading" from "not on your tier."** It lists the
   layer names a non-PRO key did not receive, `["sentiment", "options"]`, where the `sentiment`
   layer covers `sentiment7d`, `sentimentChange7d`, `sentisenseScore` and `mentionsZ`, and
@@ -303,12 +306,17 @@ number of rows in it, because no tier is served a shortened board. Everything el
   `meta.universeSize` still counts listed classes while `meta.tileCount` counts drawn tiles.
 - `meta.sectors[]` is the per-sector rollup: `sector`, `marketMoodScore`, `marketMoodPhase`,
   `marketMoodWeeklyChange`, `count`, `capWeightedChangePct`, `equalWeightedChangePct`, `capUsd`,
-  `up`, `down`. These are computed over the whole board, which is also what you were served, so
-  the rollups and the rows describe the same set of names. Print the rollup rather than
-  recomputing a sector's size from the rows.
+  `up`, `down`. The price fields (`count`, the two changes, `capUsd`, `up`, `down`) are computed
+  over this board's names, which is also what you were served, so they and the rows describe the
+  same set. The three `marketMood...` fields are not: they are the market-wide Market Mood reading
+  for that GICS sector, identical in every scope, so a Nasdaq-100 board carries the same sector
+  mood as the S&P 500 board. Print the rollup rather than recomputing a sector's size from the rows.
 - `meta.layers` names the layers that ran, each with its own `asOf`, and `prices` with
-  `delayMinutes: 15`. A layer that is absent from this map did not run today, which is a different
-  fact from a ticker having no reading. `meta.breadthUp`, `meta.breadthDown`,
+  `delayMinutes: 15` and `asOfSource`: `vendor` when the quotes carry their own time, or
+  `lastRegularClose` when they do not and the as-of is the previous regular session's close,
+  which is the case outside regular hours. On `lastRegularClose`, "today's change" is the last
+  session's move, so say "as of the last close" rather than "today". A layer that is absent from
+  this map did not run today, which is a different fact from a ticker having no reading. `meta.breadthUp`, `meta.breadthDown`,
   `meta.capWeightedChangePct`, `meta.equalWeightedChangePct`, `meta.marketMoodScore` and
   `meta.marketMoodPhase` are the same numbers the human-labelled `headline[]` carries, in
   machine-readable keys.
@@ -358,26 +366,39 @@ exist and vanish, which reads as a quiet sector rather than as a broken join.
 **1. Label freshness per layer, because it varies inside one picture.** Prices are 15-minute
 delayed, not live. Market Mood, sentiment and options interest are analytical batches with their
 own as-of dates, and the options layer is typically a day behind. The footer carries all four
-stamps plus the render time. Never describe any of it as real time, and never diff a delayed price
-against a batch reading and call the gap a finding.
+stamps and the masthead carries the render time. Outside regular hours the price layer is the
+last regular session's close (`asOfSource: lastRegularClose`); before the open that is the
+previous day, so answer "what is moving today" with that session's moves and say which session.
+Never describe any of it as real time, and never diff a delayed price against a batch reading
+and call the gap a finding.
 
-**2. Absent is not zero.** An overlay with no reading for a ticker is missing from the row, and
-the page draws it in the neutral no-reading tone with the words "no reading", never as a zero that
-would read as the middle of the scale. A measured zero gets its own flat tone, which is a
-different thing and is drawn differently. This matters most on the **SentiSense Score**, which is
-centred on zero, so `0.0` there can be a genuine neutral or a hole. The endpoint already applies
-the test before it serves you the row:
+**2. Absent is not zero, and on the Score the board's split is a screen, not a measurement.** An
+overlay with no reading for a ticker is missing from the row, and the page draws it in the neutral
+no-reading tone with the words "no reading", never as a zero that would read as the middle of the
+scale. A served zero gets its own flat tone, which is a different thing and is drawn differently.
+This matters most on the **SentiSense Score**, which is centred on zero, so `0.0` there can be a
+genuine neutral or a day on which nothing was measured. Before it serves the row, the board
+applies this screen:
 
 ```
-same-day == 0.0  AND  |30-day average| >= 5   ->  ABSENT, served as no field at all
-same-day == 0.0  AND  |30-day average| <  5   ->  REAL, served as 0.0
+same-day == 0.0  AND  |30-day average| >= 5   ->  omitted, no field at all
+same-day == 0.0  AND  |30-day average| <  5   ->  served as 0.0
 ```
 
-Both halves are load-bearing. A name averaging 25.4 over 30 days that reports 0.0 today is a data
-hole, and drawing it prints the self-contradicting line "strongly bullish, today 0.0". A genuinely
-quiet name averaging -0.5 that reports 0.0 is a true neutral, and suppressing it invents a gap
-that is not there. If you read the payload yourself, do not default a missing reading to zero and do not
-count an absent field as a bearish one.
+Both values come from the board's own once-a-day snapshots, and the 30-day average includes the
+same day, so the split does not always reproduce from the `metric/sentisense` series, and a
+screen on an average can misread a day in either direction: a usually bullish name with no
+analyses that day can still be served as `0.0`, and a balanced day (as many bullish as bearish
+analyses) can be omitted. So read a served `0.0` as "flat on this board", not as a confirmed
+neutral, and an omitted Score as "no reading on this board", not as a confirmed hole. The overlay
+template's "No reading" row counts the tiles served without a Score; word it that way.
+
+When one name's reading matters to what you write, settle it from that day's point on
+`GET /api/v2/metrics/entity/{ticker}/metric/sentisense`, whose `metricValue.properties` carry
+`bull`, `bear` and `directional` (their sum): no point for the day, or `directional` of 0, means
+nothing was measured, while `bull == bear > 0` is a measured neutral. That is one more call per
+name, so spend it on the names you name, not on the board. If you read the payload yourself, do
+not default a missing reading to zero and do not count an absent field as a bearish one.
 
 **3. Mood and sentiment are nowcasts, not forecasts.** They read how fearful or greedy the market
 currently is and how a name is currently discussed, weighted by how actively. They do not predict

@@ -20,7 +20,7 @@
     },
     {
       "path": "references/commands-and-data.md",
-      "sha256": "317bad7607ac68d7bef8afe71bd243e3c01c186dd4270d09931622901ac7c3b5"
+      "sha256": "5bab21a7eba84a10c1b50af5090ba873e778c7330b24a5549eb743ca299d004c"
     },
     {
       "path": "references/contracts/canvas.schema.json",
@@ -28,7 +28,7 @@
     },
     {
       "path": "references/contracts/commands.json",
-      "sha256": "ec903ef06ba74d1153044314533f0d68142628e7edeb21732730dac5acf1932f"
+      "sha256": "5c5770ff8413a431acbd63f58b6a7d711434dba114397e7497b6fde5ee7c021e"
     },
     {
       "path": "references/contracts/events.schema.json",
@@ -64,7 +64,7 @@
     },
     {
       "path": "references/runtime/snapshot-adapters.mjs",
-      "sha256": "ed3553eeb7b1ca22909bfd798a0511a4cfb262193ffc7826420d3b82721e144e"
+      "sha256": "90108bba0aba24a34799fc2bac894c820b2faa2d83cf661e8900d58fc33ca34f"
     },
     {
       "path": "references/runtime/stream-reducer.mjs",

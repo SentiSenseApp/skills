@@ -67,14 +67,39 @@ runtime and this skill, for example `OpenClaw/1.4 (us-stocks-analysis)`. Substit
 runtime and version if neither matches. Optional, and it is what tells us this skill has real
 integrations behind it, so it gets prioritized and you get notice before it changes.
 
-All SentiSense endpoints require an API key. Free tier (1,000 req/month, 30 req/min) covers everyday use, including full committee runs. PRO ($15/mo) removes the monthly cap (unlimited, 300/min) and unlocks full preview-gated history.
+All SentiSense endpoints require an API key. Free tier (1,000 req/month, 30 req/min) runs every quick read and the whole committee pipeline, but several evidence rows arrive as previews on a Free key, so a Free run fills a sliced ledger, not a complete one (see "Free-tier previews" below). PRO ($15/mo) removes the monthly cap (unlimited, 300/min) and returns the full data behind every preview.
 
 | Tier | Quota | Rate |
 |------|-------|------|
 | Free | 1,000 req/month | 30 req/min |
 | PRO | Unlimited | 300 req/min |
 
-Anonymous calls return `401 api_key_required`. The key also covers the financial statements (`/stocks/fundamentals*`), so a full SentiSense evidence ledger needs no second credential. External EDGAR, FRED, and investor-relations evidence must be supplied by the user or host; otherwise mark those rows `[NOT AVAILABLE]`.
+Without a key, most endpoints return `401 api_key_required` and some return a `LOGIN_REQUIRED` preview instead, so always send the key. The key also covers the financial statements (`/stocks/fundamentals*`), so a full SentiSense evidence ledger needs no second credential. External EDGAR, FRED, and investor-relations evidence must be supplied by the user or host; otherwise mark those rows `[NOT AVAILABLE]`.
+
+**Free-tier previews: a slice is not the window.** A response with `isPreview: true` carries a
+`totalCount`, the size of the full result. When `totalCount` is larger than the rows returned, those
+rows are a slice (the newest or top N), not the window you asked for. Label every figure built from
+one ("newest 5 of 61 insider trades, free preview"), tally it only as that slice, and never infer
+absence from it: no "zero insider activity", "no congressional buying", "not scheduled" or "no
+unusual contracts" from a slice. When the answer needs the whole window (a 90-day insider or
+congressional net, any "none" claim), say in one line that the full window needs PRO and continue
+with what the slice does show. What a Free key gets back on the calls this skill makes:
+
+| Row / step | Endpoint | Free key receives |
+|---|---|---|
+| E12, Quick Reads 1 and 4 | `insider/trades/{T}` | the newest 5 trades |
+| E13 | `politicians/filings/{T}` | the newest 3 filings by disclosure date |
+| E14 | `institutional/holders/{T}` | the top 5 holders by shares |
+| E15, Quick Read 1 | `analyst/{T}/consensus` | band, mean, analyst count and label; the buy/hold/sell counts are withheld and arrive as zeros, so never report them |
+| E16, Quick Read 4 | `calendar/earnings` | the first Monday-to-Sunday week of the requested window (by default the current week); an empty `earnings[]` with `totalCount` above 0 means the report falls outside that week, not that none is scheduled |
+| E19 | `stocks/{T}/options/summary` | 10 full summaries per calendar month (repeat calls count), then a flat headline preview (see E19 below) |
+| Quick Read 1 | `insights/stock/{T}` | the top 3 insights |
+| Quick Read 2 | `insider/cluster-buys`, `politicians/activity` | the top 5 rows of each |
+| Quick Read 4 | `analyst/{T}/estimates`, `analyst/{T}/actions` | the current-quarter estimate and the 2 most recent surprises; the 3 most recent actions |
+| Quick Read 5 | `insights/market` | the top 5 insights |
+
+Price, chart, profile, the statements (`/stocks/fundamentals*`), the sentiment and Score series,
+`/stocks/{T}/sentiment`, market mood and `/stocks/popular` are not preview-gated.
 
 **Resolve a company name before the first data call.** Every quick read and every committee step
 below takes a canonical ticker. When the user names the company instead ("brief me on tesla",
@@ -128,7 +153,7 @@ Each is a natural-language intent, an ordered set of REST calls, and a synthesis
 4. `GET /api/v1/analyst/{T}/consensus`; unwrap the envelope and read `.data`, including the target band and its `updatedAt`.
 5. `GET /api/v1/insights/stock/{T}`; unwrap `.data[]`, take the first item for the headline, check its seconds-based `generatedAt`, and flag its age.
 
-**Synthesize as:** "AAPL $190.20 (+1.2%). Sentiment +0.34 and rising (+0.06 over 7d). 3 insider buys in 90d, no sells. Analyst band $180-$250 (mean $210, 33 analysts, Buy). Latest insight: 'Margin guide raised, services beating consensus.'" Five signals, one tight brief, done.
+**Synthesize as:** "AAPL $190.20 (+1.2%). Sentiment +0.34 and rising (+0.06 over 7d). 3 insider buys in 90d, no sells. Analyst band $180-$250 (mean $210, 33 analysts, Buy). Latest insight: 'Margin guide raised, services beating consensus.'" Five signals, one tight brief, done. On a Free key the insider call is a preview: when `totalCount` exceeds the rows returned, the clause reads "newest 5 of 61 insider filings (free preview): 5 awards, no open-market trades among them", never "0 buys, 0 sells in 90d".
 
 ### Quick Read 2: "What's the smart money doing this week?"
 
@@ -136,7 +161,7 @@ Each is a natural-language intent, an ordered set of REST calls, and a synthesis
 2. `GET /api/v1/politicians/activity?lookbackDays=7`; read `.data[]` and filter to `transactionType == "PURCHASE"`.
 3. `GET /api/v1/analyst/activity?lookbackDays=7&actionTypes=UPGRADE`; read `.data[]`. `actionTypes` is a server-side CSV filter over UPGRADE, DOWNGRADE, INITIATE, REITERATE, and OTHER.
 
-Intersect the three ticker lists; report names in 2+ buckets with a one-liner each ("NVDA: 4 insiders bought ($2.1M), 1 senator purchased $50k-$100k, 2 upgrades"). Convergence is the signal. **Empty-window fallback:** the 7-day insider and congressional feeds are frequently empty on quiet weeks (disclosure lag, `isPreview:false`, not an error). Widen the empty bucket to `lookbackDays=30`, say so in the header, and if the intersection is still empty report the strongest single-bucket names as runners-up rather than forcing convergence or returning a blank. Cite the trade date (`transactionDate`), not the 7-day disclosure window: STOCK Act filings lag weeks to months, so a name surfacing this week may reflect a much older trade (see the Committee disclosure rule).
+Intersect the three ticker lists; report names in 2+ buckets with a one-liner each ("NVDA: 4 insiders bought ($2.1M), 1 senator purchased $50k-$100k, 2 upgrades"). Convergence is the signal. **Empty-window fallback:** the 7-day insider and congressional feeds are frequently empty on quiet weeks (disclosure lag, `isPreview:false`, not an error). Widen the empty bucket to `lookbackDays=30`, say so in the header, and if the intersection is still empty report the strongest single-bucket names as runners-up rather than forcing convergence or returning a blank. On a Free key the insider and congressional feeds are top-5 previews (`totalCount` gives the full count), so report convergence only among the rows returned, say the lists were previews, and never call a name absent from a bucket because it is missing from a slice. Cite the trade dates (`transactionDate` on congressional rows, `firstBuyDate` to `lastBuyDate` on cluster-buy rows), not the 7-day disclosure window: STOCK Act filings lag weeks to months, so a name surfacing this week may reflect a much older trade (see the Committee disclosure rule).
 
 ### Quick Read 3: "Find divergence stocks"
 
@@ -149,20 +174,20 @@ Intersect the three ticker lists; report names in 2+ buckets with a one-liner ea
 
 ### Quick Read 4: "Pre-earnings sentiment check on $TICKER"
 
-1. `GET /api/v1/calendar/earnings?ticker={T}` for the next report date (`data.earnings[0].earningsDate` + `confirmed`); empty means outside the forward window: fall back to `periodLabel` from step 5 for timing framing.
+1. `GET /api/v1/calendar/earnings?ticker={T}` for the next report date (`data.earnings[0].earningsDate` + `confirmed`). An empty `earnings[]` means the date is outside the window returned, which is about 60 days forward on PRO but only one week on a Free key: with `totalCount` above 0 on a Free preview the report is scheduled outside the free week, so never call it unscheduled. Either way, fall back to `periodLabel` from step 5 for timing framing and say which case it is.
 2. `GET /api/v1/stocks/{T}/profile` for sector context.
 3. `GET /api/v2/metrics/entity/{T}/metric/sentiment?startTime={now-30d epoch ms}&endTime={now epoch ms}` for the 30-day trend.
-4. `GET /api/v1/insider/trades/{T}?lookbackDays=60`. Filter before tallying: only `transactionCode` P and S are directional, and codes A, G, M and F (awards, gifts, exercises, tax withholding) are not, so an all-award window is zero insider activity, not a wave of it
+4. `GET /api/v1/insider/trades/{T}?lookbackDays=60`. Filter before tallying: only `transactionCode` P and S are directional, and codes A, G, M and F (awards, gifts, exercises, tax withholding) are not, so an all-award window is zero insider activity, not a wave of it. That reading needs the full window: on a Free preview (`totalCount` above the rows returned) an all-award slice says nothing about the rest of the window, so report it as the slice it is.
 5. `GET /api/v1/analyst/{T}/estimates` for the EPS band (`data.estimates[0]`, plus `data.surprises[]` history; no revenue figure, no revision history).
 6. `GET /api/v1/analyst/{T}/actions?lookbackDays=30`
 
-**Synthesize as:** "AAPL ER in 5d. Sentiment +0.22 over 30d, trending up. Insiders: 2 sells, 0 buys (neutral-to-bearish). EPS consensus $1.52 (range $1.48-$1.55, 28 analysts); beat 3 of last 4. 3 upgrades in 30d. Setup: mixed-bullish."
+**Synthesize as:** "AAPL ER in 5d. Sentiment +0.22 over 30d, trending up. Insiders: 2 sells, 0 buys (neutral-to-bearish). EPS consensus $1.52 (range $1.48-$1.55, 28 analysts); beat 3 of last 4. 3 upgrades in 30d. Setup: mixed-bullish." On a Free key the surprise history holds 2 quarters and the actions list 3 rows, so state the record over what was returned ("beat 2 of the last 2") rather than a four-quarter record.
 
 ### Quick Read 5: "Sector rotation today"
 
 1. `GET /api/v2/market-mood`. The composite is nested under `market` (`market.currentScore`, `market.phase`, `market.weeklyChange`), NOT at the root. `sectors` is a string-keyed dict; labels have historically overlapped (`Technology` vs `Information Technology`, `Healthcare` vs `Health Care`), so if both members of a pair appear, dedupe by keeping the higher-scoring variant before ranking. A clean 11-key response is the common case.
-2. For sectors with `weeklyChange > +5` or `< -5`: `GET /api/v1/insights/market`. **There is no ticker field on these rows.** Each item carries exactly `insightId`, `insightType`, `insightText`, `category`, `confidence`, `urgency`, `docRefs` and `generatedAt`, so the ticker has to be parsed out of `insightId`, which is the only place it is structured. The id reads `{insightType}_{SCOPE}_{period}`, where the scope segment is either a ticker or the literal `global`: `options_pc_ratio_extreme_TRMB_2026W36` and `analyst_reaction_PATH_2026-09-04` are ticker-scoped, `market_insider_trend_global` and `market_institutional_rotation_2026-06-30` are market-wide and belong to no sector. Strip the leading `insightType` and the trailing period token, and what remains is the ticker. **Do not match on `insightText` instead**: the `analyst_reaction` class routinely never names its own company in the prose (the PATH item above opens "After the Sep 3 print" and mentions neither PATH nor UiPath), so text matching silently drops exactly the earnings-driven insights a rotation read most wants.
-3. Map each parsed ticker to a sector with `/stocks/{T}/profile` `sector`, which is reliable (`descriptions` often omits `sector`, so skip rather than guess), then keep the insights whose sector is one of your movers. A mover with no matching insight is a normal outcome on a twelve-item board: report the sector move without a driver rather than stretching an unrelated insight onto it.
+2. For sectors with `weeklyChange > +5` or `< -5`: `GET /api/v1/insights/market`. Each row carries `ticker`, the stock the insight is about, next to `insightId`, `insightType`, `insightText`, `category`, `confidence`, `urgency`, `docRefs` and `generatedAt`. Market-wide rows (`market_insider_trend_global`, `market_institutional_rotation_2026-06-30`) carry `ticker: "MARKET"` (treat a null `ticker` the same way) and belong to no sector, so skip them. Parse the ticker out of `insightId` only as a fallback when `ticker` is absent: the id's trailing token is not always a period (`insider_buy_signal_FUL_cluster`, `volume_spike_anomaly_JBL_752ec5d6`), and a mis-parsed symbol 404s at the profile step and silently drops the driver. **Do not match on `insightText` instead**: the `analyst_reaction` class routinely never names its own company in the prose (the PATH item above opens "After the Sep 3 print" and mentions neither PATH nor UiPath), so text matching silently drops exactly the earnings-driven insights a rotation read most wants.
+3. Map each ticker to a sector with `/stocks/{T}/profile` `sector`, which is reliable (`descriptions` often omits `sector`, so skip rather than guess), then keep the insights whose sector is one of your movers. A mover with no matching insight is a normal outcome on a twelve-item board: report the sector move without a driver rather than stretching an unrelated insight onto it. On a Free key the board is the top 5 of `totalCount`, so a missing driver says nothing about the rest of the board.
 4. Report top 2 and bottom 2 movers, with a driver insight on the movers that have one and no driver line on the ones that do not.
 
 **Synthesize as:** "Market mood 62 (Greed, +4 wk). Greed: Technology 71 (+3.2), Comms 68. Fear: Energy 31 (-6), Utilities 36. Top driver: NVDA 'Data-center revenue accelerating.'" Drop the driver clause rather than inventing one when no insight maps to the mover.
@@ -262,15 +287,28 @@ E11  GET /api/v2/metrics/entity/{T}/metric/sentisense            bare array; lat
 E12  GET /api/v1/insider/trades/{T}?lookbackDays=90              envelope data[]
 E13  GET /api/v1/politicians/filings/{T}?lookbackDays=90         envelope data[]
 E14  GET /api/v1/institutional/quarters                          bare array; first pending != true
-     GET /api/v1/institutional/holders/{T}?reportDate={Q}        envelope data.holders[]
+     GET /api/v1/institutional/holders/{T}?reportDate={Q}&limit=10   envelope data.holders[], top 10 by shares
 E15  GET /api/v1/analyst/{T}/consensus                           envelope data
 E16  GET /api/v1/calendar/earnings?ticker={T}                    envelope data.earnings[]
 E17  GET /api/v2/market-mood                                     flat; composite under market
-E19  GET /api/v1/stocks/{T}/options/summary                      envelope data
+E19  GET /api/v1/stocks/{T}/options/summary                      envelope data: latest, context, oiWalls
 ```
 
 The current `sentisenseScore` can be null until the day's batch lands. In that case, use
 `data.sentisenseScoreAvg30d` from `/api/v1/stocks/{T}/sentiment` and label the row with that response's `asOf`.
+
+Pass `limit` on the E14 holders call: without it the endpoint returns every holder, which for a
+mega-cap is 6,000+ rows and well over a megabyte, while the row needs the top 10.
+
+**On a Free key, check every enveloped row against "Free-tier previews" before filling it.** E12,
+E13 and E14 are slices: write them as "newest 5 of 61 filings (free preview): 0 open-market buys,
+0 sells among them", never as the 90-day net. E15 keeps its band, mean, count and label but not the
+buy/hold/sell split. E16 can be empty because of the one-week window. E19, once the month's 10 full
+summaries are spent, comes back as `isPreview: true` with the headline fields flat under `data`
+(`asOf`, `sentiment`, `ivRank1y`, `atmIv`, `expectedMove1d`, `pcVol`, `pcVolPctl1y`, `maxPain`)
+instead of nested under `data.latest` and `data.context`: read `data.latest ?? data` and
+`data.context ?? data`, label the row a free preview, and write the 25d skew `[NOT AVAILABLE]`,
+since the preview carries no skew, OI walls or unusual contracts.
 
 ### The ledger template
 
@@ -283,10 +321,10 @@ The current `sentisenseScore` can be null until the day's batch lands. In that c
 | E3  | Net income (TTM or latest FY)   | $__   | __                  | quarterly | P    | SS /fundamentals/history |
 | E4  | Operating cash flow             | $__   | __                  | quarterly | P    | SS /fundamentals/history |
 | E5  | Free cash flow                  | $__   | __                  | quarterly | P    | SS /fundamentals/history |
-| E6  | Cash & equivalents              | $__   | latest balance sheet| quarterly | P    | SS /fundamentals/history |
-| E7  | Total debt                      | $__   | latest balance sheet| quarterly | P    | SS /fundamentals/history |
+| E6  | Cash & equivalents              | $__   | latest quarter end  | quarterly | P    | SS /fundamentals quarterly |
+| E7  | Total debt                      | $__   | latest quarter end  | quarterly | P    | SS /fundamentals quarterly |
 | E8  | Diluted weighted-avg shares + 3y trend | __ (up/down/flat __%) | __  | quarterly | P    | SS /fundamentals/history |
-| E9  | P/E, P/S, P/B                   | __ / __ / __ | as-of __ (price-based) | derived | P | SS /fundamentals |
+| E9  | P/E (TTM), P/S (TTM), P/B       | __ / __ / __ | TTM to __, price as-of __ | derived | P | SS /fundamentals quarterly |
 | E10 | Sentiment polarity [-1,1] + 7d trend | __ (__)| as-of __ (batch) | batch  | D1   | SS /metrics sentiment |
 | E11 | SentiSense Score                | __    | as-of __ (batch)    | batch     | D1   | SS /metrics sentisense |
 | E12 | Insider net 90d (buys/sells, $) | __    | last 90d            | batch     | D1   | SS /insider/trades |
@@ -306,7 +344,7 @@ Rules under the table, non-negotiable:
 - **Force the fiscal period into every fundamental row.** FY ends differ (NVDA ends January, AAPL ends September). "Q4 2025" without the FY convention is a bug.
 - **Every row carries its as-of, and nothing is described as real time.** Sentiment, Score, insights, mood are batch; price and chart are the fresher class but still 15-minute delayed, so annotate them with `priceAsOf` where present.
 - **New facts found mid-debate get appended as E20, E21, ...** before anyone may cite them. No row, no citation, no claim.
-- **13F: quarters first.** Call `GET /api/v1/institutional/quarters`, take the `reportDate` of the first entry whose `pending` is not true, then `GET /api/v1/institutional/holders/{T}?reportDate={Q}` and read `.data.holders[]`. Never hardcode a quarter; never take a `pending:true` one.
+- **13F: quarters first.** Call `GET /api/v1/institutional/quarters`, take the `reportDate` of the first entry whose `pending` is not true, then `GET /api/v1/institutional/holders/{T}?reportDate={Q}&limit=10` and read `.data.holders[]`. Never hardcode a quarter; never take a `pending:true` one.
 - **Insider tallies exclude non-signals.** Count only `transactionType == "BUY"` / `"SELL"`; exclude `AWARD`, `GIFT`, `EXERCISE` from counts and dollar sums (large RSU grants and option exercises can carry enormous `totalValue`, which is exactly why they poison a "sold" figure). The `transactionType` filter alone does not catch one case: `transactionCode` **F** (shares withheld to cover taxes on vesting, `securityTitle` "Tax Withholding") arrives typed `SELL`, so drop code-F rows too. It is mechanical withholding, not a decision to sell.
 - **Sample size matters on sentiment rows.** A reading built on a handful of mentions is noise, not signal. Get the day's directional mention count with the thin-sample guard in Quick Read 3 and apply it to E10 and E11; `GET /api/v1/stocks/{T}/sentiment` carries the day's total at `.data.mentions` as a coarse cross-check. Note thin samples in the Value cell ("+0.41 on 5 mentions, thin") and expect them to be attacked in R2.
 - **Congressional windows filter on disclosure date, not trade date.** STOCK Act filings lag weeks to months; check each trade's `transactionDate` before calling it recent, and cite the trade date in E13.
@@ -316,9 +354,21 @@ Rules under the table, non-negotiable:
 Fills E2 through E9 with the same API key as the D1 rows. Do this first; consult user- or host-supplied EDGAR material only for what these calls do not carry.
 
 ```bash
-GET /api/v1/stocks/fundamentals/history?ticker={T}&timeframe=annual&limit=4   # E2-E8, plus the 3y share trend
-GET /api/v1/stocks/fundamentals?ticker={T}&timeframe=annual                   # E9 ratios and market cap
+GET /api/v1/stocks/fundamentals/history?ticker={T}&timeframe=annual&limit=4   # E2-E5, E8, plus the 3y share trend
+GET /api/v1/stocks/fundamentals?ticker={T}&timeframe=quarterly                # E6, E7, E9: latest quarter, trailing multiples
 ```
+
+**E9 uses trailing multiples, never the annual route.** With no `fiscalPeriod` or `fiscalYear`,
+`/fundamentals?timeframe=quarterly` returns the latest reported quarter priced against the current
+15-minute-delayed quote: `peRatio` is that price over `epsTTM` (the last four reported quarters,
+counted in `quartersIncluded`), `psRatio` is a trailing-twelve-month price to sales, and `pbRatio`
+uses that quarter's book value. Label the row `TTM to {periodEndDate}` with the price's as-of, and
+call the P/E trailing only when `epsTTM` is present and `quartersIncluded` is 4. A null `peRatio`
+with `epsTTM` at or below zero is a trailing loss: write "not meaningful (TTM loss)", not
+`[NOT AVAILABLE]`. Do not fill E9 from `timeframe=annual`: that path prices today's quote against
+the last fiscal year's diluted EPS, which can be up to a year old (AAPL on 2026-10-01: 44.6x on
+FY2025 EPS against 38.1x trailing). The same response carries `revenueTTM` and `netIncomeTTM` if
+E2 and E3 should be trailing rather than fiscal-year figures.
 
 `/fundamentals/history` returns `{ ticker, timeframe, count, reason, periods[] }`, newest first,
 one entry per fiscal year (or quarter with `timeframe=quarterly`, up to 40). Each period carries
@@ -351,14 +401,17 @@ was never a period-end count despite the name.
 
 Four field-level facts worth knowing before you read a null as a gap:
 
-- **`/fundamentals` (single period) leaves `cash` null; `/fundamentals/history` fills it.** Checked
-  on NVDA, AAPL and MSFT annual on 2026-09-07: the single-period endpoint returned `cash: null` for
-  all three while the history rows carried the balance. So E6 comes from the history call. The
-  reverse holds for E9: `peRatio`, `psRatio`, `pbRatio`, `marketCap` and `currentPrice` are
-  populated on `/fundamentals` and null on every history row, because they are price-based and the
-  history table is statements only.
-- **`/fundamentals/current` is not a statement snapshot.** It returned only `epsTTM` on the same
-  three tickers, every statement field null. Do not route a ledger row through it.
+- **The two calls cover different periods.** Annual history rows end at the last fiscal year end;
+  the quarterly `/fundamentals` call is the latest reported quarter. So the balance-sheet rows E6
+  and E7 come from the quarterly call (`cash`, `debt`, labelled with its `periodEndDate`), since
+  that is the latest balance sheet, while the flows and the share trend come from the annual
+  history. The price-based fields (`peRatio`, `psRatio`, `pbRatio`, `marketCap`, `currentPrice`)
+  are populated on `/fundamentals` and null on every history row, because history is statements only.
+- **`/fundamentals/current` is a trailing-ratio snapshot, not a statement snapshot.** It returns
+  `currentPrice`, `peTTM`, `psTTM`, `epsTTM`, `revenueTTM`, `quartersIncluded`, `reportedCurrency`
+  and `available`, and no statement fields. Its `peTTM` and `psTTM` are on the same trailing basis
+  as E9 above, so it works as a cross-check; it carries no P/B and no period end date, so it cannot
+  fill E9 alone.
 - **`reportedCurrency` is the filer's own currency, never converted.** ADRs report in KRW, JPY, EUR.
   When it is absent the currency is unknown, not implicitly USD. The API suppresses `peRatio`,
   `psRatio` and `pbRatio` to null for non-USD filers on purpose (the price is a USD ADR price), so
@@ -420,7 +473,7 @@ If a fundamentals call itself comes back empty (`count: 0`, or a `reason`), or t
 for it, run the committee anyway with the thinner ledger: D1 rows filled, the statement rows
 `[NOT AVAILABLE]`. Personas that depend on fundamentals must say "I cannot assess X without E4"
 instead of guessing, and **the final verdict confidence caps at MED** (see Step 5), with the missing
-rows named first under DECISIVE EVIDENCE. Degrade to fewer facts, never to invented facts.
+rows named first under WHAT WE DON'T KNOW. Degrade to fewer facts, never to invented facts.
 
 ---
 
@@ -775,7 +828,7 @@ Run last, before showing the user anything:
 
 ## Execution modes
 
-Mode selection is the first orchestration decision, made at Step 0 via a detection gate: **if the host's tool list contains a tool that runs an independent agent or prompt** (`Task`, `dispatch_agent`, `spawn`, `spawn_agent`, `run_subagent`, `agent`, or similar), use Mode A; otherwise Mode B. When unsure, Mode B. Emit `COMMITTEE MODE: A | B` in the verdict for transcript honesty.
+Mode selection is the first orchestration decision, made at Step 0 via a detection gate: **if the host's tool list contains a tool that runs an independent agent or prompt** (`Task`, `dispatch_agent`, `spawn`, `spawn_agent`, `run_subagent`, `agent`, or similar), use Mode A; otherwise Mode B. When unsure, Mode B. Record the mode in the verdict's RUN NOTES line for transcript honesty.
 
 ### Mode A: native sub-agent fan-out (the upside)
 
@@ -842,7 +895,7 @@ EVIDENCE (excerpt)
 | E1  | Price + day    | $172.40 / +1.1% (ill.) | 15-min delayed | D1 | SS /stocks/price |
 | E2  | Revenue FY     | $130.5B (ill.)  | FY2025, ended Jan 2025 | P | SS /fundamentals/history |
 | E5  | FCF            | $60.9B (ill.)   | FY2025             | P  | SS /fundamentals/history |
-| E9  | P/E, P/S       | 46x / 21x (ill.)| derived            | P  | derived |
+| E9  | P/E, P/S (TTM) | 46x / 21x (ill.)| TTM to Jul 2025 (ill.) | P | SS /fundamentals |
 | E10 | Sentiment      | +0.41, rising (ill.) | as-of 09:30 ET (batch) | D1 | SS |
 | E12 | Insider 90d    | 0 buys / 7 sells, $48M (ill.) | 90d  | D1 | SS |
 | E14 | 13F motion     | [NOT AVAILABLE] (quarter pending)    | D1 | SS |
@@ -908,9 +961,11 @@ Parameters and full schemas: the `sentisense` skill, or https://sentisense.ai/sk
 RESOLVE     GET /api/v1/kb/entities/search?q={name}&type=company&limit=5   (bare array, best first; take the first non-null ticker; type=etf for funds)
 FUNDAMENTALS
             GET /api/v1/stocks/fundamentals/history?ticker={T}&timeframe=annual|quarterly&limit=N
-                                                       (periods[], newest first; E2-E8)
-            GET /api/v1/stocks/fundamentals?ticker={T}&timeframe=annual|quarterly
-                                                       (flat single period; E9 ratios + marketCap)
+                                                       (periods[], newest first; E2-E5, E8)
+            GET /api/v1/stocks/fundamentals?ticker={T}&timeframe=quarterly
+                                                       (flat latest quarter; E6, E7, E9 trailing ratios, marketCap)
+            GET /api/v1/stocks/fundamentals/current?ticker={T}
+                                                       (flat; peTTM, psTTM, epsTTM, revenueTTM; E9 cross-check only)
 PRICE       GET /api/v1/stocks/price?ticker={T}          (flat; currentPrice, changePercent; timestamp is serve time)
             GET /api/v1/stocks/prices?tickers=A,B,C
             GET /api/v1/stocks/chart?ticker={T}&timeframe=1M|3M|6M|1Y
@@ -925,7 +980,7 @@ CONGRESS    GET /api/v1/politicians/filings/{T}?lookbackDays=N        (envelope 
             GET /api/v1/politicians/activity?lookbackDays=N           (envelope data[])
             GET /api/v1/politicians/member/{slug}                     (trades at data.recentTrades[])
 INSTITUTION GET /api/v1/institutional/quarters                         (bare array; skip pending:true)
-            GET /api/v1/institutional/holders/{T}?reportDate={Q}      (envelope data.holders[])
+            GET /api/v1/institutional/holders/{T}?reportDate={Q}&limit=N   (envelope data.holders[]; pass limit)
 ANALYST     GET /api/v1/analyst/{T}/consensus         (envelope data)
             GET /api/v1/analyst/{T}/actions?lookbackDays=N            (envelope data[])
             GET /api/v1/analyst/{T}/estimates          (data.estimates[0] + data.surprises[])
@@ -941,7 +996,7 @@ OPTIONS     GET /api/v1/options/overview               (end-of-day radar board, 
 ## Agent Tips (shape gotchas worth memorizing)
 
 - **Wrap vs flat varies by endpoint.** Read FLAT (no `.data`): `price`, `prices`, `chart`, `popular`, `market-mood`, `stocks/{T}/profile`, `descriptions`, and `metrics/entity/{T}/metric/*` (bare arrays). `institutional/quarters` is a bare array (take the first entry whose `pending` is not true). These are wrapped in `{ isPreview, previewReason, data }`: `insider/*`, `analyst/*`, `insights/*`, `politicians/*`, `institutional/holders`, `stocks/{T}/sentiment`, `stocks/{T}/options/summary`, and `calendar/earnings` (read `data.earnings[]`). When unsure: `Array.isArray(raw) ? raw : (raw?.data ?? raw)`.
-- **`isPreview:true` is not an error.** Free tier returns real, truncated data. Synthesize from what you get; mention PRO only when the truncation materially limits the answer.
+- **`isPreview:true` is not an error, and it is not the whole window.** Free returns real data, truncated: compare `totalCount` with the rows returned, label a slice as a slice ("newest 5 of 61"), and never read absence or a window total from it (see "Free-tier previews"). Mention PRO in one line when the truncation materially limits the answer, which it does whenever a row needs the full window.
 - **Metric scalar path:** the flat `series[i].value`, present on every point of every metric series and holding the reading. Prefer it over the nested `metricValue`, whose depth varies by metric type: `sentiment`, `sentisense` and `social_dominance` nest at `metricValue.value.value` because `metricValue.value` is itself a dict, while `mentions` is a count metric whose integer sits at `metricValue.value`, so `metricValue.value.value` throws on it. Latest reading = last element. Polarity in [-1, 1]; the SentiSense Score is unbounded, report as-is.
 - **Insider field is `transactionType` (`BUY`/`SELL`)**, congress uses `PURCHASE`/`SALE`. Exclude `AWARD`/`GIFT`/`EXERCISE` from tallies (grants and exercises can carry very large `totalValue`), and drop `transactionCode` `F` (tax withholding on vesting) even though it arrives typed `SELL`.
 - **`market-mood` nests the composite under `market`**; `sectors` is a dict whose GICS labels have historically overlapped, so dedupe defensively if a pair appears.
@@ -970,10 +1025,10 @@ the missing fact is load-bearing.
 
 | Capability | Free | PRO |
 |------------|------|-----|
-| Quick Reads 1-5 | Full workflows; preview-gated depth (top-3 insights, sliced flow) | Full lists and history |
-| Committee run | Full committee; 13F depth and history preview-gated | Full 13F holder base and history for the smart-money rows |
-| Options positioning (E19) | IV rank, put/call, skew, OI walls, max pain: full dossier for 10 tickers/month + top-25 board + 1y history | Unlimited dossiers, full board, full history |
-| Divergence screen | Against `/popular` (~50 tickers, ~101 calls/run: 1 `/popular` + 2 per ticker, about 10% of the Free 1,000/month quota) | Full universe |
+| Quick Reads 1-5 | Full workflows on previews: newest 5 insider trades, top 3 or 5 insights, top 5 of each smart-money feed, one week of the earnings calendar, 3 analyst actions; label slices, never infer absence | Full lists and history |
+| Committee run | Full pipeline on a sliced ledger: E12 newest 5 insider trades, E13 newest 3 congressional filings, E14 top 5 holders, E15 without the rating split, E16 one week, E19 headline-only after 10 full summaries; statements, price, sentiment, Score and mood complete | Full windows for every row |
+| Options positioning (E19) | 10 full summaries per calendar month, repeat calls included, then a headline preview (IV rank, ATM IV, 1-day expected move, put/call and its percentile, max pain; no skew, OI walls or unusual contracts) + top-25 board + 1y history | Unlimited full summaries, full board, full history |
+| Divergence screen | Against `/popular`: 1 call plus 2 per ticker, so compute 1 + 2 x the list length before running (83 tickers currently, 167 calls, about 17% of the Free 1,000/month quota and over 5 minutes at 30/min) | Full universe |
 | Monthly quota | ~30 committee runs + daily quick reads | Unlimited |
 
 PRO at $15/month: https://app.sentisense.ai/pricing?coupon=AGENTS (apply coupon AGENTS at checkout for a builder launch discount)

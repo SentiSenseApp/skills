@@ -91,6 +91,18 @@ export function validateLiveBlockBinding(manifest, snapshot, block, options = {}
   return { ok: true, operation, snapshot };
 }
 
+// A flat preview contract (operation.preview.shape === 'flat') moves the fields it keeps from
+// nested objects such as `latest` or `context` directly under data. Returns the path to read,
+// or null when the preview withholds the field entirely.
+const previewPath = (operation, snapshot, path) => {
+  const contract = operation.preview;
+  if (snapshot?.isPreview !== true || contract?.shape !== 'flat') return path;
+  const keys = path.split('.');
+  const flattened = keys.length === 2 && contract.flattens?.includes(keys[0]);
+  const leaf = flattened ? keys[1] : path;
+  return contract.fields?.includes(leaf) ? leaf : null;
+};
+
 export function getDisplayField(manifest, snapshot, key) {
   const operation = operationFor(manifest, snapshot?.operationId);
   if (!operation) return error('UNSUPPORTED_OPERATION', 'Snapshot operation is not registered for presentation.');
@@ -99,7 +111,9 @@ export function getDisplayField(manifest, snapshot, key) {
   if (collectionPath(field.path)) {
     return error('COLLECTION_FIELD', 'A collection field cannot be selected as a metric scalar.');
   }
-  const value = readPath(snapshot.data, field.path);
+  const path = previewPath(operation, snapshot, field.path);
+  if (path === null) return { ok: true, field, value: null, missing: true, withheldByPreview: true };
+  const value = readPath(snapshot.data, path);
   if (value === undefined || value === null) return { ok: true, field, value: null, missing: true };
   if (!scalar(value, MAX_METRIC_STRING)) return error('NON_SCALAR_FIELD', 'Display field did not resolve to a bounded scalar value.');
   return { ok: true, field, value, missing: false };

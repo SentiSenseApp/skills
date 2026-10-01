@@ -1,6 +1,6 @@
 ---
 name: stock-market-dashboard
-description: "Build a stock market dashboard as a single self-contained HTML file you can open in a browser. Generates a morning market briefing from live data: a fear-to-greed market mood gauge with its component signals, sentiment breadth, sector heat, the biggest 7-day attention shifts, an options radar, a watchlist with sentiment scores and analyst consensus, insider cluster buys, congressional trades, institutional flows, overnight story clusters, and the week's earnings calendar. No backend, no build step, no dependencies, one file. Use for \"build me a stock market dashboard\", \"make a stock dashboard html\", \"morning market briefing\", \"watchlist dashboard\", \"daily market report\". Read-only. No trading, no purchases, no write operations, no wallet access."
+description: "Build a stock market dashboard as a single self-contained HTML file you can open in a browser. Generates a morning market briefing from live data: a fear-to-greed market mood gauge with its component signals, sentiment breadth, sector heat, the biggest 7-day SentiSense Score shifts, an options radar, a watchlist with sentiment scores and analyst consensus, insider cluster buys, congressional trades, institutional flows, overnight story clusters, and the week's earnings calendar. No backend, no build step, no dependencies, one file. Use for \"build me a stock market dashboard\", \"make a stock dashboard html\", \"morning market briefing\", \"watchlist dashboard\", \"daily market report\". Read-only. No trading, no purchases, no write operations, no wallet access."
 license: MIT
 metadata:
   homepage: https://sentisense.ai
@@ -11,7 +11,7 @@ metadata:
 
 > Turn live market data into a morning desk note you can open in a browser. One self-contained
 > HTML file: no backend, no build step, no dependencies, no deploy. Fear-to-greed market mood and
-> its component signals, sentiment breadth, sector tone, the biggest attention shifts, an options
+> its component signals, sentiment breadth, sector tone, the biggest 7-day Score shifts, an options
 > radar ranked against each name's own history, your watchlist, insider and congressional and
 > institutional position changes, overnight stories ranked by impact, Street rating moves, and the
 > week's earnings. Read-only API.
@@ -59,45 +59,55 @@ will end up hand-patching a half-written document.
 | Market mood + signals | `GET /api/v2/market-mood?days=30` |
 | Sector tone vs market | `GET /api/v1/sentiment/sectors` |
 | Sentiment breadth | `GET /api/v1/sentiment/breadth` |
-| Attention shifts, 7d sentiment movers | `GET /api/v1/trackers/sentiment-movers` |
+| Score shifts, 7-day movers | `GET /api/v1/trackers/sentiment-movers` |
 | Options radar | `GET /api/v1/options/overview` |
 | Insider cluster buys | `GET /api/v1/insider/cluster-buys` |
 | Congressional trades | `GET /api/v1/politicians/activity` |
 | Institutional net flows | `GET /api/v1/institutional/flows` |
 | Overnight stories | `GET /api/v1/documents/stories` |
-| Street rating changes | `GET /api/v1/analyst/activity?actionTypes=UPGRADE,DOWNGRADE,INITIATE` |
-| Earnings this week | `GET /api/v1/calendar/earnings` |
+| Street rating changes | `GET /api/v1/analyst/activity?actionTypes=UPGRADE,DOWNGRADE,INITIATE&lookbackDays=1` (`3` on a Monday) |
+| Earnings this week | `GET /api/v1/calendar/earnings?week=this` |
 | Latest price (15-minute delayed), per ticker | `GET /api/v1/stocks/{ticker}/quote` |
 | **SentiSense Score**, per ticker | `GET /api/v2/metrics/entity/{ticker}/metric/sentisense?startTime={epochMs30dAgo}` |
 | Sentiment polarity, per ticker | `GET /api/v2/metrics/entity/{ticker}/metric/sentiment` |
 | Analyst consensus, per ticker | `GET /api/v1/analyst/{ticker}/consensus` |
 
-A five-ticker watchlist plus the market-wide sections is about twenty-five calls. Run them
-concurrently.
+A five-ticker watchlist plus the market-wide sections is 31 calls: 11 market-wide plus 4 per
+ticker. On PRO run them concurrently. A free key allows 30 requests a minute, so cap concurrency
+or spread the calls over more than a minute, and on a `429 rate_limit_exceeded` wait for the
+`Retry-After` seconds before retrying.
 
-**Four parameter details that are not optional, each of which silently degrades the page if you
-drop it:**
+**Parameter details that are not optional, each of which silently degrades the page if you drop
+it:**
 
 - **`sentisense` and `sentiment` are different metrics on different scales.** `sentisense` is the
-  SentiSense Score, which currently runs roughly -30 to +45 across the tracked universe and is
-  centred on 0. `sentiment` is polarity, bounded to
-  [-1, 1]. Every threshold in this skill (the diverging bar, the strong-regime band, the absent
-  test) is on the Score scale. Feed it polarity and every one of them is wrong by two orders of
-  magnitude: nothing ever clears them, and the page silently renders every name as unremarkable.
-  Fetch both if you render both columns.
+  SentiSense Score, which is unbounded and centred on 0; single-day readings on heavily discussed
+  names pass plus or minus 40, so scale the diverging bar to the values you fetched rather than to
+  a fixed range. `sentiment` is polarity, bounded to [-1, 1]. Every threshold in this skill (the
+  diverging bar, the strong-regime band) is on the Score scale. Feed it polarity and every one of
+  them is wrong by two orders of magnitude: nothing ever clears them, and the page silently
+  renders every name as unremarkable. Fetch both if you render both columns.
 - **Metric calls default to a 7-day window.** The 30-day average this page leads with does not
   exist in that response. Pass `startTime` as epoch millis 30 days back, or you are averaging a
   week and calling it a month.
 - **`days=30` on market mood, not `days=7`.** Below roughly two weeks of history the API returns
   `weeklyChange: null` and a `null` `change` on every one of the six signals, so the trend arrows
   the layout depends on all disappear.
-- **`actionTypes` on analyst activity.** The bare call is mostly reiterations, which are not rating
-  changes. Without the filter the "Street moves" section is padding. Size the panel for what the
-  filter actually leaves: about 83% of all actions are reiterations, so of the roughly 70 to 110
-  actions on an active market day, only **about 10 to 15 market-wide are real rating changes**.
-  A "Street moves" panel built to hold twenty rows will look empty most days and that is the data,
-  not a broken call. Ask for a multi-day window (`lookbackDays=3` or more) if you want the panel
-  full, and label the window you used.
+- **`actionTypes` and `lookbackDays` on analyst activity.** The bare call is mostly reiterations,
+  which are not rating changes, so without the `actionTypes` filter the "Street moves" section is
+  padding. The window matters as much: `lookbackDays` defaults to 30, it counts back that many
+  calendar days from today in US Eastern time with today included, and rows arrive newest first,
+  50 to a page. A call without it therefore fills the panel from the last several sessions, which
+  is not "today". For the latest session's moves pass `lookbackDays=1` from Tuesday to Saturday,
+  `2` on a Sunday and `3` on a Monday, each of which reaches back to the last weekday session.
+  Size the panel from `totalCount` rather than a fixed row count: a quiet session leaves only a
+  handful of real changes, and that is the data, not a broken call. Label the dates you show.
+- **`week=this` on the earnings calendar.** Without a window the calendar returns the whole
+  forward window on PRO (about two months, hundreds of events), which a heading of "Earnings this
+  week" would misdescribe. `week=this` is the Monday-to-Sunday week containing the current US
+  Eastern date on every tier, and `metadata.windowStart` / `metadata.windowEnd` echo the dates, so
+  put them in the section heading. Generating on a weekend for the week ahead, ask for
+  `week=next` and title the section for that week.
 - **Drop rating-change rows whose grades did not move.** `actionType` comes from the research
   provider and is not cross-checked against `fromGrade` and `toGrade`, so a few rows a week arrive
   as an `UPGRADE` with identical grades, or an `INITIATE` that still carries a `fromGrade`. In a
@@ -108,6 +118,19 @@ drop it:**
 Several v1 endpoints wrap the payload as `{ isPreview, previewReason, data }`; read `data`. The
 movers, options, insider, politicians, flows, analyst and earnings calls all do. Market mood,
 sectors, breadth, stories, quote and the metrics endpoints return their payload directly.
+
+**On a free key some panels are previews, and a preview is a slice, not the window.** When a
+response carries `isPreview: true` and a `totalCount` larger than the rows you received, you have
+the top or newest few, not everything: currently 5 rows for insider cluster buys and congressional
+trades, 5 per side for institutional flows, and the top 25 for the options radar. Label each such
+panel with what it is ("newest 5 of 1,774 congressional trades, free preview") and never write
+absence from a slice: no "no cluster buying", "Congress is quiet" or "nothing unusual in options"
+while `totalCount` says there is more. A preview whose `totalCount` equals its rows is complete,
+as the `week=this` calendar is on every tier. The analyst consensus preview keeps
+`consensusLabel`, the target band and `numberOfAnalysts` but serves the five rating counts as `0`
+and `recommendationMean` as `null`. Those zeros are withheld, not a survey with no ratings, so on
+a preview drop the buy/hold/sell distribution and the "rated" count from the watchlist row rather
+than printing "0 rated".
 
 **Identify your client.** Send a `User-Agent` naming your agent runtime and this skill, for
 example `OpenClaw/1.4 (stock-market-dashboard)` or `ClaudeCode/2.1 (stock-market-dashboard)`. Substitute your own runtime and
@@ -134,10 +157,10 @@ names come next, and the calendar is context rather than headline.
 
 1. **Masthead.** Name it like a desk note, not a report. The week it covers, the generation
    timestamp, whether it is pre-open or post-close.
-2. **Market state**, three columns: the mood hero with its phase, the five component signals as
-   thin bars, and all eleven sectors ranked by tone *relative to the market*. Sector tone is
-   market-relative on purpose, because news tone skews positive as a genre and an absolute number
-   would read bullish everywhere.
+2. **Market state**, three columns: the mood hero with its phase, the six component signals as
+   thin bars, and all eleven sectors ranked by tone *relative to the market* (`consensusVsMarket`,
+   with `consensusLabel` as the wording). Sector tone is market-relative on purpose, because news
+   tone skews positive as a genre and an absolute number would read bullish everywhere.
 3. **Sentiment breadth** as a single stacked strip: bullish, neutral, bearish share plus net
    breadth against a month ago. Breadth is what confirms or denies the composite, so it sits
    directly beneath it.
@@ -145,9 +168,15 @@ names come next, and the calendar is context rather than headline.
    the page. When Risk Appetite is greedy while Social Momentum is fearful, that gap *is* the read
    and a composite alone hides it. **Skip it entirely when nothing diverges. Do not manufacture
    tension.**
-5. **Attention shifts**: the biggest 7-day sentiment changes, warming and cooling. This tracker
-   ranks *tone*, not the SentiSense Score, so label it that way. A leaderboard is
-   static and a delta is actionable, so prefer movers over top-N.
+5. **Score shifts**: the biggest 7-day moves, warming and cooling. This tracker ranks by its
+   `Score change (7d)` metric: the name's 7-day average SentiSense Score minus its 30-day average,
+   so it measures how far the last week has pulled away from the month. It is not a change in
+   tone and not a change since seven days ago. Rows carry `category` (`improving` or
+   `deteriorating`), the 30-day average Score where one exists (`SentiSense Score`) with its band
+   (`Score tone`), and polarity columns (`Sentiment now`, `7d ago`, `Change (7d)`). Label the
+   section as Score shifts. If you show the polarity change beside it, name it as a separate measure, because the
+   two can disagree in sign: a name can lead the warming list while its tone fell. A leaderboard
+   is static and a delta is actionable, so prefer movers over top-N.
 6. **Options radar**: names at extremes of *their own* IV rank and put/call history, not absolute
    levels. Absolute IV just re-sorts the same volatile names every day.
 7. **Watchlist**: price, score with a diverging bar, today, sentiment, analyst consensus, and a
@@ -227,33 +256,38 @@ Rules that keep it readable:
 ## Honesty rules, all five load-bearing
 
 **1. Label freshness per field, because it varies inside one row.** Prices are 15-minute delayed,
-not live: annotate them with `priceAsOf` where the payload carries it. Scores, sentiment and
+not live: annotate them with `priceAsOf` where the payload carries it. `priceAsOf` is omitted
+outside regular hours, so a pre-open brief labels the price by session ("last close") rather
+than by the response `timestamp`, which is the time it was served. Scores, sentiment and
 signals come from the latest analytical batch and are older still. A 13F quarter that is still
 filing shows early filers only, so positions will grow. Earnings dates are curated and unconfirmed
 ones shift. Putting a price next to a batch score with no note invites the reader to diff them and
 conclude something is broken.
 
-**2. A zero is not a missing value, and this one has bitten us twice in opposite directions.** The
-**SentiSense Score** (`metric/sentisense`, not `metric/sentiment`) is centered on zero, so `0.0`
-means *genuinely neutral*. When a same-day value comes back as exactly `0.0`, you have to decide
-whether it is a reading or a hole, and **"non-zero 30-day average" is not a good enough test.** Use
-a magnitude threshold, on the Score scale:
+**2. A zero is not a missing value, and it fails in both directions.** The **SentiSense Score**
+(`metric/sentisense`, not `metric/sentiment`) is centred on zero, so a same-day `0.0` can be a
+genuine neutral or a day on which nothing was measured. Decide from the day's own sample, which
+every Score point carries under `metricValue.properties`: `bull`, `bear`, and `directional`
+(their sum).
 
 ```
-same-day == 0.0  AND  |30-day average| >= 5   ->  ABSENT, render "no reading"
-same-day == 0.0  AND  |30-day average| <  5   ->  REAL, render 0.0
+no point for the day, or directional == 0   ->  ABSENT, render "no reading"
+value == 0.0  AND  bull == bear > 0          ->  REAL, render 0.0
 ```
 
 Both halves are load-bearing, and each corresponds to a real row:
 
-- A name at `30d 25.4` reporting `today 0.0` is a data hole. Rendering it prints the
-  self-contradicting line "Strong Bullish, today 0.0".
-- A genuinely quiet name at `30d -0.5` reporting `today 0.0` is a **true neutral**. Suppressing it
-  as "no reading" invents a gap that is not there, which is the same error in the other direction.
+- A name averaging about 7 over 30 days that reports `today 0.0` with `directional 0` had no
+  bullish or bearish analyses that day. Rendering 0.0 prints a neutral nobody measured.
+- A name averaging about 10 that reports `today 0.0` with 14 bullish and 14 bearish analyses is a
+  **measured neutral**: a balanced day, not a gap. Suppressing it invents a hole.
 
-Rendering an absent value as zero on a zero-centered scale is unfalsifiable by the reader: they
-cannot tell a real neutral from a gap. Inventing a gap is equally unfalsifiable. Pick with the
-threshold, not by eye.
+Do not use the 30-day average as the test. A quiet day and a balanced day for the same name look
+identical through it, so any threshold on it either suppresses genuine neutrals or keeps holes.
+The last point can be the current day so far, so early in the day `directional 0` means no
+reading yet. Rendering an absent value as zero on a zero-centered scale is unfalsifiable by the
+reader: they cannot tell a real neutral from a gap. Inventing a gap is equally unfalsifiable.
+Decide from the counts, not by eye.
 
 **3. The score is a nowcast, not a forecast.** It reads how bullish or bearish the market currently
 is on a stock, weighted by how actively it is discussed. It does not predict price. Never label it
@@ -293,7 +327,9 @@ with unconfirmed dates, an options radar built from one session's chains.
   backwards from what people expect, so label it in the tooltip.
 - **Analyst counts do not reconcile, and that is correct.** The price-target population and the
   buy/hold/sell survey are different samples. Report "58 analysts" against the target band and
-  "61 rated" against the distribution rather than forcing them to match.
+  "61 rated" against the distribution rather than forcing them to match. On a free-key preview
+  the distribution is withheld (see the preview note under the calls), so show the label and the
+  target band only.
 
 ---
 

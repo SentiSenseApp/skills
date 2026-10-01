@@ -752,6 +752,11 @@ function update() {
         "carry it.");
     }
   }
+  if (!(DATA.nextEarnings && DATA.nextEarnings.date) && DATA.nextEarningsStatus === "outside_preview") {
+    notes.push("The next report date is not in this snapshot: the free earnings calendar covers " +
+      "the current week only. A report inside this expiry cannot be ruled out, and one that " +
+      "falls inside is part of why the implied volatility is where it is.");
+  }
   if (!(DATA.iv && DATA.iv.call25 > 0 && DATA.iv.put25 > 0)) {
     notes.push("No 25 delta legs are bound, so every strike prices off the same at the money " +
       "volatility and the skew is flat.");
@@ -787,9 +792,14 @@ function shell() {
         : "one year rank still building") +
     statHtml("25 delta skew", typeof iv.skew25d === "number" ? pct(iv.skew25d, 2) : "n/a",
       "put volatility less call volatility") +
+    // A missing date is only "not scheduled" when the calendar answered for its whole window.
     statHtml("Next report",
-      DATA.nextEarnings && DATA.nextEarnings.date ? esc(DATA.nextEarnings.date) : "not scheduled",
-      DATA.nextEarnings ? esc(TIMING_LABEL[DATA.nextEarnings.timing] || "") : "") +
+      DATA.nextEarnings && DATA.nextEarnings.date ? esc(DATA.nextEarnings.date)
+        : (DATA.nextEarningsStatus === "outside_preview" || DATA.nextEarningsStatus === "unavailable")
+          ? "unknown" : "not scheduled",
+      DATA.nextEarnings && DATA.nextEarnings.date ? esc(TIMING_LABEL[DATA.nextEarnings.timing] || "")
+        : DATA.nextEarningsStatus === "outside_preview" ? "past the free calendar week"
+          : DATA.nextEarningsStatus === "unavailable" ? "calendar not read" : "") +
     "</div></header>");
 
   var stratOpts = STRATEGIES.map(function (s) {

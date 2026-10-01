@@ -79,7 +79,14 @@ export function sentisenseApiUrl(path) {
   return url;
 }
 
-async function get(path, { allowNullData = false, tolerate400 = false } = {}) {
+async function get(path, { allowNullData = false, tolerate400 = false, optional = false } = {}) {
+  // A load-bearing call exits the process with a message. An optional context call THROWS
+  // instead, so the caller's try/catch can soften the artifact rather than losing it. Auth
+  // failures always exit, optional or not, because a rejected key dooms every call.
+  const fail = (msg, hint) => {
+    if (optional) throw new Error(hint ? `${msg} (${hint})` : msg);
+    die(msg, hint);
+  };
   let response;
   try {
     const url = sentisenseApiUrl(path);
@@ -88,7 +95,7 @@ async function get(path, { allowNullData = false, tolerate400 = false } = {}) {
       headers: { "X-SentiSense-API-Key": KEY, Accept: "application/json", "User-Agent": UA },
     });
   } catch (cause) {
-    die(`network error calling ${path}`, String(cause && cause.message ? cause.message : cause));
+    fail(`network error calling ${path}`, String(cause && cause.message ? cause.message : cause));
   }
 
   if (response.status === 401 || response.status === 403) {
@@ -99,7 +106,7 @@ async function get(path, { allowNullData = false, tolerate400 = false } = {}) {
   }
   if (response.status === 429) {
     const wait = response.headers.get("Retry-After");
-    die("rate limited", wait ? `Retry after ${wait}s.` : "Wait a minute and retry.");
+    fail("rate limited", wait ? `Retry after ${wait}s.` : "Wait a minute and retry.");
   }
   // A 400 is sometimes routing advice rather than a failure: the quote endpoints are split by
   // instrument type and the stock one names the ETF path in its error. Hand the body back so the
@@ -110,7 +117,7 @@ async function get(path, { allowNullData = false, tolerate400 = false } = {}) {
     return { data: null, isPreview: false, error: err };
   }
   if (!response.ok) {
-    die(`${path} answered HTTP ${response.status}`);
+    fail(`${path} answered HTTP ${response.status}`);
   }
 
   const body = await response.json();
@@ -119,9 +126,91 @@ async function get(path, { allowNullData = false, tolerate400 = false } = {}) {
   const enveloped = body && typeof body === "object" && "isPreview" in body && "data" in body;
   const data = enveloped ? body.data : body;
   if (!allowNullData && (data === null || data === undefined)) {
-    die(`${path} returned no data`);
+    fail(`${path} returned no data`);
   }
-  return { data, isPreview: enveloped ? body.isPreview === true : false };
+  return {
+    data,
+    isPreview: enveloped ? body.isPreview === true : false,
+    // A preview can carry the size of the whole window it was cut from. Kept so a caller can
+    // tell "this slice is empty" apart from "the window is empty".
+    totalCount: enveloped && typeof body.totalCount === "number" ? body.totalCount : null,
+  };
+}
+
+function num(v) {
+  return typeof v === "number" && isFinite(v) ? v : null;
+}
+
+/**
+ * Read the implied-volatility inputs out of an options summary `data` object, in either shape
+ * the endpoint serves. A full dossier nests them under `latest` and `context`. A free key past
+ * its monthly full-dossier allowance gets the headline preview instead, which carries `atmIv`
+ * and `ivRank1y` flattened directly under `data` and none of the term structure or 25-delta
+ * legs, so those come back null and the template draws the 30 day band alone, untilted.
+ */
+export function readOptionsIv(data) {
+  const d = data && typeof data === "object" ? data : {};
+  const latest = d.latest && typeof d.latest === "object" ? d.latest : d;
+  const context = d.context && typeof d.context === "object" ? d.context : d;
+  return {
+    atm30: num(latest.atmIv),
+    atm60: num(latest.atmIv60),
+    atm90: num(latest.atmIv90),
+    // The 25-delta legs are what let the cone tilt. skew25d == iv25p - iv25c, so a positive
+    // skew means puts are bid richer than calls and the downside half of the cone is wider.
+    call25: num(latest.iv25c),
+    put25: num(latest.iv25p),
+    skew25d: num(latest.skew25d),
+    rank1y: num(context.ivRank1y),
+  };
+}
+
+/** Today's date in US Eastern time, YYYY-MM-DD: the calendar the earnings endpoint keys on. */
+export function easternToday(now = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(now);
+}
+
+/**
+ * Pick the next report out of an earnings calendar response, and say how far the answer goes.
+ *
+ * `cal` is the unwrapped `data` ({ earnings, metadata }); `isPreview` and `totalCount` come from
+ * the envelope. The default calendar window opens on the Monday of the current week, so a row
+ * can be a report that already happened earlier this week: only rows dated `today` or later
+ * count as next. A free key sees only one week of the window while `totalCount` still counts
+ * the whole of it, so an empty slice with a larger `totalCount` means the report sits past the
+ * preview week, not that nothing is scheduled.
+ *
+ * Returns { nextEarnings, status }, status being one of:
+ *   "scheduled"        nextEarnings is the first report dated today or later
+ *   "not_scheduled"    the window returned holds no upcoming report
+ *   "outside_preview"  a preview slice left rows out, so the next date is unknown here
+ */
+export function pickNextEarnings(cal, { isPreview = false, totalCount = null, today } = {}) {
+  const rows = cal && Array.isArray(cal.earnings) ? cal.earnings : [];
+  const upcoming = rows
+    .filter((e) => e && typeof e.earningsDate === "string" && e.earningsDate.slice(0, 10) >= today)
+    .sort((a, b) => a.earningsDate.localeCompare(b.earningsDate));
+  if (upcoming.length) {
+    const event = upcoming[0];
+    return {
+      status: "scheduled",
+      nextEarnings: {
+        date: event.earningsDate,
+        // `earningsTime` is always one of before_open, after_close, during_market or unknown.
+        // "unknown" is a real reading (timing not published, or a weekend release that has no
+        // session to sit against), so it is passed through rather than smoothed to null.
+        timing: event.earningsTime || "unknown",
+        confirmed: event.confirmed === true,
+        estimatedEps: num(event.estimatedEps),
+      },
+    };
+  }
+  if (isPreview && typeof totalCount === "number" && totalCount > rows.length) {
+    return { status: "outside_preview", nextEarnings: null };
+  }
+  return { status: "not_scheduled", nextEarnings: null };
 }
 
 /** Annualized standard deviation of daily log returns over the last `n` sessions. */
@@ -167,9 +256,10 @@ async function main() {
       "Coverage is the most actively optioned US names plus the tracked ETFs. Try a larger name.",
     );
   }
-  const latest = options.data.latest || {};
-  const context = options.data.context || {};
-  if (typeof latest.atmIv !== "number") {
+  // Full dossier or free headline preview, read the same way. A preview is not an error: it
+  // still carries the 30 day reading, and `isPreview` below puts the preview label on the page.
+  const iv = readOptionsIv(options.data);
+  if (iv.atm30 === null) {
     die(
       `${ticker} has no at-the-money implied volatility in its latest session`,
       "Without it there is no cone to draw. This is usually a still-building baseline.",
@@ -199,30 +289,34 @@ async function main() {
   // unscheduled next report should soften the artifact, never fail the run.
   let closes = [];
   try {
-    const bars = (await get(`/api/v1/stocks/chart?ticker=${encodeURIComponent(ticker)}&timeframe=1Y`))
-      .data;
+    const bars = (await get(`/api/v1/stocks/chart?ticker=${encodeURIComponent(ticker)}&timeframe=1Y`, {
+      optional: true,
+    })).data;
     if (Array.isArray(bars)) closes = bars.map((b) => b.close).filter((c) => typeof c === "number");
   } catch {
     closes = [];
   }
 
+  // `from` = today drops reports that already happened earlier this week; the default window
+  // opens on Monday. A failed call leaves the next date unknown rather than "not scheduled".
   let nextEarnings = null;
+  let nextEarningsStatus = "unavailable";
   try {
-    const cal = (await get(`/api/v1/calendar/earnings?ticker=${encodeURIComponent(ticker)}`)).data;
-    const event = cal && Array.isArray(cal.earnings) ? cal.earnings[0] : null;
-    if (event && event.earningsDate) {
-      nextEarnings = {
-        date: event.earningsDate,
-        // `earningsTime` is always one of before_open, after_close, during_market or unknown.
-        // "unknown" is a real reading (timing not published, or a weekend release that has no
-        // session to sit against), so it is passed through rather than smoothed to null.
-        timing: event.earningsTime || "unknown",
-        confirmed: event.confirmed === true,
-        estimatedEps: typeof event.estimatedEps === "number" ? event.estimatedEps : null,
-      };
-    }
+    const today = easternToday();
+    const cal = await get(
+      `/api/v1/calendar/earnings?ticker=${encodeURIComponent(ticker)}&from=${today}`,
+      { optional: true },
+    );
+    const picked = pickNextEarnings(cal.data, {
+      isPreview: cal.isPreview,
+      totalCount: cal.totalCount,
+      today,
+    });
+    nextEarnings = picked.nextEarnings;
+    nextEarningsStatus = picked.status;
   } catch {
     nextEarnings = null;
+    nextEarningsStatus = "unavailable";
   }
 
   // One entry per window that actually computed, each carrying the session count behind it so
@@ -233,7 +327,9 @@ async function main() {
   // which lands in the same empty-array result as a genuine error.
   let reactions = [];
   try {
-    const react = (await get(`/api/v1/stocks/${encodeURIComponent(ticker)}/earnings/reactions`)).data;
+    const react = (await get(`/api/v1/stocks/${encodeURIComponent(ticker)}/earnings/reactions`, {
+      optional: true,
+    })).data;
     if (react && Array.isArray(react.reactions)) {
       reactions = react.reactions
         .filter((r) => r && typeof r.movePct === "number" && r.reportDate)
@@ -274,20 +370,11 @@ async function main() {
     generatedAt: new Date().toISOString(),
     spot,
     // Every IV here is annualized and expressed as a fraction, so 0.4051 is 40.51%.
-    iv: {
-      atm30: latest.atmIv,
-      atm60: typeof latest.atmIv60 === "number" ? latest.atmIv60 : null,
-      atm90: typeof latest.atmIv90 === "number" ? latest.atmIv90 : null,
-      // The 25-delta legs are what let the cone tilt. skew25d == iv25p - iv25c, so a positive
-      // skew means puts are bid richer than calls and the downside half of the cone is wider.
-      call25: typeof latest.iv25c === "number" ? latest.iv25c : null,
-      put25: typeof latest.iv25p === "number" ? latest.iv25p : null,
-      skew25d: typeof latest.skew25d === "number" ? latest.skew25d : null,
-      rank1y: typeof context.ivRank1y === "number" ? context.ivRank1y : null,
-    },
+    iv,
     realizedVolatility,
     realizedSessions: closes.length,
     nextEarnings,
+    nextEarningsStatus,
     // The template renders a past-earnings-reaction comparison when this has rows, and falls
     // back to the realized-volatility comparison when it is empty.
     reactions,

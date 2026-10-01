@@ -108,7 +108,7 @@ Cross-reference insider trading, institutional flows, and politician trades to f
 ### Sentiment-Driven Watchlist
 Alert when sentiment shifts for your stocks. Track news volume, social mentions, and baseline deviations.
 - `GET /api/v2/metrics/entity/{ticker}/metric/sentisense` for the SentiSense Score time series (prefer it over `sentiment`; see the metric notes below)
-- `GET /api/v2/metrics/entity/{ticker}/baselines/sentiment` for anomaly detection (3-sigma deviations)
+- `GET /api/v2/metrics/entity/{ticker}/baselines/sentiment` for anomaly detection against historical and peer baselines
 - `GET /api/v1/documents/ticker/{ticker}` for the underlying news and social posts driving the shift
 
 ### Congressional Trade Monitor
@@ -128,7 +128,7 @@ Generate stock research reports by combining multiple data signals into a single
 ### Earnings Calendar Monitor
 Position ahead of earnings instead of reacting to them. Pull the forward calendar, intersect it with a watchlist, and pre-load sentiment and smart-money context for the companies reporting soon.
 - `GET /api/v1/calendar/earnings?week=next` for who reports next week (or `?from=&to=` for a custom window)
-- `GET /api/v1/calendar/earnings?ticker={ticker}` for a single name's next report date and consensus EPS
+- `GET /api/v1/calendar/earnings?ticker={ticker}` for a single name's next report date and consensus EPS (on a FREE key this searches only the current Monday-to-Sunday week; see the Calendar section)
 - `GET /api/v2/metrics/entity/{ticker}/metric/sentisense` to gauge positioning into the print
 - `GET /api/v1/insider/trades/{ticker}` to see if insiders moved ahead of the date
 
@@ -150,8 +150,8 @@ Filter the whole tracked universe on the SentiSense Score and attention in the s
 Which way the market's tone leans, and how widely it's shared. Daily snapshots.
 - `GET /api/v1/sentiment/sectors` for the 11 GICS sectors vs the market's own tone (`consensusVsMarket` + "Hotter/Cooler than market" labels; market-relative because news tone skews positive as a genre)
 - `GET /api/v1/sentiment/breadth` for the bullish/neutral/bearish share of ~1,000 covered stocks (the sentiment advance/decline line; `netBreadth` in points, stock- and mention-weighted)
-- `GET /api/v1/trackers/sentiment-leaderboard` for the most bullish and bearish stocks by pure sentiment polarity (tone, not the SentiSense Score), with a minimum-mention confidence floor
-- `GET /api/v1/trackers/sentiment-movers` for the biggest 7-day shifts in tone, improving and deteriorating
+- `GET /api/v1/trackers/sentiment-leaderboard` for the most bullish and bearish stocks ranked by their 30-day SentiSense Score, with a minimum-mention confidence floor (each row also carries the 7-day Score and raw tone polarity, which do not set the order)
+- `GET /api/v1/trackers/sentiment-movers` for the biggest SentiSense Score shifts, improving and deteriorating, ranked by the 7-day average Score minus the 30-day average (a row with no Score change falls back to its tone change)
 
 ---
 
@@ -160,7 +160,7 @@ Which way the market's tone leans, and how widely it's shared. Daily snapshots.
 ### Workflow Pattern
 1. Call `GET /api/v1/stocks/market-status` first to check if the market is open
 2. Call `GET /api/v1/institutional/quarters` before the institutional endpoints that need a `reportDate` to get valid values (`/flows` does not need one; omit it for the latest quarter)
-3. All PRO-gated endpoints return `{isPreview, previewReason, data}`. Always access `response["data"]` (or `response.data`). On a preview (FREE) list response a `totalCount` field is also present: the number of items in the full PRO dataset, so you can show "showing N of totalCount"
+3. All PRO-gated endpoints return `{isPreview, previewReason, data}`. Always access `response["data"]` (or `response.data`). On a preview (FREE) list response a `totalCount` field is also present: the number of items in the full PRO dataset, so you can show "showing N of totalCount". **A preview is a slice, not the window.** When `isPreview` is `true` and `totalCount` is larger than the rows returned, those rows are the newest or top N only: label them ("newest 5 of 61 trades, free preview") and never infer absence from them. No "zero insider buying", "no congressional activity", "not scheduled" or "no unusual contracts" from a slice
 4. Use `lookbackDays` (1-365) on insider and politician endpoints to control the time window
 
 ### Common Mistakes
@@ -253,7 +253,7 @@ All stocks with company name, KB entity ID, URL slug, and precomputed `socialDom
 Popular stock tickers. **Public.**
 
 ### GET /api/v1/stocks/popular/detailed
-Popular stocks with company details (same schema as `/detailed`). **Public.**
+Popular stocks with company details. **Public.** Rows carry the same keys as `/detailed`. Check `socialDominance` before you sort or filter this list by share of voice: where it is `null` on a row, read it from `/detailed` by `ticker`.
 
 ### GET /api/v1/stocks/images
 Company logo URLs. **Public.** `GET` a returned URL to receive the image bytes; no API key is needed for the image fetch itself. Treat the URLs as refreshable rather than permanent: brand assets are periodically refreshed, so re-read them from this endpoint instead of storing them long term.
@@ -283,6 +283,8 @@ Peer/similar stocks. **Public.**
 |-------|------|----------|---------|-------------|
 | `limit` | int | No | 5 | Max results |
 
+Response: bare array of `{ symbol, name, price, changePercent }`. The key is `symbol`, not `ticker`, and the array can hold fewer than `limit` entries.
+
 ### GET /api/v1/stocks/{ticker}/sentiment
 One-call sentiment picture for a stock: the SentiSense Score with its 30-day regime, where the conversation is happening by source, and what is driving it. **Public.** **Quota-gated** when called with a key.
 
@@ -302,7 +304,7 @@ Response: `{ isPreview, previewReason, data }`. Everything below lives under `da
 | `scoreSparkline` | number[] | Daily Score series |
 | `mentions` / `mentionsAvg30d` | number | Mention volume of the latest New York daily bucket with data (today's once it lands, otherwise an earlier day; `narrative` names which), and the 30-day daily average |
 | `socialDominance` | number | Latest share of voice, as a fraction (`0.021` = 2.1%) |
-| `bySource[]` | array | Per-source tone, loudest first: `source` (`News`, `Reddit`, `X`, `YouTube`, `Substack`), `direction`, `mentionShare` (whole-number percent, the array sums to 100), `value` (per-source polarity, -1 to +1) |
+| `bySource[]` | array | Per-source tone, loudest first: `source` (`News`, `Reddit`, `X`, `YouTube`, `Hacker News`, `Substack`), `direction`, `mentionShare` (whole-number percent; rounding can make the array sum to 99 or 101 rather than exactly 100), `value` (per-source polarity, -1 to +1) |
 | `relatedTickers[]` | array | Curated peers: `ticker`, `name` |
 | `drivers[]` | array | Top story drivers: `title`, `tone` (-1 to +1) |
 | `narrative` | string | Plain-language summary of why the Score sits where it does |
@@ -406,11 +408,13 @@ is the USD ADR price, so for non-USD filers `peRatio` / `psRatio` / `pbRatio` ar
 current ratio, debt/equity) stay valid for all filers.
 
 ### GET /api/v1/stocks/fundamentals/current
-Most recent fundamental data snapshot. **Public.**
+Trailing-twelve-month valuation snapshot against the latest price. **Public.** It is not a statement snapshot: for income-statement, balance-sheet and cash-flow lines use `/fundamentals` or `/fundamentals/history`.
 
 | Param | Type | Required | Description |
 |-------|------|----------|-------------|
 | `ticker` | string | Yes | Stock ticker |
+
+Response (flat): `{ ticker, currentPrice, peTTM, psTTM, epsTTM, revenueTTM, quartersIncluded, available, reason, fetchedAt, reportedCurrency? }`. `peTTM` and `psTTM` are the latest price over trailing EPS and over trailing revenue per share; `quartersIncluded` is how many quarters the trailing figures sum (normally 4); `fetchedAt` is epoch seconds. When `available` is `false`, `reason` says why (no current price, or no trailing earnings data) and the TTM fields are null. `reportedCurrency` names the currency of `epsTTM` and `revenueTTM` (`currentPrice` stays USD) and is omitted when unknown; for a non-USD filer `peTTM` and `psTTM` are `null` by design, the same cross-currency rule as above.
 
 ### GET /api/v1/stocks/fundamentals/history
 Multi-period history of full financial statements (income statement, balance sheet, cash flow), one
@@ -497,7 +501,7 @@ Aggregate quote snapshot: latest price (15-minute delayed), today OHLC, 52-week 
 
 Response: `{ ticker, currentPrice, change, changePercent, volume, open, dayHigh, dayLow, previousClose, week52High, week52Low, marketCap, peRatio, epsTTM, dividendYield, movingAverage200Day, reportedCurrency, timestamp, extendedHours?, listingStatus?, delistedDate?, delistingReason? }` -- all fields except `ticker` are nullable. `currentPrice` is always the regular-session price; the optional `extendedHours` object (`{ session, price, change, changePercent }`) is present outside regular hours whenever an extended-hours price exists, and `session` stays `"post"` while the last after-hours print is carried overnight and through the weekend. `movingAverage200Day` is `null` when fewer than 200 trading days of history exist. `reportedCurrency` ("USD", "EUR", "KRW", ...) names the currency `epsTTM` is reported in, matching the fundamentals endpoints. Responses carry a private 15 s `max-age`; the server's own price cache is 30 s, per process.
 
-**Null fields are omitted, and foreign filers omit the fundamentals trio.** A null field is left out of the JSON entirely rather than serialized as `null`, so do not assume a key is present: read defensively. In particular `reportedCurrency`, `epsTTM` and `peRatio` are all absent on foreign ADR filers such as `ASML` and `TM`, while price fields and `dividendYield` are served normally. This is the same cross-currency rule as the fundamentals endpoints: the price is the USD ADR price and the filer's earnings are in home currency, so `peRatio` is withheld rather than computed across two currencies. Do not divide `currentPrice` by a non-USD `epsTTM` to fill the gap yourself.
+**Null fields are omitted, and foreign filers omit `peRatio`.** A null field is left out of the JSON entirely rather than serialized as `null`, so do not assume a key is present: read defensively. On foreign ADR filers such as `ASML` and `TM`, `peRatio` is absent, while `epsTTM` is served in the filer's home currency and `reportedCurrency` names that currency (`EUR` for ASML, `JPY` for TM, whose `epsTTM` reads in the thousands beside a USD price near 200). Price fields and `dividendYield` are served normally. This is the same cross-currency rule as the fundamentals endpoints: the price is the USD ADR price and the filer's earnings are in home currency, so `peRatio` is withheld rather than computed across two currencies. Always check `reportedCurrency` before using `epsTTM`, and do not divide `currentPrice` by a non-USD `epsTTM` to fill the gap yourself.
 
 **Delisted symbols keep quoting their last trade.** `listingStatus`, `delistedDate` and `delistingReason` are present only when the symbol is delisted or pending delisting, and absent otherwise, with the same values as `/price`. When `listingStatus` reads `"DELISTED"`, every price field in this payload is frozen at the last trade before `delistedDate` and nothing else in the response says so.
 
@@ -574,10 +578,10 @@ Time series metrics for stocks and entities: mentions, sentiment, social dominan
 
 Which handle to store: the `urlSlug`, or the ticker for a listed company. It is the only identifier these paths accept. Internal KB ids, in any spelling (`kb/person/65`, `kb-person-65`, `p65`), are not part of the public API and resolve to nothing. If a rename ever breaks a stored handle, find the entity again by name with `GET /api/v1/kb/entities/search?q=`.
 
-Every metric type (`mentions`, `sentiment`, `sentisense`, `social_dominance`, `app_review_count`, `app_rating`) is available on the Free tier: no PRO subscription needed. All metrics endpoints are **Quota-gated**: an API key is required and each request counts against your monthly quota (Free: 1,000 requests/month; PRO: no monthly cap). Per-minute rate limits apply on every tier.
+Every metric type (`mentions`, `sentiment`, `sentisense`, `social_dominance`, `sentisense_rating`, `app_review_count`, `app_rating`) is available on the Free tier: no PRO subscription needed. All metrics endpoints are **Quota-gated**: an API key is required and each request counts against your monthly quota (Free: 1,000 requests/month; PRO: no monthly cap). Per-minute rate limits apply on every tier.
 
 ### GET /api/v2/metrics/entity/{entityId}/metric/{metricType}
-Time series metric data for a stock or entity. **Quota-gated** -- all metric types (`mentions`, `sentiment`, `sentisense`, `social_dominance`, `sentisense_rating`, `app_review_count`, `app_rating`) are available on the Free tier. `sentisense_rating` is stocks-only and its `value` is the daily Rating score, 0 to 100, which is the number the letter is banded from and not the percentile; see the SentiSense Rating API section above.
+Time series metric data for a stock or entity. **Quota-gated** -- all metric types (`mentions`, `sentiment`, `sentisense`, `social_dominance`, `sentisense_rating`, `app_review_count`, `app_rating`) are available on the Free tier. `sentisense_rating` is stocks-only and its `value` is the daily Rating score, 0 to 100, which is the number the letter is banded from and not the percentile; see the SentiSense Rating API section below.
 
 What each metric type means:
 
@@ -623,7 +627,7 @@ Read the scalar from the flat `value` (the polarity for `sentiment`, the count f
 - `bull` / `bear`: mentions that day our models scored bullish / bearish for the entity.
 - `directional`: `bull` plus `bear`, the sample size behind that day's Score.
 
-Mention volume is direction-blind: a spike in `mentions` fires as hard on a crash as on a rally, so never call a name bullish or bearish from volume, or from a sector or rival's read. Settle direction from that entity's own `bull` against `bear`, and when the question is "is this spike good or bad news?", read those two counts on the spike day. Sum `bull` and `bear` across a window to state a run ("bull-led every day this week, 310 to 140"). Points are daily, one per New York calendar day, and the last point is the current day so far: do not compare it to full days.
+Mention volume is direction-blind: a spike in `mentions` fires as hard on a crash as on a rally, so never call a name bullish or bearish from volume, or from a sector or rival's read. Settle direction from that entity's own `bull` against `bear`, and when the question is "is this spike good or bad news?", read those two counts on the spike day. Sum `bull` and `bear` across a window to state a run ("bull-led every day this week, 310 to 140"). Points are daily, one per New York calendar day. The last point is the latest day with data: today's partial bucket once the day's first reading lands, otherwise the last complete day. Compare its `timestamp` to today's New York date before treating it as a partial day, and do not compare a partial day to full days.
 
 ### GET /api/v2/metrics/entity/{entityId}/distribution/{metricType}
 A metric split across a dimension (e.g., mentions or sentiment by source). **Quota-gated**, available on the Free tier.
@@ -634,7 +638,7 @@ Response: `{ metricType, dimension, distribution, valueType, ... }`, where `dist
 |-------|------|----------|---------|-------------|
 | `entityId` | path | Yes | - | Stock ticker or entity `urlSlug` |
 | `metricType` | path | Yes | - | Metric type key |
-| `dimension` | string | Yes | - | Dimension to slice by (e.g., `source`) |
+| `dimension` | string | Yes | - | Dimension to slice by. Use `source`; see the `/slices` note below |
 | `startTime` | long | No | 7 days ago | Epoch milliseconds |
 | `endTime` | long | No | now | Epoch milliseconds |
 
@@ -645,14 +649,14 @@ Mean of a metric per dimension value over a time window (e.g., per-source mean s
 |-------|------|----------|---------|-------------|
 | `entityId` | path | Yes | - | Stock ticker or entity `urlSlug` |
 | `metricType` | path | Yes | - | Metric type key (e.g., `sentiment`) |
-| `dimension` | path | Yes | - | Dimension to group by (e.g., `source`) |
+| `dimension` | path | Yes | - | Dimension to group by. Use `source`; see the `/slices` note below |
 | `startTime` | long | No | 7 days ago | Epoch milliseconds |
 | `endTime` | long | No | now | Epoch milliseconds |
 
-Response: flat map of dimension value to mean, e.g. `{ "NEWS": 0.42, "REDDIT": -0.05 }`. For sentiment by source, each value is the average of that source's daily mean readings inside the window; a window with no data returns `{}`. Returns `400` for an unknown metric type or when `startTime` is after `endTime`.
+Response: flat map of dimension value to mean, e.g. `{ "News": 0.37, "Reddit": 0.04, "X": 0.22, "YouTube": 0.25, "Hacker News": -0.57, "Substack": 0.5 }`. The keys are display names, title case and possibly containing a space (`Hacker News`), not the uppercase `source` parameter values; `distribution` uses the same keys. Look them up case-insensitively, or iterate the map, rather than indexing a fixed `"NEWS"`. For sentiment by source, each value is the average of that source's daily mean readings inside the window; a window with no data returns `{}`. Returns `400` for an unknown metric type or when `startTime` is after `endTime`.
 
 ### GET /api/v2/metrics/entity/{entityId}/metric/{metricType}/slices
-Available slice dimensions for a metric. **Quota-gated**, available on the Free tier.
+Slice keys stored for a metric. **Quota-gated**, available on the Free tier. Response: array of `{ metricType, dimension, values, displayName }`. It currently returns only `{ dimension: "type", values: ["root"] }`, the marker for the unsliced series, so it is not a guide to what `distribution` and `mean-by` accept: pass `source` to those two. `type` is not a usable split there (it currently fails with a `500` after a long wait), and an unrecognized dimension returns `400`.
 
 ### GET /api/v2/metrics/entity/{entityId}/baselines/{metricType}
 Historical and peer baselines for a metric. **Quota-gated**, available on the Free tier.
@@ -805,18 +809,22 @@ Response shape:
     ]
   },
   "sectors": {
-    "Technology": {"currentScore": 71.2, "phase": "Greed", "weeklyChange": 1.5},
-    "Healthcare": {"currentScore": 48.3, "phase": "Neutral", "weeklyChange": -3.1}
+    "Information Technology": {"currentScore": 71.2, "phase": "Greed", "weeklyChange": 1.5},
+    "Health Care": {"currentScore": 48.3, "phase": "Neutral", "weeklyChange": -3.1}
   }
 }
 ```
 
-**Phase interpretation** (`market.phase` and each sector's `phase`, by score): 0-15 Extreme Fear, 16-30 Fear, 31-45 Anxiety, 46-55 Neutral, 56-70 Optimism, 71-85 Greed, 86-100 Extreme Greed. `phase` is `"---"` when the score is null.
+**Phase interpretation** (`market.phase` and each sector's `phase`, by score). Scores are fractional and each band includes its upper edge: Extreme Fear up to 15, Fear above 15 through 30, Anxiety above 30 through 45, Neutral above 45 through 55, Optimism above 55 through 70, Greed above 70 through 85, Extreme Greed above 85. So 55.16 reads Optimism. `phase` is `"---"` when the score is null.
 
-`signals[]` only lists signals present in the latest reading, so key off `key`, not array position or length.
+`sectors` is keyed by the 11 GICS sector names (`Information Technology`, `Health Care`, `Communication Services`, ...).
+
+`signals[]` only lists signals present in the latest reading, so key off `key`, not array position or length. The `history[]` columns spell the same signals in camelCase: `signals[].key` `fear_gauge` is the `fearGauge` column, `spy_trend` is `spyTrend`, and so on, so convert snake_case to camelCase when you join a signal to its history.
 
 **Node SDK:**
 ```javascript
+import SentiSense from 'sentisense';
+const client = new SentiSense({ apiKey: process.env.SENTISENSE_API_KEY });
 const mood = await client.marketMood.get();
 console.log(mood.market.currentScore, mood.market.phase);
 ```
@@ -826,7 +834,7 @@ console.log(mood.market.currentScore, mood.market.phase);
 
 ## Documents & News API (`/api/v1/documents`)
 
-> **Note:** Document responses include a `url` field but **no headline or title text**. The API provides derived analytics (sentiment, entities, reliability), not source content. The `sourceName` field identifies the publisher. If your application needs to display titles, the `url` field links to the original source. Any content retrieval from source URLs is your application's independent action, subject to the source platform's terms. See our [API Terms of Service](https://sentisense.ai/agreement/API-Terms-of-Service.pdf).
+> **Note:** Document responses include a `url` field but **no headline or title text**. The API provides derived analytics (sentiment, entities, reliability), not source content. The `sourceName` field identifies the publisher when it is known; it is often `null` on NEWS documents, so render a null as "publisher not named" rather than dropping the row. If your application needs to display titles, the `url` field links to the original source. Any content retrieval from source URLs is your application's independent action, subject to the source platform's terms. See our [API Terms of Service](https://sentisense.ai/agreement/API-Terms-of-Service.pdf).
 
 ### GET /api/v1/documents/ticker/{ticker}
 News and social posts for a stock with sentiment scores. **Public.**
@@ -864,14 +872,16 @@ Smart search with natural language queries. **Public.**
 | `limit` | int | No | 200 | Max results (capped at 500) |
 
 ### GET /api/v1/documents/source/{source}
-Latest documents from a specific source. **Public.**
+Latest documents from a specific source. **Public.** A short most-recent feed, not a windowed archive.
 
 | Param | Type | Required | Description |
 |-------|------|----------|-------------|
 | `source` | path | Yes | `NEWS`, `REDDIT`, `X`, `SUBSTACK`, `YOUTUBE` |
-| `days` | int | No | Lookback in days |
-| `limit` | int | No | Max results (capped at 500) |
+| `days` | int | No | Oldest document allowed, in days (default 7). It caps age; it does not make the feed reach back that far |
+| `limit` | int | No | Most documents to return (default 100, capped at 500) |
 | `sort` | string | No | `latest` (default, newest first) or `top` (reliability-first: recent documents are grouped into freshness buckets and ranked by publisher reliability within each bucket, so high-authority publishers surface first). Any other value returns `400`. |
+
+**A most-recent feed: on busy sources it covers hours rather than days.** The feed returns up to `limit` of the most recent documents in the window, in the order `sort` asks for, counting only documents that carry an article body (items with a headline but no body are left out). Near-duplicate headlines are then collapsed, and on X and YouTube some low-authority posts are filtered out, so a response can come back under `limit`, at times well under; count the rows you received rather than assuming `limit`. `totalCount` equals the rows returned, not the size of the window, and there is no `offset`, so you cannot page further back. For a window that has to be complete, query `/documents/ticker/{ticker}` (with `days` or `hours`) or `/documents/search` instead.
 
 ### GET /api/v1/documents/stories
 AI-curated news story clusters. **Public.**
@@ -884,7 +894,7 @@ AI-curated news story clusters. **Public.**
 | `offset` | int | No | 0 | Pagination offset |
 | `ticker` | string | No | none | Filters the feed to clusters tagged with that stock, e.g. `NVDA`. With a ticker set, `limit` caps at 20 instead of 50, while `filterHours` and `offset` still apply, and a ticker we do not track returns an empty list. The path form `/documents/stories/ticker/{ticker}` is still available. |
 
-Response: Story objects with a top-level `id` AND `clusterId` (both equal to the cluster id -- pass either to `/documents/stories/{clusterId}`), plus `cluster.title`, `cluster.averageSentiment`, `tickers`, `displayTickers`, `impactScore` (0-10), `brokeAt` (epoch seconds, nullable), `cluster.clusteredAt` (epoch seconds). Each entry also carries `cluster.storySource` (`ORIGINAL` for an editorially authored SentiSense Original, `AI` for a pipeline-generated story, always one of the two) and `cluster.isLive` (true while we are actively updating a developing story). Use `tickers` (bare symbols, e.g. `["AAPL"]`) programmatically; `displayTickers` are human-formatted labels (e.g. `["Apple Inc (AAPL)"]`) for display only, do not parse symbols out of them. The `cluster.createdAt` field (epoch millis) is deprecated and will be removed on or after 2026-08-16; use `cluster.clusteredAt`.
+Response: Story objects with a top-level `id` AND `clusterId` (both equal to the cluster id -- pass either to `/documents/stories/{clusterId}`), plus `cluster.title`, `cluster.averageSentiment`, `tickers`, `displayTickers`, `impactScore` (0-10), `brokeAt` (epoch seconds, nullable), `cluster.clusteredAt` (epoch seconds). Each entry also carries `cluster.storySource` (`ORIGINAL` for an editorially authored SentiSense Original, `AI` for a pipeline-generated story, always one of the two) and `cluster.isLive` (true while we are actively updating a developing story). Use `tickers` (bare symbols, e.g. `["AAPL"]`) programmatically; `displayTickers` are human-formatted labels (e.g. `["Apple Inc (AAPL)"]`) for display only, do not parse symbols out of them. The `cluster.createdAt` field (epoch millis) is deprecated and slated for removal; use `cluster.clusteredAt`.
 
 
 ### GET /api/v1/documents/stories/search
@@ -979,7 +989,7 @@ Discover the universe of institutions: paginated, AUM-ranked list of filers (slu
 Response: `{ isPreview, previewReason, data: { quarter, totalCount, offset, limit, institutions: [...] } }`. `isPreview` is always false here. Each institution: `cik, urlSlug, displayName, filerCategory, totalValueUsd, holdingsCount, multiCikRollup, childCikCount`. Bad inputs (unknown category/sort, negative offset/minAumUsd, quarter with no data) return 400.
 
 ### GET /api/v1/institutional/institution/{slugOrCik}
-Full profile, summary stats, and current-quarter equity holdings for a specific institutional filer. Resolved by URL slug (e.g. `Berkshire-Hathaway`) or numeric CIK (e.g. `1067983`). **PRO (preview)** -- Free: profile + top 10 holdings, PRO: full holdings array. Returns 404 if the slug or CIK is unknown.
+Full profile, summary stats, and current-quarter equity holdings for a specific institutional filer. Resolved by URL slug (e.g. `Berkshire-Hathaway`) or by the 10-digit zero-padded CIK (e.g. `0001067983`, the form `filerCik` is returned in). An unpadded CIK such as `1067983` returns 404, so pad it to 10 digits first. **PRO (preview)** -- Free: profile + top 10 holdings, PRO: full holdings array. Returns 404 if the slug or CIK is unknown.
 
 Response: `{ isPreview, previewReason, data: { filerCik, displayName, urlSlug, filerCategory, totalValueUsd, holdingsCount, latestReportDate, quartersTracked, newPositions, increasedPositions, decreasedPositions, soldOutPositions, multiCikRollup, childCikCount, childCiks, holdings: [...] } }`. `multiCikRollup`/`childCikCount`/`childCiks` describe parent/subsidiary rollups (e.g. Vanguard) and are present for all tiers (`childCiks` is null when not a rollup). Holding objects include `ticker, companyName, shares, valueUsd, changeType, sharesChange, sharesChangePct, portfolioWeight`.
 
@@ -994,13 +1004,15 @@ SEC Form 4 insider trading data: track buys, sells, awards, and exercises by com
 **Transaction types:** `BUY`, `SELL`, `EXERCISE`, `AWARD`, `GIFT`, `OTHER`. To count open-market activity, filter `transactionType` to `BUY` or `SELL`; `AWARD` (grants), `GIFT`, and `EXERCISE` are not open-market trades and should be excluded from a buys/sells tally. The `transactionType` filter alone misses one case: rows with raw `transactionCode` `F` (shares withheld to cover taxes on vesting) arrive typed `SELL`, so drop code-F rows from sell tallies too; on names with heavy stock compensation they can be most of the reported selling. This applies when you tally rows yourself from `/insider/trades/{ticker}`, which returns every filed row untouched. The server-side rollup at `/insider/activity` already excludes code F from its sells, so do not subtract it a second time there. Sanity-check `totalValue` against `sharesTransacted` times `pricePerShare` before headlining a dollar figure. Note the insider endpoint uses `BUY`/`SELL`, NOT the politician endpoint's `PURCHASE`/`SALE` vocabulary (a filter written for one returns zero on the other).
 
 ### GET /api/v1/insider/activity
-Market-wide insider buying and selling aggregated by ticker. **Public (preview)** -- Free: top 5, PRO: full data.
+Market-wide insider buying and selling aggregated by ticker: a leaderboard of the largest by dollar value, not every ticker with activity. **Public (preview)** -- Free: top 5 per side, PRO: top 50 per side.
 
 | Param | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `lookbackDays` | int | No | 90 | Days to look back (1-365) |
 
-Response (FREE tier): `{ isPreview: true, previewReason: "PRO_REQUIRED", data: { buys: [...], sells: [...] } }`. PRO: `{ isPreview: false, previewReason: null, data: { buys: [...], sells: [...] } }`. Each entry: `ticker`, `companyName`, `tradeCount`, `insiderCount`, `totalShares`, `totalValue`, `latestDate`, `latestInsider`, `latestTitle`.
+Response (FREE tier): `{ isPreview: true, previewReason: "PRO_REQUIRED", totalCount, data: { buys: [...], sells: [...] } }`. PRO: `{ isPreview: false, previewReason: null, data: { buys: [...], sells: [...] } }`. Each entry: `ticker`, `companyName`, `tradeCount`, `insiderCount`, `totalShares`, `totalValue`, `latestDate`, `latestInsider`, `latestTitle`.
+
+**Each list is capped at 50 tickers, ranked by `totalValue` descending, on every tier.** There is no `limit` or `offset`, and the PRO response carries no `totalCount`, so a full list of 50 means "the 50 largest", never "all 50 there were". A longer `lookbackDays` pushes smaller names out: a ticker that shows up in the 30-day list can be missing from the 90-day one. The FREE `totalCount` is the buys plus sells of those capped lists (at most 100), not a count of tickers with activity. For "how many stocks had insider buying" or "did insiders buy X", read `/insider/trades/{ticker}` per name rather than this rollup. `latestInsider` and `latestTitle` are each picked from the window's rows independently, so they name an insider who traded in the window, not necessarily the most recent filer, and the two can come from different filings; read `/insider/trades/{ticker}` for who filed last.
 
 ### GET /api/v1/insider/trades/{ticker}
 Insider transactions for a specific stock, newest first. **Public (preview)** -- Free: top 5, PRO: full data.
@@ -1021,13 +1033,13 @@ for t in trades.data:
 
 
 ### GET /api/v1/insider/cluster-buys
-Cluster buy signals: stocks where 3+ distinct insiders purchased recently. **Public (preview)** -- Free: top 5, PRO: full data.
+Cluster buy signals: stocks where 3+ distinct insiders purchased recently. **Public (preview)** -- Free: top 5, PRO: top 50.
 
 | Param | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `lookbackDays` | int | No | 90 | Days to look back (1-365) |
 
-Response: `{ isPreview: bool, previewReason: string|null, data: [...] }`. Free: top 5 signals, PRO: full list. Each entry: `{ ticker, companyName, insiderCount, tradeCount, totalShares, totalValue, firstBuyDate, lastBuyDate }`.
+Response: `{ isPreview: bool, previewReason: string|null, totalCount?, data: [...] }`. Free: top 5 signals with `totalCount`, PRO: up to 50. Each entry: `{ ticker, companyName, insiderCount, tradeCount, totalShares, totalValue, firstBuyDate, lastBuyDate }`. Ranked by `insiderCount` descending, then `totalValue`, and capped at 50 on every tier with no `limit` or `offset`: on a long window (365 days) the list fills to 50 and drops three-insider clusters a shorter window shows. Treat exactly 50 rows as "the 50 broadest clusters", not the complete set; the FREE `totalCount` counts that capped list.
 
 ---
 
@@ -1050,7 +1062,7 @@ Recent congressional trades across all politicians, paged, sorted by disclosure 
 | `limit` | int | No | 200 | Rows per page. Above 500 is clamped, not rejected. Returns `400 invalid_limit` below 1 |
 | `offset` | int | No | 0 | Rows to skip, for paging |
 
-Response: `{ isPreview, previewReason, totalCount, data: [...] }`. `totalCount` is the size of the whole window, not the page, so `offset + data.length < totalCount` means there is another page. Each trade: `politicianName`, `firstName`, `lastName`, `chamber`, `party`, `state`, `bioguideId`, `imageUrl`, `ticker`, `assetDescription`, `assetType` (`Stock`, `ETF`, or `Stock Option`), `assetMetadata` (object: `null`, or `{kind:"OPTION", optionType, strikePrice, expirationDate}` for options), `transactionType`, `transactionDate`, `disclosureDate`, `disclosureDelayDays`, `amountRange`, `amountMin`, `amountMax`, `owner`, `urlSlug`, `sentiSenseScore`. That last field is reserved: it is present on every row and currently `null` on all of them, so read the ticker's Score from `/stocks/{ticker}/sentiment` rather than building on it here.
+Response: `{ isPreview, previewReason, totalCount, data: [...] }`. `totalCount` is the size of the whole window, not the page, so `offset + data.length < totalCount` means there is another page. Each trade: `politicianName`, `firstName`, `lastName`, `chamber`, `party`, `state`, `bioguideId`, `imageUrl`, `ticker`, `assetDescription`, `assetType` (`Stock`, `ETF`, or `Stock Option`), `assetMetadata` (object: `null`, or `{kind:"OPTION", optionType, strikePrice, expirationDate}` when option terms were parsed from the filing, which is uncommon; identify option rows by `assetType == "Stock Option"`, not by this field), `transactionType`, `transactionDate`, `disclosureDate`, `disclosureDelayDays`, `amountRange`, `amountMin`, `amountMax`, `owner`, `urlSlug`, `sentiSenseScore`. That last field is reserved: it is present on every row and currently `null` on all of them, so read the ticker's Score from `/stocks/{ticker}/sentiment` rather than building on it here.
 
 ```python
 client = SentiSenseClient(api_key=os.environ["SENTISENSE_API_KEY"])
@@ -1112,7 +1124,7 @@ Response: `{ isPreview, previewReason, totalCount, data: { profile: {...}, recen
 
 AI-generated signals for stocks and the overall market. Each insight identifies a specific pattern: insider cluster buying, institutional position changes, volume anomalies, sentiment baseline deviations, and more. Most lists are sorted by urgency then confidence; the per-stock endpoint (`/stock/{ticker}`) is ranked by importance (relevance, confidence, and recency) so fresh signals lead.
 
-**Insight fields:** `insightId`, `insightType`, `category` (`SENTIMENT`/`TRENDING`/`TECHNICAL`/`FUNDAMENTAL`/`PERSONALIZED`), `insightText`, `confidence` (0.0-1.0), `urgency` (`low`/`medium`/`high`), `generatedAt` (epoch seconds), `docRefs` (`[{url, type}]`).
+**Insight fields:** `insightId`, `insightType`, `ticker` (the stock the insight is about, or `"MARKET"` on market-wide insights such as `market_insider_trend`), `category` (`SENTIMENT`/`TRENDING`/`TECHNICAL`/`FUNDAMENTAL`/`PERSONALIZED`, or `null`), `insightText`, `confidence` (0.0-1.0), `urgency` (`low`/`medium`/`high`), `generatedAt` (epoch seconds), `docRefs` (`[{url, type}]`, or `null`; most insights carry none). Handle a null `category` or `docRefs` rather than assuming the enum or an array.
 
 **Response shape (all tiers):** `{ isPreview, previewReason, data: [...] }`. Free: top N insights, PRO: full list.
 
@@ -1273,6 +1285,11 @@ Forward EPS estimates and recent earnings surprise history. **PRO (preview)** --
 
 Response: `{ isPreview, previewReason, data: { estimates: [...], surprises: [...] } }`.
 
+- Estimate row: `{ periodLabel, periodType, estimateLow, estimateMean, estimateHigh, numberOfAnalysts }`. `periodType` is `CURRENT_QUARTER`, `NEXT_QUARTER`, `CURRENT_YEAR` or `NEXT_YEAR`. `periodLabel` is either a date (`2026-11-03`) or a relative code (`0q`, `+1q`, `0y`, `+1y`), so read the period from `periodType`, not by parsing the label.
+- Surprise row, newest first: `{ periodLabel, reportDate, estimateEps, actualEps, surprisePercent }`.
+
+**`surprisePercent` is a fraction rounded to two decimals, despite its name.** `0.16` means a 16% beat (AMD: 1.53 actual against 1.32 estimated), not 0.16%, and the rounding turns a beat or miss under half a percent into `0.00`. This is the one exception to the field-name unit convention used elsewhere (`Pct` and `Percent` fields are percents, as on `/earnings/ranked`). For the reported number, recompute `(actualEps - estimateEps) / abs(estimateEps)` from the two EPS values.
+
 ### GET /api/v1/analyst/activity
 Market-wide recent analyst actions across all covered tickers, paged. Ordered by action date descending, ties broken by ticker then id ascending, a total order so paging is stable. **Free: the full first page** -- the first 50 rows of the window are complete data on every tier (`isPreview: false`). Depth is what PRO buys: `limit` above 50 or any `offset` past row 50 serves FREE keys their in-allowance slice as a preview (`previewReason: "PRO_REQUIRED"`) while PRO pages the whole window.
 
@@ -1285,7 +1302,7 @@ Market-wide recent analyst actions across all covered tickers, paged. Ordered by
 
 Response: `{ isPreview, previewReason, totalCount, data: [...] }`. `totalCount` is the number of actions in the whole `lookbackDays` window **after the `actionTypes` filter**, not the page size, so `offset + data.length < totalCount` means another page is available.
 
-Roughly 70 to 110 rating actions land on a single active market day (measured across a recent trailing week; a heavy day runs a little over 100, not several hundred), and roughly 83% of all actions are `REITERATE` (an analyst confirming an unchanged rating). Weekend and holiday dates carry a handful of stragglers at most, so a 7-day window is about 500 rows, not 1,400. For actual rating changes, pass `actionTypes=UPGRADE,DOWNGRADE,INITIATE` -- otherwise the newest-first page is mostly reiterations. Since rows come back newest first, the default 50-row page is typically filled by the newest day alone, and raising `lookbackDays` by itself returns nothing new. Raise `limit` for a wider slice, or walk the window with `offset`.
+On the order of a hundred rating actions land on an active market day, and most of them (roughly three in four, varying by week) are `REITERATE` (an analyst confirming an unchanged rating). Weekend and holiday dates carry a handful of stragglers at most, so a 7-day window runs to several hundred rows and a 30-day window into the thousands; size your paging from `totalCount` rather than from these figures. For actual rating changes, pass `actionTypes=UPGRADE,DOWNGRADE,INITIATE` -- otherwise the newest-first page is mostly reiterations. Since rows come back newest first, the default 50-row page is typically filled by the newest day alone, and raising `lookbackDays` by itself returns nothing new. Raise `limit` for a wider slice, or walk the window with `offset`.
 
 Same per-action shape as `/api/v1/analyst/{ticker}/actions`.
 
@@ -1299,7 +1316,7 @@ Who covers this stock and what they most recently said, grouped by firm, most re
 
 Response: `{ isPreview, previewReason, data: { ticker, windowDays, asOf, firmCount, ratingOnlyFirmCount, ratingBuckets, namedAnalystCount, noteCount, attributedNoteCount, unattributedNoteCount, attributionNote, coverage: [...] } }`. `windowDays` echoes the window actually applied after clamping, so a request for 99999 comes back saying 1825. A truncated FREE response adds a top-level `totalCount` carrying the full number of covering firms; the untruncated response omits it, because nothing was withheld to count. Read `data.firmCount` when you want that number on every tier. `firmCount` counts firms that covered the ticker in the window, which means a price target note OR a rating action; `ratingOnlyFirmCount` says how many of them are here on a rating alone, so firms that published a target are `firmCount - ratingOnlyFirmCount`. `ratingBuckets` is `{ buy, hold, sell, unrated, total }` over the WHOLE book (every firm's current rating, counted before the FREE truncation, so `total` equals `firmCount` on both tiers): `unrated` is a firm with no rating action in the window or a grade spelling we do not recognize, never a guess, and this is a different population from the `strongBuy`/`hold`/`sell` consensus counts on `/consensus`, so do not mix the two in one view.
 
-Firm row: `{ firm, analysts: [{ slug, name, noteCount, firstNote, lastNote, latestPriceTarget }], noteCount, attributedNoteCount, unattributedNoteCount, firstNote, lastNote, latestNote: { publishedDate, analyst, priceTarget, adjPriceTarget, priceWhenPosted, newsTitle, newsUrl, newsPublisher }, firmRating: { rating, priorRating, actionType, date } }`. `latestNote.analyst` is an object `{ slug, name }`, not a string, and it is null when the report named nobody. `firmRating` is null for a firm that published a price target in the window without a rating action behind it, which is common: 5 of AMD's 27 covering firms on a 180-day window.
+Firm row: `{ firm, analysts: [{ slug, name, noteCount, firstNote, lastNote, latestPriceTarget }], noteCount, attributedNoteCount, unattributedNoteCount, firstNote, lastNote, latestNote: { publishedDate, analyst, priceTarget, adjPriceTarget, priceWhenPosted, newsTitle, newsUrl, newsPublisher }, firmRating: { rating, priorRating, actionType, date } }`. `latestNote.analyst` is an object `{ slug, name }`, not a string, and it is null when the report named nobody. `firmRating` is null for a firm that published a price target in the window without a rating action behind it, which is common.
 
 **A firm can cover a stock without publishing a price target.** The upstream price target feed goes quiet on a desk while that desk's rating actions keep arriving, so a firm in that state comes back as an ordinary row with `noteCount: 0`, an empty `analysts` array, `null` for `firstNote` / `lastNote` / `latestNote`, and its `firmRating` set. Rows are ordered by whichever came later, the firm's last note or its last rating action, so a rating-only firm interleaves by its rating date rather than sinking to the end. Check `noteCount` on the row before reaching into `latestNote`, and never render such a row as "analyst not named": there is no note, so there is no byline to be missing.
 
@@ -1343,7 +1360,7 @@ Response: `{ isPreview, previewReason, totalCount, data: [...] }`. Unlike the tw
 # 1. who covers it, and what they most recently said
 curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
   "https://app.sentisense.ai/api/v1/analyst/AMD/coverage?lookbackDays=180" \
-| jq -r '.data.coverage[] | "\(.firm): \(.analysts[0].name // "not named") target \(.latestNote.priceTarget // "n/a") rating \(.firmRating.rating // "n/a")"'
+| jq -r '.data.coverage[] | "\(.firm): \(if .noteCount == 0 then "rating only, no target note" else (.analysts[0].name // "not named") end) target \(.latestNote.priceTarget // "n/a") rating \(.firmRating.rating // "n/a")"'
 
 # 2. take a slug from that response and read that analyst's own history
 curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
@@ -1418,7 +1435,7 @@ Response: `{ isPreview, previewReason, data: { ticker, asOfDate (ISO date), comp
 
 End-of-day options analytics for US stocks and ETFs, ranked against each ticker's OWN history. Each session's full option chain is reduced to a lean daily aggregate: put/call volume and open interest, an ATM implied-volatility term structure, 25-delta skew, estimated premium activity, open-interest walls with max pain, and the session's unusually-active contracts. Percentile and rank context accompanies readings when sufficient data is available, measured within that ticker's own trailing window (for example "put/call volume at the 92nd percentile of its 1y range"), never as a cross-sectional number. Readings describe what the chain looks like versus its own past; they are not forecasts.
 
-This is end-of-day data, not real-time. End-of-day fields describe the latest successfully published snapshot; after market close, `asOf` may still identify the prior session, so quote the returned `asOf`. Follow-ups compare the next session's open interest once its chain is observed, and intraday fields have independent timestamps. Coverage is two universes, discovered differently. **Stocks:** a bounded universe of the most actively optioned US names, about 1,040 in the latest build (the exact size is in `coverageCount`) and expanding; the `rows` of the full `/options/overview` are the authoritative list. **ETFs:** covered funds are served on the same `/stocks/{ticker}/options/...` paths, and on the overview they are a SEPARATE board: `etfRows`, never mixed into `rows`. `GET /api/v1/etfs` lists tracked funds; the full overview's `etfRows` lists funds in the current options snapshot, and a tracked fund without a snapshot returns `data: null` from `/summary`. FREE receives the top 25 ETF rows, so absence from that slice does not establish noncoverage. `coverageCount` and the market-pulse aggregates describe the stock board only, so an ETF is never counted there. The two boards are ranked independently and must not be merged: every reading is a percentile of that ticker's own trailing history, so an ETF's `interestScore` is comparable to other ETFs, not to a single stock. A ticker with no options snapshot (outside both universes, unknown, or not yet built) returns `200` with `data: null` from `/summary`; treat a null dossier as "no snapshot available", not as an error. A percentile requires a current reading and at least 60 usable observations in its window; IV rank is also omitted for a flat range. `interestScore` requires at least 60 observations and either $250,000 of estimated premium activity (`notionalVol`) or 100 contracts listed in the chain (`contracts`, not traded volume), and at least one usable score component; otherwise the row is unscored. Report a missing percentile or score as unavailable, not as a zero.
+This is end-of-day data, not real-time. End-of-day fields describe the latest successfully published snapshot; after market close, `asOf` may still identify the prior session, so quote the returned `asOf`. Follow-ups compare the next session's open interest once its chain is observed, and intraday fields have independent timestamps. Coverage is two universes, discovered differently. **Stocks:** a bounded universe of the most actively optioned US names, about 1,040 in the latest build (the exact size is in `coverageCount`) and expanding; the `rows` of the full `/options/overview` are the authoritative list. **ETFs:** covered funds are served on the same `/stocks/{ticker}/options/...` paths, and on the overview they are a SEPARATE board: `etfRows`, never mixed into `rows`. `GET /api/v1/etfs` lists tracked funds; the full overview's `etfRows` lists funds in the current options snapshot, and a tracked fund without a snapshot returns `data: null` from `/summary`. FREE receives the top 25 ETF rows, so absence from that slice does not establish noncoverage. `coverageCount` and the market-pulse aggregates describe the stock board only, so an ETF is never counted there. The two boards are ranked independently and must not be merged: every reading is a percentile of that ticker's own trailing history, so an ETF's `interestScore` is comparable to other ETFs, not to a single stock. A ticker with no options snapshot (outside both universes, unknown, or not yet built) returns `200` with `data: null` from `/summary`; treat a null dossier as "no snapshot available", not as an error. A percentile requires a current reading and at least 60 usable observations in its window; IV rank is also omitted for a flat range. `interestScore` requires at least 60 observations, at least $100,000 of estimated premium activity (`notionalVol`) in the latest session, and at least one usable score component; otherwise the row is unscored. Report a missing percentile or score as unavailable, not as a zero.
 
 **Access and free-tier gating:** all three endpoints require an API key and each call counts against your monthly request quota. Monthly request and dossier allowances reset at the start of the first day of each calendar month in America/New_York (Eastern time). The options data itself is additionally tiered by key. PRO keys always get the full response. FREE access is a limited cut: `/options/overview` returns the top 25 ranked rows of each board (plus all market-pulse aggregates and a `totalCount` of the full stock board); on `/stocks/{ticker}/options/summary`, FREE accounts receive ten covered full-summary calls per calendar month, including repeat calls and prior account usage (summaries without a snapshot never spend this allowance), then headline previews (`asOf`, `sentiment`, `ivRank1y`, `atmIv`, `expectedMove1d`, `pcVol`, `pcVolPctl1y`, `maxPain`, flattened under `data`, plus the intraday session fields when available); remaining allowance and reset timestamps are not returned. `/stocks/{ticker}/options/history` always serves `window=1y` to FREE keys and reports `window: "1y"` with `isPreview: false`, even when `2y` or `5y` was requested. Overview and summary previews carry `isPreview: true`, `previewReason: "PRO_REQUIRED"` and an `upgrade` object (`plan`, `message`, `price`, `url`, `relay`); full bodies carry `isPreview: false` and `previewReason: null`. Inside `data`, unavailable nested metric fields are omitted, while envelope fields can be an explicit `null` (`previewReason` above, `data` when no snapshot is available), so handle absent and `null` alike. Standard FREE and PRO limits are 30 and 300 requests/minute. A `429 rate_limit_exceeded` returns `Retry-After: 60`; a `429 quota_exceeded` has no `Retry-After` and requires waiting for the monthly reset or a quota change. 401 and 429 bodies are `{ error, message }` without the success envelope so dispatch on `error`, not on the message text, which can vary.
 
@@ -1479,8 +1496,19 @@ curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
   "https://app.sentisense.ai/api/v1/stocks/NVDA/options/summary"
 ```
 
+**The FREE headline preview is flat.** Once a FREE key has spent its ten full summaries for the month, `/summary` answers `isPreview: true`, `previewReason: "PRO_REQUIRED"`, an `upgrade` object, and a `data` object with the headline fields directly under it instead of nested: `{ asOf, sentiment, ivRank1y, atmIv, expectedMove1d, pcVol, pcVolPctl1y, maxPain }`, plus the intraday session fields `intradayFlow`, `largePrintCount`, `largestPrintPctl` and `capabilities` when available. Each field is omitted when it has no value. There is no `latest`, `context`, `oiWalls` or `unusual` on the preview, so `data.latest.atmIv` and `data.context.ivRank1y` read as missing there. Read both shapes with one code path, and label the result a preview:
 
-ETFs appear in `data.etfRows` and use the same summary path:
+```javascript
+const d = body.data;                           // null: no snapshot for this ticker
+const latest  = d && (d.latest  ?? d);         // atmIv, expectedMove1d, pcVol
+const context = d && (d.context ?? d);         // ivRank1y, pcVolPctl1y
+const maxPain = d && (d.oiWalls?.maxPain ?? d.maxPain);
+const preview = body.isPreview === true;       // label the numbers "free preview"
+```
+
+An absent field on the preview means "not in the preview", not a zero and not an empty chain: never report "no unusual contracts" or "no walls" from it.
+
+ETFs appear in the overview's `data.etfRows` (`GET /api/v1/options/overview`) and use the same summary path:
 
 ```bash
 curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
@@ -1502,7 +1530,7 @@ curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
   "https://app.sentisense.ai/api/v1/stocks/NVDA/options/history?window=1y"
 ```
 
-**When to use these:** call `/options/overview` (no ticker) for the market-wide read of where options activity and implied volatility are unusual today, then drill into a name with `/stocks/{ticker}/options/summary` for its full dossier (walls, max pain, unusual contracts). For a macro or sector read, use `data.etfRows` from the overview, or go straight to an ETF dossier (`SPY`, `QQQ`, `IWM`, `TLT`, `GLD`, the sector `XL*` funds). Use `/stocks/{ticker}/options/history` to chart how a reading (IV, put/call, skew) has trended over time (available history is 2+ years, from July 2024, growing daily). Every value is a percentile of that stock's own past, so read it as "elevated or muted versus this stock's own history", not as a cross-stock ranking.
+**When to use these:** call `/options/overview` (no ticker) for the market-wide read of where options activity and implied volatility are unusual today, then drill into a name with `/stocks/{ticker}/options/summary` for its full dossier (walls, max pain, unusual contracts). For a macro or sector read, use `data.etfRows` from `GET /api/v1/options/overview`, or go straight to an ETF dossier (`SPY`, `QQQ`, `IWM`, `TLT`, `GLD`, the sector `XL*` funds). Use `/stocks/{ticker}/options/history` to chart how a reading (IV, put/call, skew) has trended over time (available history is 2+ years, from July 2024, growing daily). Every value is a percentile of that stock's own past, so read it as "elevated or muted versus this stock's own history", not as a cross-stock ranking.
 
 ---
 
@@ -1516,7 +1544,7 @@ Four endpoints, all **API key required**. Call `/fields` once to learn the catal
 
 | Field | Type | Default | Notes |
 |-------|------|---------|-------|
-| `filters` | array | required | ANDed together. There is no OR: run two screens and merge |
+| `filters` | array | required | ANDed together. There is no OR: run two screens and merge. A few curated plans from `/screens` (`high-volume`, `etf-high-volume`) carry no `filters` key at all and rank the whole universe by their `sort`, so read the key defensively |
 | `sort` | object | none | `{ "fieldName": "<FIELD>", "dir": "ASC" \| "DESC" }` |
 | `universe` | string | set by the path | The body value is a no-op; the endpoint you call decides stock vs ETF |
 
@@ -1572,6 +1600,8 @@ ETF fields by group:
 - **`MA_CROSS_STATE` is ordinal, not boolean.** `1` golden cross (50-day above 200-day), `-1` death cross, `0` neither. Use `EQ`.
 - **`SENTIMENT_DIRECTION` is the sign of the 7-day Score** with a neutral band: `1` above +5, `-1` below -5, `0` in between. Despite the name it is not sentiment polarity.
 - **`SENTISENSE_RATING` is a letter, and the letter is a band of a score.** The only string-typed field in the stock universe: values `A`, `B`, `C`, `D`, `F`, operators `IN` / `NOT_IN` with the letters in a `values` array. Sorting it resolves to the underlying 0 to 100 score, not the letter's alphabetical order, so `DESC` puts the highest score first, and rows come back with `ratingLetter`, `ratingScore` and `ratingPercentile`. Unrated stocks match no letter, so `NOT_IN ["F"]` is not the complement of `IN ["F"]`. Describe a result as a score and a rank, never as a buy list.
+
+There is no sector field in either universe, as a filter or on result rows. For a sector cut, screen first and then join the rows to `/api/v1/stocks/{ticker}/profile` or `/api/v1/stocks/descriptions`, or restrict the screen with a `tickers` list you built for that sector.
 
 `ANALYST_COUNT` is the sum of the rating buckets, deliberately not the same population as the target-price panel, so the two counts disagree for most tickers. When you screen on `ANALYST_BUY_RATIO_PCT`, add an `ANALYST_COUNT >= 5` leg: coverage bottoms out at a single analyst, and a 0% buy ratio from one analyst is noise, not disagreement.
 
@@ -1646,7 +1676,7 @@ curl -X POST "https://app.sentisense.ai/api/v1/screener/etfs/execute" \
 ```
 
 
-Two scale traps worth taking from the catalog rather than guessing. `EXPENSE_RATIO` is in percent, so `0.25` means 0.25%, not 25% and not 0.0025. And `CONSTITUENTS_WEIGHTED_SENTISENSE` is a Score, not a percentage: the field's own description puts the bullish line at +5, which is why this example uses it. Do not assume the two `quickValues` the catalog offers are both reachable; the ETF universe is small and its top Score sits near +12, so the higher suggestion can match nothing on a given day. Read the returned `matched` count and loosen if it is 0.
+Two scale traps worth taking from the catalog rather than guessing. `EXPENSE_RATIO` is in percent, so `0.25` means 0.25%, not 25% and not 0.0025. And `CONSTITUENTS_WEIGHTED_SENTISENSE` is a Score, not a percentage: the field's own description puts the bullish line at +5, which is why this example uses it. Do not assume the two `quickValues` the catalog offers are both reachable; the ETF universe is small and its top Score moves from day to day, so the higher suggestion can match nothing on a given day. Read the returned `matched` count and loosen if it is 0.
 
 **When to use these:** call `/fields` once at startup and cache it, use `/screens` when the user asks for something a curated screen already expresses (execute its `plan` verbatim), and build a plan yourself when they want a cross the curated set does not cover. Full docs: <https://sentisense.ai/docs/api/screener>.
 
@@ -1663,10 +1693,12 @@ Response:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `lastUpdated` | long | Epoch milliseconds when data was last updated |
+| `lastUpdated` | long | Epoch milliseconds when this response was served. It tracks the clock, not the content |
 | `headline` | string? | 1-2 sentence market punchline |
 | `expandedContent` | string? | Full markdown analysis |
-| `generatedAt` | long? | Epoch seconds when AI summary was generated |
+| `generatedAt` | long? | Epoch seconds when the AI summary was generated |
+
+Date the summary with `generatedAt` (epoch seconds), never with `lastUpdated` (epoch milliseconds, always "now"). A summary generated after yesterday's close still reads as current on `lastUpdated`, and any figure quoted in `headline` (a Market Mood score, an index move) is as of `generatedAt`, so it can differ from the live `/api/v2/market-mood` reading.
 
 ---
 
@@ -1742,7 +1774,7 @@ Standardized snapshot envelope for one tracker. Returns:
 {"isPreview": false, "previewReason": null, "data": TrackerSnapshot}
 ```
 
-A `pro` tracker served to a FREE caller sets `isPreview: true, previewReason: "PRO_REQUIRED"` plus `totalCount` (the full row count on every response), and withholds one of two ways: most truncate `rows[]` to a top-N preview, while a tracker whose value is a complete dataset keeps every row and drops the proprietary columns instead, naming them in `data.meta.previewWithheld` (`market-heatmap` is the one that does this). `free` trackers and PRO callers get the full snapshot. Where `TrackerSnapshot` has `trackerId`, `displayName`, `viewType`, `asOf`, `headline[]` (top-of-page stat tiles), and one payload field per `viewType`:
+A `pro` tracker served to a FREE caller sets `isPreview: true, previewReason: "PRO_REQUIRED"` plus `totalCount` (the full row count on every response), and withholds one of two ways: most truncate `rows[]` to a top-N preview, while a tracker whose value is a complete dataset keeps every row and drops the proprietary columns instead, naming them in `data.meta.previewWithheld` (`market-heatmap` is the one that does this). `free` trackers and PRO callers get the full snapshot. Where `TrackerSnapshot` has `trackerId`, `displayName`, `viewType`, `asOf`, `headline[]` (top-of-page stat tiles; some trackers, the sentiment leaderboard and movers among them, omit it, so read it defensively), and one payload field per `viewType`:
 
 | `viewType` | Payload field | Per-item shape |
 |-----------|---------------|----------------|
@@ -1758,8 +1790,8 @@ Live trackers as of this writing. The catalog grows over time: treat the `GET /a
 | `institution-aum` | free | Largest 13F filers by disclosed long-equity AUM |
 | `hedge-fund-reported-returns` | pro | Net-of-fee annual returns large hedge funds publish, with citations |
 | `media-darlings` | free | Stocks by how bullish or bearish the curated financial press is on them |
-| `sentiment-leaderboard` | free | Most bullish and most bearish stocks by pure sentiment polarity |
-| `sentiment-movers` | free | Biggest 7-day sentiment shifts, improving and deteriorating |
+| `sentiment-leaderboard` | free | Most bullish and most bearish stocks, ranked by 30-day SentiSense Score (rows also carry the 7-day Score and raw polarity, which do not set the order and can disagree with the side a row sits on) |
+| `sentiment-movers` | free | Biggest SentiSense Score shifts, improving and deteriorating, ranked by `Score change (7d)`: the 7-day average Score minus the 30-day average, not the tone change also shown (a row with no Score change falls back to its tone change) |
 | `trending-products` | free | Products and services by mention volume and week-over-week growth |
 | `market-heatmap` | pro | A whole index as tiles in one call: market cap, the day's move, GICS sector, plus sentiment, Score, mentions and options overlays per stock. Every row on every tier, overlays PRO. Scope-aware, see below |
 
@@ -1771,7 +1803,7 @@ Column headers are the metric labels on `rows[0]`. Common metric `unit` values a
 
 Per-row fields: `ticker`, `sector` (canonical GICS-11 or `Unclassified`), `industry`, `marketCap`, `price`, `previousClose`, `changePercent`, `volume`, `priceAsOf`, `sentiment7d`, `sentimentChange7d`, `sentisenseScore`, `mentionsZ`, `optionsInterestScore`. `meta` carries `scope`, `universeSize`, `tileCount`, `missingPrice[]`, `breadthUp`, `breadthDown`, `capWeightedChangePct`, `equalWeightedChangePct`, `marketMoodScore`, `marketMoodPhase`, `layers` and `sectors[]`.
 
-Within the layers you were served, an absent field means no reading for that tile, never a zero, and a measured `0.0` is always written. Whether an overlay ran at all is answered by `meta.layers`, which omits any layer that failed or is not shipped. Snapshots rewrite every 15 minutes during the US regular session and hourly outside it, with prices delayed about 15 minutes (`meta.layers.prices.delayMinutes`), so do not present the board as real time.
+Within the layers you were served, an absent field means no reading for that tile, never a zero. `sentisenseScore` is the latest daily Score with one exception: a `0.0` on a name whose 30-day average sits 5 or more points from zero is treated as a missing reading and left out, so a genuinely balanced day on such a name is absent too, while a `0.0` on a quieter name is served and does not say whether that day's analyses were balanced or there were none. To settle one name's day, read its own `bull`, `bear` and `directional` counts from `GET /api/v2/metrics/entity/{ticker}/metric/sentisense` rather than the tile. Whether an overlay ran at all is answered by `meta.layers`, which omits any layer that failed or is not shipped. Snapshots rewrite every 15 minutes during the US regular session and hourly outside it, with prices delayed about 15 minutes (`meta.layers.prices.delayMinutes`), so do not present the board as real time.
 
 Errors: `404 unknown_tracker`, `404 no_snapshot` (a scope whose first snapshot has not been written yet: a warm-up state, retry in 15 minutes), `400 invalid_scope`, `503 tracker_unavailable`.
 
@@ -1789,7 +1821,7 @@ Discover which calendars are available. **Discovery (no quota cost)** -- API key
 Response: `{ calendars: [ { type, path, description } ] }`. Today: `earnings`.
 
 ### GET /api/v1/calendar/earnings
-Upcoming company earnings, sorted by date. **Public (preview)** -- Free: one week, PRO: full forward window (about 60 days). Field richness is identical across tiers; the gate is how much of the window you get back, not which columns you get. On Free the week returned is the first week of the window you asked for, so `week=next` returns next week and `week=this` (or no date params) returns the current week. Defaults to the current week onward, measured from Monday of the current US Eastern week rather than from today, so it can include dates earlier in the week that have already passed; pass an earlier `from` to reach further back. Entries are schedule data in every case and never carry what a company actually reported.
+Upcoming company earnings, sorted by date. **Public (preview)** -- Free: one week, PRO: full forward window (about 60 days). Field richness is identical across tiers; the gate is how much of the window you get back, not which columns you get. On Free the week returned is the first Monday-to-Sunday week of the window you asked for, so `week=next` returns next week and `week=this` (or no date params) returns the current week. **That one-week cut applies to the `ticker` filter too.** On a FREE key, `?ticker=AAPL` searches only the current week, so a report four weeks out comes back as `data.earnings: []` with `totalCount: 1`. An empty FREE list with `totalCount` above zero means "scheduled outside the free week", never "not scheduled": say so, then either walk forward one week per call with `from=` set to each following Monday (up to about nine calls to cover the window) or note that PRO returns the date in one call. Defaults to the current week onward, measured from Monday of the current US Eastern week rather than from today, so it can include dates earlier in the week that have already passed; pass an earlier `from` to reach further back. Entries are schedule data in every case and never carry what a company actually reported.
 
 | Param | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
@@ -1834,7 +1866,7 @@ Coverage: the actively curated US equity universe, expanding each earnings seaso
 
 Response: `{ isPreview, previewReason, totalCount?, data: [...] }`, quarters newest first. Each PRO quarter: `{ fiscalPeriod, reportDate, headline, summaryMd, kpiHighlights: [{label, value, yoy?}], guidance?, hasTranscript, transcriptSummaryMd?, transcriptHighlights?, transcriptGeneratedAt?, sources: [{title, url}], generatedAt, source }`. `fiscalPeriod` is a display label (e.g. `Q2 FY2026`), `reportDate` is `YYYY-MM-DD`, `generatedAt` and `transcriptGeneratedAt` are epoch seconds, and `source` is `press_release` or `transcript`.
 
-The FREE preview quarter is shaped, not cut: `fiscalPeriod`, `reportDate` and `headline` in full, plus `kpiHighlights` as up to two `{label, value}` cards, `kpiHighlightCount`, `summaryTopics` and `transcriptTopics` (section titles only, never body text), `hasTranscript`, `hasGuidance`, `guidanceDirection` (`RAISED`, `CUT`, `HELD`, `MIXED`, or `null`), `generatedAt` and `source`. It never carries a body, a KPI history, or a guidance figure.
+The FREE preview quarter is shaped, not cut: `fiscalPeriod`, `reportDate` and `headline` in full, plus `kpiHighlights` as up to two `{label, value}` cards, `kpiHighlightCount`, `summaryTopics` and `transcriptTopics` (section titles only, never body text), `hasTranscript`, `hasGuidance`, `guidanceDirection` (`RAISED`, `CUT`, `HELD`, `MIXED`, or `null`), `generatedAt` and `source`. It never carries a body, a KPI history, or a guidance figure. `guidanceDirection` is a machine classification of the release's guidance wording and can misread it (a reaffirmed range that mentions an increase can come back `RAISED`), so present it as a classification and do not treat `hasGuidance: false` as proof the company gave no guidance on its call.
 
 `guidance` is prose, not a number: PRO callers get the language and classify it themselves, and the classification must let no-guidance language win before any direction word ("no formal guidance was issued ... increasingly difficult" is not a raise). Absence is explicit rather than omitted: a quarter with no call summary sets `hasTranscript: false`, so a client can say "no call summary yet" instead of rendering nothing.
 
@@ -1861,9 +1893,9 @@ Response: `{ ticker, asOf, reactions: [...] }`, returned directly rather than th
 Past announcements only: a company that reported after today's close has no completed reaction session yet and appears once that session closes. A quarter that cannot be measured is absent rather than approximated, and no move is computed across a gap in price history. An empty `reactions` array means no measured history for that ticker rather than an error, and unknown tickers return the same shape.
 
 ### GET /api/v1/earnings/recent
-The cross-ticker backward-looking feed: which covered companies reported on or after `today - days`, newest first. Drives a post-earnings sweep ("who reported this week"), then follow up per ticker with the per-quarter analysis above. **API key required**, no tier gate: every key receives the full window it asks for. Params: `days` (1 to 31, default 7; above 31 is capped, below 1 returns `400 invalid_days`), `limit` (1 to 100, default 50; above 100 is capped, below 1 returns `400 invalid_limit`).
+The cross-ticker backward-looking feed of quarters that have a stored SentiSense earnings analysis, reported on or after `today - days`, newest first. It lists only those quarters, so it is not every company that reported in the window (a quarter appears once its analysis is written, which can lag the report). Drives a post-earnings sweep ("who reported this week"), then follow up per ticker with the per-quarter analysis above. **API key required**, no tier gate: every key receives the full window it asks for. Params: `days` (1 to 31, default 7; above 31 is capped, below 1 returns `400 invalid_days`), `limit` (1 to 100, default 50; above 100 is capped, below 1 returns `400 invalid_limit`).
 
-Response: `{ isPreview: false, previewReason: null, data: [...] }`. Each row: `{ ticker, fiscalPeriod, reportDate, headline, hasTranscriptSummary, generatedAt }`. The window is bounded by `reportDate`, so a quarter reported inside it appears even when its call summary lands later. An empty `data` array means nobody in the covered set reported in that window, not an error. This is the only backward-looking earnings feed; the Calendar API is forward-looking and covers scheduled dates, not results.
+Response: `{ isPreview: false, previewReason: null, data: [...] }`. Each row: `{ ticker, fiscalPeriod, reportDate, headline, hasTranscriptSummary, generatedAt }`. The window is bounded by `reportDate`, so a quarter reported inside it appears even when its call summary lands later. An empty `data` array means no quarter in that window has a stored analysis yet, not an error and not proof that nobody reported. For the wider list of who reported, read the `reported` section of `/earnings/ranked` below, which carries `totalInWindow`. The Calendar API is forward-looking and covers scheduled dates, not results.
 
 ### GET /api/v1/earnings/statistics
 The only endpoint here that describes the market rather than one company: of everyone who reported in a window, how many cleared the estimate, and how the market actually traded them. **API key required**, no tier gate. One param, `window`: `last_completed_week` (default), `week_to_date`, `trailing_52w`, `all_time`. Anything else returns `400 invalid_window`. Weeks are ISO weeks evaluated in America/New_York; the default is the last finished week because a mid-week figure gets revised underneath you, and `week_to_date` marks itself partial in its window key.
@@ -1888,10 +1920,10 @@ Three things to get right:
 - **A missing move has two meanings.** `reactionPending: true` means the reacting session plausibly has not closed yet, and `liveReactionPct` then carries that session's move so far, from a delayed snapshot: its presence does not mean the market is open. On the report date itself, from 16:00 ET, a company the calendar marks as reporting after the close may instead carry `afterHoursReactionPct`, the extended-hours move against that day's close. Report it as the after-hours move, not as the reaction. At most one of the three readings is present. A missing `movePct` with `reactionPending` false or absent is a coverage gap that will not fill in; do not describe it as pending.
 - **`awaitingConsensus: true` means the print is in but the EPS consensus is not.** Render it as awaiting consensus, not as an unclassified beat or miss. `outcome` is `BEAT`, `MISS`, `INLINE` or `UNCLASSIFIED`, and `earningsTime` on upcoming rows is `before_open`, `after_close`, `during_market` or `unknown`.
 
-Reach for `/earnings/recent` when the reader wants every name in the window rather than the important ones, and for `/calendar/earnings` for the plain forward schedule. Rank comes from the API; explain why a row ranked (surprise, move, cap, Score) rather than re-ranking it.
+When the reader wants every covered company that reported in the window rather than the important ones, call `/earnings/ranked` with `reportedLimit=50` (one row per company) and compare `reported.totalInWindow` with the rows returned (above 50, shorten `reportedDays`; a FREE key sees 3 rows per section). Reach for `/earnings/recent` to list the quarters that already have an analysis you can open with `earnings-summaries`, and for `/calendar/earnings` for the plain forward schedule. Rank comes from the API; explain why a row ranked (surprise, move, cap, Score) rather than re-ranking it.
 
 Reported by the earnings family alongside the five endpoints above:
-- **Calendar** -- `GET /api/v1/calendar/earnings?week=next` (who reports next week) or `?ticker={ticker}` (a single name's next date + consensus EPS). See the Calendar API section.
+- **Calendar** -- `GET /api/v1/calendar/earnings?week=next` (who reports next week) or `?ticker={ticker}` (a single name's next date + consensus EPS; a FREE key searches only the current week, so an empty result with `totalCount` above zero means the date is further out). See the Calendar API section.
 - **Fundamentals + KPIs** -- `GET /api/v1/stocks/fundamentals` for statements; `GET /api/v1/stocks/{ticker}/kpis` for curated GAAP and non-GAAP metrics (PRO preview). See the Stocks API section.
 - **Analyst estimates** -- `GET /api/v1/analyst/{ticker}/estimates` for forward EPS and beat/miss history. See the Analyst Ratings API section.
 - **Insights** -- earnings-driven signal types such as `earnings_pulse` surface through `GET /api/v1/insights/stock/{ticker}` (discover types via `.../types`). These are editorial and time-boxed: they appear around an earnings event while the read is fresh, then expire, so an empty array outside those windows is normal. Treat them as opportunistic signal, not guaranteed per-quarter data. See the Insights API section.
@@ -1974,7 +2006,7 @@ curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
   "https://app.sentisense.ai/api/v1/stocks/price?ticker=AAPL"
 ```
 
-3. **Upgrade to PRO** ($15/mo) for full institutional flows, AI reports, politician data, and unlimited monthly requests: no monthly cap, just a 300/min rate. Apply coupon `AGENTS26` at checkout for a builder launch discount: https://app.sentisense.ai/pricing?coupon=AGENTS26
+3. **Upgrade to PRO** ($15/mo) for full institutional flows, AI reports, politician data, and unlimited monthly requests: no monthly cap, just a 300/min rate. Apply coupon `AGENTS` at checkout for a builder launch discount: https://app.sentisense.ai/pricing?coupon=AGENTS
 
 ### SDKs (Optional Convenience)
 
@@ -1996,6 +2028,8 @@ import SentiSense from 'sentisense';
 const client = new SentiSense({ apiKey: process.env.SENTISENSE_API_KEY });
 const price = await client.stocks.getPrice('AAPL');
 ```
+
+The Node snippets use ES module syntax and top-level `await`: save them as `.mjs`, or set `"type": "module"` in your `package.json`.
 
 ---
 

@@ -58,7 +58,7 @@ curl -sS \
   "https://app.sentisense.ai/api/v1/stocks/AAPL/entities"
 ```
 
-An unknown or untracked ticker on the traversal path returns `200` with an empty array, not a `404`; treat an empty array as no coverage and confirm the ticker with a `type=company` search. Encode all user text in query strings. Treat a handle returned by the API as opaque and URL-encode it when placing it in a path. On `429`, honor `Retry-After` once, then report the rate limit instead of looping. Cache identical reads for the life of the user's request.
+An unknown or untracked ticker on the traversal path returns `200` with an empty array, not a `404`; treat an empty array as no attached people or products, not as an untracked company, and confirm coverage with a `type=company` search or the graph path's `404 entity_not_found`. Encode all user text in query strings. Treat a handle returned by the API as opaque and URL-encode it when placing it in a path. On `429`, honor `Retry-After` once, then report the rate limit instead of looping. Cache identical reads for the life of the user's request.
 
 A full "who moves this stock" pass costs one traversal call plus one Score call per entity, about 18 calls for a ticker with 17 people and products, so plan the free tier's monthly quota accordingly. A relationship answer is cheaper: one graph call covers the whole neighborhood, and you only spend a Score call per entity when the question asks for a number.
 
@@ -101,13 +101,13 @@ One company's curated neighborhood as a typed graph: which entities the knowledg
 | `ticker`, `root` | the normalized ticker and the root company's slug; the root is also the first entry in `nodes` |
 | `depth`, `cap` | the values the walk was asked for, echoed back |
 | `truncated` | true when `cap` cut the walk short |
-| `counts` | `nodes`, `edges`, and `byType`, a map of node type to how many were returned |
+| `counts` | `nodes`, `edges`, and `byType`, a map of node type to how many were returned; `nodes` includes the root, so `cap=1` can return two nodes |
 | `groups` | `people`, `products`, `productFamilies`, `peers`, `organizations`, `publishers`, `topics` |
 | `omitted` | nodes left out for carrying no slug, and so not addressable; normally 0 |
 | `nodes` | one `{slug, displayName, type}` per node; `slug` is the metric handle |
 | `edges` | one `{source, target, type, direction, properties}` per relationship, both ends slugs |
 
-**`groups` covers the whole walk, not just the root.** At `depth=1` every slug in a group is joined to the root directly. At `depth=2` the groups also collect the second hop: on MSFT, `groups.peers` grew from 7 to 19 and `groups.people` from 3 to 15, because a peer's peers and a peer's executives land in the same lists. To say what is joined to the root itself, read `depth=1`, or keep only the slugs that share an edge with `root` in `edges`. Every list under `groups` holds **slugs**, not objects, except `productFamilies`, which holds `{family, members}` entries of slugs. A slug is the same handle the metrics endpoint takes, so a slug read straight out of `groups` is already queryable; join it to `nodes` when you want its `displayName` or `type`. `properties` on an edge is a flat string map that is often empty. Node `type` is uppercase, as on the flat traversal path.
+**`groups` covers the whole walk, not just the root.** At `depth=1` every slug in a group is joined to the root directly. At `depth=2` the groups also collect the second hop: on MSFT, `groups.peers` grew from 7 to 19 and `groups.people` from 3 to 15, because a peer's peers and a peer's executives land in the same lists. To say what is joined to the root itself, read `depth=1`, or keep only the slugs that share an edge with `root` in `edges`. Every list under `groups` holds **slugs**, not objects, except `productFamilies`, which holds `{family, members}` entries of slugs. A slug is the same handle the metrics endpoint takes, so a slug read straight out of `groups` is already queryable; join it to `nodes` when you want its `displayName` or `type`. `properties` on an edge is a flat string map that is often empty. Node `type` is uppercase, as on the flat traversal path, but the vocabularies differ: a graph product node is `PRODUCT_OR_SERVICE`, while the flat traversal path labels the same product `PRODUCT`. Graph nodes carry no ticker field.
 
 Errors: `400 invalid_depth` when `depth` is not 1 or 2, `400 invalid_cap` when `cap` is outside 1 through 200, `404 entity_not_found` with up to three `suggestions` when no listed company matches the ticker, and `401` with no key. Note the contrast with the flat traversal path above, which answers an unknown ticker with `200 []`.
 
@@ -134,13 +134,13 @@ GET /api/v1/documents/entity/{entityId}?days=30&limit=10
 GET /api/v1/documents/stories/ticker/{ticker}?limit=5
 ```
 
-The entity documents path accepts the entity `urlSlug`, the same handle the metrics path uses. Internal KB ids, such as `kb-person-1`, are not accepted there. The document response is an object with `documents`, `totalCount`, `searchTicker`, `source`, `startDate`, and `endDate`; a document can include `id`, `url`, `source`, `sourceName`, `published`, `averageSentiment`, `reliability`, and `sentiment` (an array of per-entity readings, not a scalar; use `averageSentiment` for the document's tone). `published`, `brokeAt`, `cluster.createdAt` and `cluster.clusteredAt` are epoch seconds: convert them to `YYYY-MM-DD` before printing a date column. `published` is the time the document was ingested, which can be later than the source's own date. `totalCount` reflects the returned page, not the full history. The ticker story response is a bare array. Each item has top-level `id` and `clusterId`, plus fields such as `cluster.title`, `cluster.averageSentiment`, `tickers`, `displayTickers`, `impactScore`, `brokeAt`, `cluster.clusteredAt`, `cluster.storySource`, and `cluster.isLive`. `limit` defaults to 5 and is capped at 20; this path has no lookback parameter.
+The entity documents path accepts the entity `urlSlug`, the same handle the metrics path uses. The `id` field on flat traversal rows is deprecated for public use and is not accepted there; pass the `urlSlug`. The document response is an object with `documents`, `totalCount`, `searchTicker`, `source`, `startDate`, and `endDate`; a document can include `id`, `url`, `source`, `sourceName` (often null; fall back to the host of `url`), `published`, `averageSentiment`, `reliability`, and `sentiment` (an array of per-entity readings, not a scalar; use `averageSentiment` for the document's tone). `published`, `brokeAt` and `cluster.clusteredAt` are epoch seconds: convert them to `YYYY-MM-DD` before printing a date column. A story's `cluster.createdAt`, where present, is deprecated and in epoch milliseconds, so it reads a thousand times too large as seconds; date stories with `brokeAt` or `cluster.clusteredAt` instead. `published` is the time the document was ingested, which can be later than the source's own date. `totalCount` reflects the returned page, not the full history. The ticker story response is a bare array. Each item has top-level `id` and `clusterId`, plus fields such as `cluster.title`, `cluster.averageSentiment`, `tickers`, `displayTickers`, `impactScore`, `brokeAt`, `cluster.clusteredAt`, `cluster.storySource`, and `cluster.isLive`. `limit` defaults to 5 and is capped at 20; this path has no lookback parameter.
 
 ## Score Rules
 
 - Use the same `startTime` and `endTime` for every entity in a comparison.
 - Current Score is the last returned point that has a flat `value` and a `metricValue.properties.directional` of at least 5. A point with `value: 0.0` and `directional: 0` is a day with no directional mentions, not a neutral reading; skip it. If no point qualifies, print `no robust reading`. Print the date of the point you used, because the last reading need not be today.
-- Thirty-day change is the last robust point minus the first robust point. A robust point has a flat `value` and a usable directional sample. If fewer than two robust points exist, print `insufficient sample`.
+- Thirty-day change is the last robust point minus the first robust point. A robust point has a flat `value` and a usable directional sample. If fewer than two robust points exist, print `insufficient sample`. On a thin entity the two robust points can sit only days apart: when they span much less than the window, print their dates beside the change (for example `-13.78 (09-07 to 09-17)`) rather than presenting it as a 30-day move.
 - Thirty-day directional mentions are the sum of `metricValue.properties.directional` across returned points. Sum `bull` and `bear` the same way when shown. If any returned point lacks these properties, label the window sample partial instead of filling absent counts with zero.
 - Treat a window-edge point with fewer than roughly 5 directional mentions as thin. Use the nearest robust point, or average the first two and last two points when that is the only defensible edge treatment. Label the choice, and when you substitute an edge point for one entity in a comparison, use the same substituted dates for the other entity or print both as-of dates. Never use `metricValue.stats.count` as the sample size because it counts the daily bucket and is normally 1.
 - Do not normalize the SentiSense Score to a fixed range. Compare values and changes as returned.
@@ -164,7 +164,7 @@ The entity documents path accepts the entity `urlSlug`, the same handle the metr
 | `SUBTOPIC_OF` | the topic sits under a broader topic | child topic to parent |
 | `BELONGS_TO`, `AFFILIATED_WITH` | membership, and looser association | curated for the model, not populated today |
 
-  `PEER` is by far the most common, then `LEADS`, `VARIANT_OF` and `FOUNDED`; the rest are rare. Treat any type you do not recognize as an unlabeled link rather than guessing at its meaning, and do not translate a type into influence, causation or control.
+  `PRODUCT_OF`, `PEER`, `VARIANT_OF`, `LEADS` and `FOUNDED` carry nearly every edge in a company's neighborhood; the rest are rare. Treat any type you do not recognize as an unlabeled link rather than guessing at its meaning, and do not translate a type into influence, causation or control.
 - **The walk admits another company only as a peer.** A company joined to the root by `OWNS` or `SUBSIDIARY_OF` is not pulled into the neighborhood, so a parent or a subsidiary normally appears only when it is also a peer. Answer corporate-structure questions from the edges you actually received, not from the absence of one.
 - **`truncated: true` is a cut, not a total.** The walk stops at the hop where `cap` ran out, and the entities that survive the cut are ordered by node type and then by name, not by importance. So a truncated response can drop people and products while keeping peers. Raise `cap` once and re-read, or fall back to the flat traversal path when the question is only about people and products. Say in the output whether the response was truncated.
 - **Absence is not a negative finding.** An empty group, a missing edge or a truncated walk means the curated graph does not record that link at this depth, not that the relationship does not exist. `publishers` and `topics` are part of the response shape but are not reachable from a company root today, so expect them empty and never present them as theme coverage.
@@ -192,7 +192,7 @@ This data is for informational and educational purposes only, not investment adv
 
 ### 2. Executive versus company
 
-Resolve the executive from the ticker's entity response, where `relatedStock` and `title` provide context. If needed, search the name with `type=person`, then intersect candidate handles with that ticker response. Fetch the executive handle and parent ticker over identical boundaries. Compare latest dated Scores, robust window changes, and the summed bull, bear, and directional counts. Describe difference or co-movement only. Do not say the executive caused the company's reading.
+Resolve the executive from the ticker's entity response, where `relatedStock` and `title` provide context. If needed, search the name with `type=person`, then intersect candidate handles with that ticker response. Fetch the executive handle and parent ticker over identical boundaries. Compare latest dated Scores, robust window changes, and the summed bull, bear, and directional counts. Compute the gap only on a date where both entities have a robust point; the two latest readings can sit on different days, so a latest-minus-latest gap compares different dates. If no shared robust date exists, print the gap as unavailable and keep the two dated readings in the table. Describe difference or co-movement only. Do not say the executive caused the company's reading.
 
 Fill this template:
 
@@ -202,7 +202,7 @@ Entity | Handle | Latest Score | 30d change | Bull | Bear | Directional | Sample
 {executive} | {person_handle} | {value_as_of_date} | {guarded_delta_or_na} | {sum} | {sum} | {sum} | {note}
 {company} | {ticker_handle} | {value_as_of_date} | {guarded_delta_or_na} | {sum} | {sum} | {sum} | {note}
 
-Latest Score gap: {executive_minus_company_or_na}
+Same-date Score gap ({shared_robust_date}): {executive_minus_company_or_na}
 Read: {dated comparison without a causal claim}
 Provenance: as of {YYYY-MM-DD}; handles used: {person_handle, ticker_handle}
 This data is for informational and educational purposes only, not investment advice.
@@ -210,7 +210,7 @@ This data is for informational and educational purposes only, not investment adv
 
 ### 3. Product versus parent
 
-Resolve the product from the ticker's entity response, where `relatedStock` and `category` provide context. If needed, search by name with `type=product`, then intersect candidate handles with that ticker response. Fetch the product handle and parent ticker across the same window. Apply the same robust-edge rule and report both sample counts. Do not turn a product-company gap into a claim about sales, earnings, or price impact.
+Resolve the product from the ticker's entity response, where `relatedStock` and `category` provide context. If needed, search by name with `type=product`, then intersect candidate handles with that ticker response. Search alone does not name a product's parent company (a product row carries `ticker: null`); when the user did not supply the parent ticker and no ticker traversal contains the handle, report the parent as unresolved rather than guessing or sweeping tickers. Fetch the product handle and parent ticker across the same window. Apply the same robust-edge rule and report both sample counts. Do not turn a product-company gap into a claim about sales, earnings, or price impact.
 
 Fill this template:
 
@@ -220,7 +220,7 @@ Entity | Handle | Latest Score | 30d change | Bull | Bear | Directional | Sample
 {product} | {product_handle} | {value_as_of_date} | {guarded_delta_or_na} | {sum} | {sum} | {sum} | {note}
 {company} | {ticker_handle} | {value_as_of_date} | {guarded_delta_or_na} | {sum} | {sum} | {sum} | {note}
 
-Latest Score gap: {product_minus_parent_or_na}
+Same-date Score gap ({shared_robust_date}): {product_minus_parent_or_na}
 Read: {dated comparison without a sales, earnings, or causal claim}
 Provenance: as of {YYYY-MM-DD}; handles used: {product_handle, ticker_handle}
 This data is for informational and educational purposes only, not investment advice.
@@ -260,7 +260,7 @@ This data is for informational and educational purposes only, not investment adv
 
 ### 6. Supplied watchlist pass, maximum 10 tickers
 
-Accept only the user's explicit list and reject more than 10 tickers until it is narrowed. For each ticker, traverse its attached people and products, fetch each handle over one common 30-day window, and render the same columns as Workflow 1. Group by ticker, rank within each ticker by directional mentions, observe the active tier's rate limit, and label incomplete results as partial.
+Accept only the user's explicit list and reject more than 10 tickers until it is narrowed. Traverse the listed tickers first, then count the Score calls the pass needs: one per unique handle, and a single large-cap ticker can attach 30 entities. Check that count against the remaining request quota and the tier's rate limit before fanning out. If it does not fit, measure a labeled subset, list the handles left unqueried, and rank only what was measured. Fetch every handle over one common 30-day window and render the same columns as Workflow 1. Group by ticker, rank within each ticker by directional mentions, observe the active tier's rate limit, and label incomplete results as partial.
 
 Fill this template:
 
@@ -283,7 +283,7 @@ Fill this template:
 ```text
 RELATIONSHIP EVIDENCE | {ENTITY} and {TICKER}
 Kind | Date | Source or story | Derived reading | Reference
-Document | {published} | {sourceName} | {averageSentiment_or_na} | {url}
+Document | {published} | {sourceName_or_url_host} | {averageSentiment_or_na} | {url}
 Story | {clusteredAt_or_brokeAt} | {cluster.title} | impact {impactScore_or_na} | story {clusterId}
 
 Limits: {missing fields, empty results, and any date mismatch}
@@ -327,7 +327,7 @@ This data is for informational and educational purposes only, not investment adv
 
 ### 10. Peers and connected organizations
 
-At `depth=1`, `groups.peers` holds the companies joined to the root by a `PEER` edge, which is a curated comparable set and not an index membership, a sector screen or a competitor ranking. **Take peers from `depth=1` only.** At `depth=2`, `groups.peers` also holds the peers of peers (19 names for MSFT, of which 7 are its own peers), so printing it as the root's peer set is wrong. Organizations are usually reached one hop further, through a person who leads them, so use `depth=2` when the question asks about organizations, fill the `Via` column from `edges`, and report an empty list as no curated link. When one `depth=2` call has to serve both rows, keep as a peer only a slug with a `PEER` edge whose other end is `root`. Each peer node carries a `urlSlug`, and a peer's ticker also works as a metric handle, so a Score comparison across the root and its peers follows the Score Rules unchanged: one common window, and a bounded number of extra calls.
+At `depth=1`, `groups.peers` holds the companies joined to the root by a `PEER` edge, which is a curated comparable set and not an index membership, a sector screen or a competitor ranking. **Take peers from `depth=1` only.** At `depth=2`, `groups.peers` also holds the peers of peers (19 names for MSFT, of which 7 are its own peers), so printing it as the root's peer set is wrong. Organizations are usually reached one hop further, through a person who leads or founded them, so use `depth=2` when the question asks about organizations, fill the `Via` column from `edges`, and report an empty list as no curated link. When one `depth=2` call has to serve both rows, keep as a peer only a slug with a `PEER` edge whose other end is `root`. Each peer node's `slug` is its metric handle (graph nodes carry no ticker field), so a Score comparison across the root and its peers follows the Score Rules unchanged: one common window, and a bounded number of extra calls.
 
 Fill this template:
 
@@ -345,9 +345,9 @@ This data is for informational and educational purposes only, not investment adv
 ## Data Notes
 
 - The SentiSense Score is an unbounded composite of `sentiment`, the raw unweighted tone metric, and attention. Use the Score for every bullish or bearish metric read in this skill.
-- Metric points are time-ascending. Use the last available point for current, not array index zero, and print the point's date.
+- Metric points are time-ascending. Current Score follows the Score Rules: the last point with a flat `value` and at least 5 directional mentions, never array index zero, printed with its date. If no point qualifies, report no robust reading.
 - Directional is bull plus bear and excludes neutral mentions. It is the relevant sample for the Score and can be below total mentions.
-- Search, the graph and the flat traversal path all hand you the same kind of handle: a `urlSlug`. It is the metric handle, the documents handle and the entity page path, so there is one identifier to carry. The flat `/entities` list also carries an internal `id`; it is not an address, so ignore it.
+- Search, the graph and the flat traversal path all hand you the same kind of handle: a `urlSlug`. It is the metric handle, the documents handle and the entity page path, so there is one identifier to carry. Some responses also carry internal identifiers, path-like strings that are not slugs: the `id` on flat `/entities` rows and popular-entity rows, and `searchTicker` and `sentiment[].entityId` on entity documents. They are not addresses: never display, store or reuse them, and carry the `urlSlug` instead.
 - Response shapes are intentionally mixed. Search, popular entities, ticker entities, Score history, and ticker stories are bare arrays. Entity documents use an object envelope with `documents` and `totalCount`. Search types are lowercase, while popular and ticker-entity types are uppercase. A public Score point has only `timestamp`, `metricType`, `metricValue`, and optional flat `value`; do not expect an echoed entity id or period.
 - Ticker traversal returns related entities without typed edge names, edge direction, confidence, or influence weights. Describe an entity as attached or related, and do not invent a relationship label. The graph path is the one place a relationship is named; anywhere else in this skill, an entity is attached, not characterized.
 - The graph path answers an unknown or unlisted ticker with `404 entity_not_found`, while the flat traversal path answers the same ticker with `200 []`. Use the graph's `404` to confirm that a ticker is not covered, and never read an empty group inside a `200` as the same signal.

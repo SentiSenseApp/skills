@@ -675,7 +675,9 @@ NA = "no reading"
 def fmt_signed(value, places=1, suffix=""):
     if value is None:
         return NA
-    if value == 0:
+    # Compare the value as printed, not the raw float: -0.047 at one decimal would otherwise
+    # print "-0.0%", a sign on a number that reads as zero.
+    if round(value, places) == 0:
         return "%.*f%s" % (places, 0.0, suffix)
     return "%+.*f%s" % (places, value, suffix)
 

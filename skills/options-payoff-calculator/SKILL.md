@@ -29,7 +29,7 @@ Not this skill: options flow and positioning readings such as put/call percentil
 Read this before presenting a premium from this skill. It is the single thing most likely to be misread.
 
 - **We do not serve an options chain, and this skill does not pretend to.** There is no bid, no ask, no open interest and no last trade behind any number here. The template prices each contract with Black-Scholes from the implied volatility the API serves. Say "modeled" out loud when you present a figure; the artifact labels every one of them that way for the same reason.
-- **The volatility input is end-of-day.** `asOf` is the latest completed session and the figures describe that completed session; follow-ups compare the next session's open interest. A premium built on yesterday's volatility is a fair description of yesterday's market, not a quote you could hit this morning.
+- **The volatility input is end-of-day.** `asOf` is the latest completed session the options snapshot has published, and the figures describe that completed session. It can trail the quote by a session on some tickers, so quote the returned `asOf` for the volatility rather than assuming it matches the price. A premium built on yesterday's volatility is a fair description of yesterday's market, not a quote you could hit this morning.
 - **The strikes are rounded, not listed.** The template rounds to a conventional increment so the diagram reads like an order ticket. With no chain to check against, a rounded strike is a plausible listing and never a confirmed one.
 - **The model's known gaps, stated rather than buried.** Black-Scholes here assumes European exercise and no dividend, at a flat 4% annual rate. A dividend-paying underlying prices its calls a little cheaper and its puts a little richer than this; American exercise carries a small early-exercise premium the model has no term for. Both are small next to the fact that the volatility is a day old, and none of the three is the reason a real fill would differ most. That reason is the bid-ask spread, which is not shown here at all.
 - **The skew is an interpolation across four numbers.** The API serves an at-the-money volatility per tenor plus one pair of 25-delta legs, for the near expiry only. The template reuses that shape at every tenor, bending volatility linearly in standardized moneyness between the anchors and flattening past them. It is a defensible curve, not a fitted surface, and a far out-of-the-money strike is where it is weakest.
@@ -54,7 +54,12 @@ Read this before presenting a premium from this skill. It is the single thing mo
 | Free | 1,000 requests/month | 30 requests/min |
 | PRO ($15/mo) | Unlimited | 300 requests/min |
 
-One artifact costs three requests, or four for an ETF: the stock quote endpoint declines a fund ticker and the quote is refetched from the ETF quote endpoint, so the declined call counts too. The options dossier is the only tiered call: a free key gets the full dossier for the first ten tickers each calendar month, then a headline preview that still carries `atmIv` and `ivRank1y`. On that preview the 30 day expiry still prices in full while the 60 and 90 day options drop out of the picker and the skew goes flat. The artifact says so on its face when that happens.
+One artifact costs three requests, or four for an ETF: the stock quote endpoint declines a fund ticker and the quote is refetched from the ETF quote endpoint, so the declined call counts too. Two of the calls are tiered on a free key:
+
+- **The options dossier.** A free key gets the full dossier on ten covered calls each calendar month (repeat calls for the same ticker count, and the allowance resets on the first of the month, US Eastern time), then a headline preview with `atmIv` and `ivRank1y` flattened directly under `data`. On that preview the 30 day expiry still prices in full while the 60 and 90 day options drop out of the picker and the skew goes flat.
+- **The earnings calendar.** A free key gets only the first week of the requested window, through the coming Sunday, while the envelope's `totalCount` still counts the whole window. A report further out than that week is missing from the rows, so its date is unknown on a free key, not unscheduled.
+
+The bundled script reads both previews, and the artifact says so on its face: a preview label, and the next report shown as unknown when the free calendar left it out.
 
 ## How to Run
 
@@ -69,7 +74,7 @@ export SENTISENSE_API_KEY=...      # or however your host supplies secrets
 node scripts/prepare_data.mjs NVDA > /tmp/nvda.json
 ```
 
-It is a single file with no dependencies, so nothing is installed and there is nothing to audit but the script itself. It exits non-zero with a specific message when the key is missing or rejected, when the symbol is not a ticker, when the ticker has no options coverage, and when the latest session carries no at-the-money implied volatility.
+It is a single file with no dependencies, so nothing is installed and there is nothing to audit but the script itself. It exits non-zero with a specific message when the key is missing or rejected, when the symbol is not a ticker, when the ticker has no options coverage, and when the latest session carries no at-the-money implied volatility. A free headline preview is not an error: the script binds its 30 day reading and sets `isPreview: true`.
 
 ### 2. Bind it into the template
 
@@ -96,11 +101,11 @@ Give the user the file and a two or three sentence read of what it shows: the de
 
 The bundled script is a convenience. Everything it does is three plain GETs, documented here so this skill works with no script, no CLI and no SDK.
 
-All of them take the header `X-SentiSense-API-Key: $SENTISENSE_API_KEY`. The options dossier and the earnings calendar are wrapped in the envelope `{ isPreview, previewReason, data }`; read `.data`. The quote returns its payload directly.
+All of them take the header `X-SentiSense-API-Key: $SENTISENSE_API_KEY`. The options dossier and the earnings calendar are wrapped in the envelope `{ isPreview, previewReason, data }`, and a calendar preview adds `totalCount`; read `.data`. The quote returns its payload directly.
 
-- **`GET /api/v1/stocks/{ticker}/options/summary`** : the end-of-day options dossier, and the source of every volatility on the diagram. Everything needed is in `data.latest` and `data.context`. From `latest`: `atmIv` (at-the-money implied volatility for the near expiry, a fraction, so `0.4051` is 40.51%), `atmIv60` and `atmIv90` (the same reading at roughly 60 and 90 days, which is the term structure and which fills the expiry picker), and `iv25c` / `iv25p` (the raw 25-delta call and put implied volatilities, where `skew25d == iv25p - iv25c`). From `context`: `ivRank1y`, where today's `atmIv` sits in its own trailing year on a 0 to 100 scale. **`data` is `null` for a ticker outside the covered universe**, which is the most actively optioned US names plus the tracked ETFs; an unknown symbol behaves the same rather than answering 404, so treat a null as "no coverage", never as an error. Percentiles are omitted while a baseline builds.
+- **`GET /api/v1/stocks/{ticker}/options/summary`** : the end-of-day options dossier, and the source of every volatility on the diagram. A full dossier carries what the diagram needs in `data.latest` and `data.context`. From `latest`: `atmIv` (at-the-money implied volatility for the near expiry, a fraction, so `0.4051` is 40.51%), `atmIv60` and `atmIv90` (the same reading at roughly 60 and 90 days, which is the term structure and which fills the expiry picker), and `iv25c` / `iv25p` (the raw 25-delta call and put implied volatilities, where `skew25d == iv25p - iv25c`). From `context`: `ivRank1y`, where today's `atmIv` sits in its own trailing year on a 0 to 100 scale. **A free headline preview is flat instead** (`isPreview: true`): `atmIv` and `ivRank1y` sit directly under `data` beside `asOf`, `sentiment`, `expectedMove1d`, `pcVol`, `pcVolPctl1y` and `maxPain`, and there is no `latest`, no `context`, no `atmIv60`/`atmIv90` and no 25-delta legs. Read `data.latest ?? data` and `data.context ?? data`, bind the preview's `atmIv` as `iv.atm30`, leave the 60 and 90 day readings and the legs null, and keep `isPreview: true`. **`data` is `null` for a ticker outside the covered universe**, which is the most actively optioned US names plus the tracked ETFs; an unknown symbol behaves the same rather than answering 404, so treat a null as "no coverage", never as an error. Percentiles are omitted while a baseline builds.
 - **`GET /api/v1/stocks/{ticker}/quote`** : the last price, in `currentPrice`. This is the regular-session price and it is delayed, not live. **Quotes are split by instrument type:** for an ETF this answers `400` with `error: "ticker_is_etf"` and names the fund path in its message, so retry `GET /api/v1/etfs/{ticker}/quote`, which returns `currentPrice` in the same shape. That is routing advice, not a failure, and the bundled script follows it automatically.
-- **`GET /api/v1/calendar/earnings?ticker={ticker}`** : the next scheduled report, in `data.earnings[0]`, carrying `earningsDate`, `earningsTime` (`before_open`, `after_close`, `during_market` or `unknown`) and `confirmed`. It marks the expiries that span an event. This endpoint is forward-looking: it returns the next date, not past ones, and an empty list simply means nothing is scheduled yet, which softens the artifact rather than failing it.
+- **`GET /api/v1/calendar/earnings?ticker={ticker}&from={today}`** : the next scheduled report, the first row of `data.earnings` dated today or later, carrying `earningsDate`, `earningsTime` (`before_open`, `after_close`, `during_market` or `unknown`) and `confirmed`. It marks the expiries that span an event. The default window opens on the Monday of the current US Eastern week, so without `from` a report from earlier this week can come back as the first row: pass `from` as today's US Eastern date (`YYYY-MM-DD`), as the bundled script does, or skip rows dated before today. On PRO the window runs about 60 days forward and an empty list means no report inside it, which softens the artifact rather than failing it. On a free key the rows cover only the first week of the window while `totalCount` counts all of it: an empty list with a larger `totalCount` means the next report is past the free week and its date is unknown here, never that nothing is scheduled.
 
 ```bash
 curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
@@ -128,15 +133,17 @@ If you build the JSON yourself rather than running the script, this is the contr
   "nextEarnings": {
     "date": "2026-08-26", "timing": "after_close", "confirmed": true, "estimatedEps": 2.09
   },
+  "nextEarningsStatus": "scheduled",
   "isPreview": false
 }
 ```
 
-Implied volatilities are annualized fractions. Three fields decide how much of the artifact draws:
+Implied volatilities are annualized fractions. On a free headline preview the same contract holds with `iv.atm60`, `iv.atm90`, `iv.call25`, `iv.put25` and `iv.skew25d` set to `null` and `isPreview: true`. Four fields decide how much of the artifact draws:
 
 - **`iv.atm60` and `iv.atm90` fill the expiry picker.** Each one present adds a tenor; absent, that option is simply not offered and the note under the diagram says how many are bound. A snapshot carrying only `atm30` still produces a complete, working artifact at one expiry.
 - **`iv.call25` and `iv.put25` give the volatility curve its shape.** With both present, strikes away from the money price off a skewed volatility anchored on those legs. With either missing, the curve is flat, every strike prices off the at-the-money figure, and the artifact says so rather than implying a skew it does not have.
 - **`nextEarnings` is context, not math.** It never moves a premium. It marks which expiries span a report, so a reader sees why the volatility is elevated instead of reading a wide diagram as a signal. `estimatedEps` is carried through for display and is `null` when no estimate is published.
+- **`nextEarningsStatus` says what a missing `nextEarnings` means:** `scheduled` (the date is bound), `not_scheduled` (the calendar answered for its whole window and holds no upcoming report), `outside_preview` (a free calendar preview left rows out, so the date is unknown and the artifact says a report inside the expiry cannot be ruled out) or `unavailable` (the calendar call failed). Without it the template reads a null `nextEarnings` as not scheduled, so set it whenever you bind a free calendar slice by hand.
 
 ## Answering well
 
@@ -148,10 +155,11 @@ Implied volatilities are annualized fractions. Three fields decide how much of t
 - Never present max profit as an expectation or a target. It is the top of a diagram, reached only at expiry and only in one scenario.
 - Do not attach probabilities to outcomes. The artifact deliberately shows the expected move band instead of a chance-of-profit number, because a single percentage invites more confidence than an end-of-day volatility reading can support.
 - On a preview response, say the 60 and 90 day expiries are missing because the free monthly dossier allowance is spent, rather than presenting a one-expiry picker as the whole picture.
+- When the next report is unknown because the free calendar covers one week, say exactly that. Never tell the user nothing is scheduled, and say a report inside the chosen expiry cannot be ruled out.
 
 ## Going further
 
-Free covers the whole workflow. **PRO ($15/mo)** lifts the monthly request cap (no monthly limit, just a 300/min rate) and returns the full options dossier on every ticker rather than the first ten each month, plus depth across the rest of the SentiSense API. Apply coupon `AGENTS26` at checkout for a builder launch discount: https://app.sentisense.ai/pricing?coupon=AGENTS26
+Free runs the whole workflow, within the two preview limits above. **PRO ($15/mo)** lifts the monthly request cap (no monthly limit, just a 300/min rate), returns the full options dossier on every call rather than ten a month and the full forward earnings calendar, plus depth across the rest of the SentiSense API. Apply coupon `AGENTS` at checkout for a builder launch discount: https://app.sentisense.ai/pricing?coupon=AGENTS
 
 For "how does breakeven compare range/past earnings?", hand off to the `expected-move-visualizer` skill when available. Pass the ticker, expiry, modeled breakeven, and data dates. Return a horizon-labeled range and past-earnings comparison, with no probability of profit. Hand off only when the user changes the question; do not automatically route back. If the sibling is unavailable, answer the supported part here using a connected tool or the inline REST workflow, state any remaining gap, and never require an install.
 

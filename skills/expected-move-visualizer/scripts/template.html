@@ -443,8 +443,12 @@ function reactionsPanel(data, hz) {
       "the report, so it covers more than the single session each bar measures: read it as " +
       "context, not as a like for like forecast.";
   } else if (median !== null) {
-    note = "Median absolute reaction across these quarters is " + median.toFixed(1) +
-      "%. No next report is scheduled, so no modeled move is drawn against the bars.";
+    note = "Median absolute reaction across these quarters is " + median.toFixed(1) + "%. " +
+      (data.nextEarningsStatus === "outside_preview"
+        ? "The next report date is past the free calendar preview, so no modeled move is drawn against the bars."
+        : data.nextEarningsStatus === "unavailable"
+          ? "The next report date could not be read, so no modeled move is drawn against the bars."
+          : "No next report is scheduled, so no modeled move is drawn against the bars.");
   }
 
   return '<section class="card">' +
@@ -548,33 +552,57 @@ function render() {
       "One standard deviation bands implied by options pricing, around the last close.") +
     "</p>");
 
-  var neText = "not scheduled";
+  // A missing date is only "not scheduled" when the calendar answered for its whole window. A
+  // free preview that left rows out, or a failed call, leaves the date unknown, and says why.
+  var neText = "not scheduled", neNote = "";
   if (DATA.nextEarnings && DATA.nextEarnings.date) {
     var dd = DATA.asOf ? daysBetween(DATA.asOf, DATA.nextEarnings.date) : null;
     neText = DATA.nextEarnings.date + (dd !== null && dd >= 0 ? " (" + dd + "d)" : "");
+    neNote = esc(TIMING_LABEL[DATA.nextEarnings.timing] || "");
+  } else if (DATA.nextEarningsStatus === "outside_preview") {
+    neText = "unknown";
+    neNote = "past the free calendar week";
+  } else if (DATA.nextEarningsStatus === "unavailable") {
+    neText = "unknown";
+    neNote = "calendar not read";
   }
 
   out.push('<div class="stats">' +
-    stat("Last price", money(DATA.spot), DATA.asOf ? "session of " + esc(DATA.asOf) : "") +
+    stat("Last price", money(DATA.spot), "delayed, not live") +
     stat("30 day expected move", "&plusmn;" + (((near.up + near.down) / 2 / DATA.spot) * 100).toFixed(1) + "%",
       money(DATA.spot - near.down) + " to " + money(DATA.spot + near.up)) +
     stat("At the money IV", pct(iv.atm30),
       typeof iv.rank1y === "number"
         ? "rank " + iv.rank1y.toFixed(0) + " of 100 in its own year"
         : "one year rank still building") +
-    stat("Next report", esc(neText),
-      DATA.nextEarnings ? esc(TIMING_LABEL[DATA.nextEarnings.timing] || "") : "") +
+    stat("Next report", esc(neText), neNote) +
     "</div></header>");
 
+  var tilted = iv.call25 > 0 && iv.put25 > 0;
+  var coneNotes = [];
+  if (DATA.isPreview) {
+    coneNotes.push("This snapshot is the free tier's headline preview: the month's full options " +
+      "dossiers are spent, so only the 30 day band draws, with no tilt. The 60 and 90 day bands " +
+      "and the 25 delta skew return with a new calendar month, or on any ticker with a PRO key.");
+  }
+  if (!(DATA.nextEarnings && DATA.nextEarnings.date) && DATA.nextEarningsStatus === "outside_preview") {
+    coneNotes.push("The next report date is not in this snapshot: the free earnings calendar " +
+      "covers the current week only. A report inside these horizons cannot be ruled out, and " +
+      "one that falls inside is part of why the implied volatility is where it is.");
+  }
   out.push('<section class="card"><h2>The cone</h2>' +
     '<p class="lede">Each band is a one standard deviation range at that horizon, modeled from ' +
-    "at the money implied volatility and tilted by 25 delta put and call demand. It is a " +
-    "probability band, not a target and not a forecast.</p>" +
+    "at the money implied volatility" +
+    (tilted ? " and tilted by 25 delta put and call demand" :
+      ", symmetric because no 25 delta legs are bound") +
+    ". It is a probability band, not a target and not a forecast.</p>" +
+    coneNotes.map(function (n) { return '<p class="lede">' + esc(n) + "</p>"; }).join("") +
     '<div class="chart-scroll">' + coneSvg(DATA, hz) + "</div>" +
     '<div class="legend">' +
-    '<span><i class="swatch" style="background:var(--cone-30)"></i>30 day</span>' +
-    '<span><i class="swatch" style="background:var(--cone-60)"></i>60 day</span>' +
-    '<span><i class="swatch" style="background:var(--cone-90)"></i>90 day</span>' +
+    hz.map(function (b) {
+      return '<span><i class="swatch" style="background:var(--cone-' + b.days + ')"></i>' +
+        b.days + " day</span>";
+    }).join("") +
     (DATA.nextEarnings && DATA.nextEarnings.date
       ? '<span><i class="swatch" style="background:var(--data)"></i>next report</span>' : "") +
     "</div>");
@@ -593,7 +621,7 @@ function render() {
 
   var stampDate = DATA.generatedAt ? String(DATA.generatedAt).replace("T", " ").slice(0, 16) + " UTC" : "";
   out.push('<footer><div class="stamp">' +
-    "<span>Data: SentiSense, as of " + esc(DATA.asOf || "the last completed session") +
+    "<span>Data: SentiSense, options as of " + esc(DATA.asOf || "the last completed session") +
     (stampDate ? ". Rendered " + esc(stampDate) : "") + ".</span>" +
     '<span><a href="https://sentisense.ai">made with SentiSense</a></span></div>' +
     '<p class="disclaimer">Expected move figures are modeled from end of day implied ' +
