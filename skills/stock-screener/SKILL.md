@@ -101,7 +101,7 @@ execute endpoint, or the ETF endpoint for an `etf-` id. Custom plans below use c
 | "large caps near their 52-week low with analyst upside" | `MARKET_CAP:GTE:10000000000`, `PCT_OFF_52W_LOW:LTE:10`, `ANALYST_TARGET_UPSIDE_PCT:GTE:20`, sort `ANALYST_TARGET_UPSIDE_PCT:DESC` (a plain JSON number such as `10000000000` always works; numeric fields also accept a compact string such as `"10B"`) |
 | "stocks analysts just upgraded", "recent analyst upgrades" | `ANALYST_RATING_MOMENTUM_30D:GTE:1`, sort `ANALYST_RATING_MOMENTUM_30D:DESC` (2 narrows to about a dozen names) |
 | "strong buy consensus with upside left" | `ANALYST_BUY_RATIO_PCT:GTE:80`, `ANALYST_TARGET_UPSIDE_PCT:GTE:15`, sort `ANALYST_TARGET_UPSIDE_PCT:DESC` |
-| "low volatility stocks the crowd likes", "calm names with bullish sentiment" | `VOLATILITY_30D:LTE:25`, `SENTIMENT_DIRECTION:EQ:1`, sort `SENTI_SCORE_7D:DESC` |
+| "low volatility stocks the crowd likes", "calm names with bullish sentiment" | `VOLATILITY_30D:LTE:20`, `SENTIMENT_DIRECTION:EQ:1`, sort `SENTI_SCORE_7D:DESC` (this is realized volatility, not options implied; 20 for calm and 60 for volatile are adjustable starting thresholds, not percentiles, so for "the calmest N" or "the most volatile N" sort `VOLATILITY_30D:ASC` or `VOLATILITY_30D:DESC` within the requested universe and take N valid values instead) |
 | "stocks 30% off their highs", "deep pullbacks" | `PCT_OFF_52W_HIGH:LTE:-30`, sort `PCT_OFF_52W_HIGH:ASC` |
 | "mentions spiking", "unusual social volume" | `MENTION_VELOCITY:GTE:100`, sort `MENTION_VELOCITY:DESC`; for share of the whole conversation, curated `rising-share-of-voice` |
 | "best performers this month that analysts still back" | `RETURN_1M:GTE:10`, `ANALYST_BUY_RATIO_PCT:GTE:70`, sort `RETURN_1M:DESC` |
@@ -186,7 +186,7 @@ Generated from the same catalog the API serves, refreshed with every release of 
 | `RETURN_3M` | Technical | number, % | Percent price return over roughly the last three months of trading. |
 | `RETURN_6M` | Technical | number, % | Percent price return over roughly the last six months of trading. |
 | `RETURN_1Y` | Technical | number, % | Percent price return over roughly the last year of trading. Blank for stocks with under a year of history. |
-| `VOLATILITY_30D` | Technical | number, % | Annualized volatility from the last 30 sessions, in percent. The typical tracked stock sits near 50; under 25 is calm and over 80 is turbulent. |
+| `VOLATILITY_30D` | Technical | number, % | Annualized historical volatility of simple adjusted-close returns, in percent, using up to the latest 31 stored-session returns (roughly a month), scaled by the square root of 252. Returns beyond +/-100% are excluded. A value of 30 corresponds to a historical daily standard deviation of about 1.9%. This is realized volatility, not options implied volatility; levels vary with market conditions. |
 | `ANALYST_RATING_MEAN` | Analyst | number, Score | Broker consensus rating on the standard 1 to 5 scale. THIS SCALE IS INVERTED: 1 is strong buy and 5 is strong sell, so bullish means a LOW value. Analyst Buy Ratio is the easier field for most filters. |
 
 ### ETF fields (16)

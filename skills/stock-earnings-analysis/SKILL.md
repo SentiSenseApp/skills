@@ -302,36 +302,46 @@ On the earnings analysis report, a FREE key receives **the latest quarter only, 
 truncated**, plus `totalCount` of the quarters that exist. The shaped quarter carries
 `fiscalPeriod`, `reportDate` and `headline` in full, up to two `kpiHighlights` as `{label, value}`
 cards, `kpiHighlightCount` for how many the full quarter holds, `summaryTopics` and
-`transcriptTopics`, `hasTranscript`, `hasGuidance`, `guidanceDirection` (`RAISED`, `CUT`, `HELD` or
+`transcriptTopics`, `hasTranscript`, `hasGuidance`, `guidanceSource` (`press_release` or
+`transcript`, omitted when `hasGuidance` is false), `guidanceDirection` (`RAISED`, `CUT`, `HELD` or
 `MIXED`, and omitted when no direction can be read), `generatedAt` and `source`. There is no body,
 no KPI history and no guidance language or figure.
 
-- `summaryTopics` and `transcriptTopics` are titles only, never body text or figures. They come from
-  the body's markdown headings and bold bullet labels; when a body has neither (most summaries are
-  plain bullet lists), they fall back to the labels of that section's highlight cards, the quarter's
-  KPI cards for `summaryTopics` and the call highlights for `transcriptTopics`. A label carrying a
+- `summaryTopics` and `transcriptTopics` are topic labels only, never body text or figures. They
+  are the body's markdown headings and bold bullet labels when it has any; most summaries are plain
+  bullet lists, and then they are the labels of that section's highlight cards, the quarter's KPI
+  cards for `summaryTopics` and the call highlights for `transcriptTopics`. A label carrying a
   figure is dropped, so the list can be shorter than `kpiHighlightCount`. An empty list means no
-  titles could be extracted, not that the section is empty.
-- `hasGuidance` reads the press-release `guidance` only. It does not look at the call.
-- `guidanceDirection` is a keyword classification of that same press-release text, computed by the
-  API. It is not management's own label, and PRO responses do not carry it at all.
+  labels could be extracted, not that the section is empty.
+- `hasGuidance` is true when the press release's guidance line carries guidance or, when it does
+  not, when the call summary (its body or its highlights) carries guidance or outlook language.
+  `guidanceSource` says which one: `press_release` or `transcript` (the call summary). False means
+  neither carries guidance language, or management said it gives none. It is a keyword check, so a
+  call that only said "we expect" without naming a guide, outlook or forecast reads as false.
+- `guidanceDirection` is a keyword classification of the guidance language from that same source,
+  computed by the API. It is not management's own label, and PRO responses do not carry it at all.
 
 Four rules follow, and they are the difference between an honest brief and a misleading one:
 
 - **A shaped quarter is written as a shaped quarter.** The FREE preview is the headline, up to two
-  KPI cards and the flags. When topic titles are present, print them as topics covered, not as if
+  KPI cards and the flags. When topic labels are present, print them as topics covered, not as if
   you had read the sections; when the lists are empty, say the full summary is not in the preview.
   Never narrate a `summaryMd` you did not receive.
 - **On FREE, present `guidanceDirection` as a classification, not as a fact.** Write "the release
-  guidance is classified as RAISED", never "the company raised guidance". A direction word inside a
-  reaffirmed range can tip the classifier: a release that reaffirmed full-year guidance for revenue
-  "to increase 2-4%" can come back `RAISED`. If the headline or anything else you received says
-  guidance was reaffirmed or maintained, report that wording and note the conflict. Do not claim to
-  have read the guidance language, because you did not receive it.
-- **On FREE, an absent guidance flag is not evidence of no guidance.** `hasGuidance: false` means
-  the press release carried none, and many companies guide only on the call. When `hasGuidance` is
-  false, write "guidance: not available on the free preview" (and, when `hasTranscript` is true,
-  that the call summary may hold it). Never write "no guidance was issued" from a FREE preview.
+  guidance is classified as RAISED" (or "the call guidance", per `guidanceSource`), never "the
+  company raised guidance". A direction word inside a reaffirmed range can tip the classifier: a
+  release that reaffirmed full-year guidance for revenue "to increase 2-4%" can come back `RAISED`.
+  If the headline or anything else you received says guidance was reaffirmed or maintained, report
+  that wording and note the conflict. Do not claim to have read the guidance language, because you
+  did not receive it.
+- **On FREE, a false guidance flag is not proof that no guidance was issued.** `hasGuidance: false`
+  means neither the release's guidance line nor the call summary carries guidance or outlook
+  wording, or management said it gives none; the check is keyword-based, and a company that only
+  said "we expect" can read as false. Write "no guidance language in the free preview" (and, when
+  `hasTranscript` is true, that the call summary itself is not included). Never write "no guidance
+  was issued" from a FREE preview. When `hasGuidance` is true with `guidanceSource: transcript`,
+  say the call summary carries guidance that the preview does not include, and give the direction
+  as its classification.
 - **State the history you did not get.** "Latest quarter only; `totalCount` quarters are available"
   is one line and it keeps a one-quarter view from reading as the whole record.
 
@@ -506,8 +516,8 @@ line:
 - no stored quarter for this ticker at all (empty `data`),
 - no filings attached to this quarter,
 - no guidance language in either the release or the call summary, or guidance explicitly withheld by management
-  (on FREE with `hasGuidance: false` the call cannot be checked, so this line is "guidance: not
-  available on the free preview").
+  (on FREE with `hasGuidance: false` this line is "no guidance language in the free preview", never
+  "no guidance was issued").
 An empty section that renders as nothing tells the reader the data does not exist. Saying "no call
 summary yet, this one often lands after the press-release content" tells them to check back.
 
@@ -555,8 +565,8 @@ applies and the absence gets a line.
    - The KPI highlights table: `label`, `value`, `yoy`. The provided subset, nothing added.
    - Guidance: the language (release `guidance`, else the call summary's outlook), plus your derived
      direction and which source it came from, or the explicit "no guidance was issued". On FREE,
-     the API's `guidanceDirection` labelled as its classification of the release, or "not
-     available on the free preview".
+     the API's `guidanceDirection` labelled as its classification of the release or of the call
+     (`guidanceSource`), or "no guidance language in the free preview".
    - Filings attached to this quarter: form, `filedAt`, `materialityScore`, and one line on what
      changed. `topNewTerms` is a useful compression when the diff is large.
    - The `earnings_pulse` signal for this quarter, if there is one, clearly labelled as a signal.
