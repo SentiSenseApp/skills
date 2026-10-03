@@ -86,7 +86,7 @@ GET /api/v1/kb/entities/search?q={encoded_query}&type={optional_type}&limit={1_t
 GET /api/v1/stocks/{ticker}/entities
 ```
 
-The response is a bare array of the people and products attached to that ticker (organizations and topics are not returned here; find them by name). Each item can include `id`, `displayName`, uppercase `type`, `relatedStock`, `iconUrl`, `title`, `category`, `urlSlug`, and `appId`. Use `urlSlug` as the metric handle. Filter the returned array client-side to the types needed for the question. The response establishes that an entity is related to the ticker, but it does not expose a typed edge, direction, weight, or claim of influence.
+The response is a bare array of the people and products attached to that ticker (organizations and topics are not returned here; find them by name). Each item can include `displayName`, uppercase `type`, `relatedStock`, `iconUrl`, `title`, `category`, `urlSlug`, and `appId`. Use `urlSlug` as the stable metric handle. Filter the returned array client-side to the types needed for the question. The response establishes that an entity is related to the ticker, but it does not expose a typed edge, direction, weight, or claim of influence.
 
 **Read one ticker's typed relationships**
 
@@ -125,7 +125,7 @@ The response is a bare ascending array. A public point contains `timestamp`, `me
 GET /api/v1/kb/entities/popular
 ```
 
-The response is a bare array. Each item can include `id`, `displayName`, uppercase `type`, `relatedStock`, and `urlSlug`. This is a starting set, not a ranking of investment merit.
+The response is a bare array. Each item can include `displayName`, uppercase `type`, `relatedStock`, and `urlSlug`. Use `urlSlug` as the stable handle. This is a starting set, not a ranking of investment merit.
 
 **Read served evidence**
 

@@ -93,13 +93,15 @@ changes.
 
 ### The earnings analysis report
 
-`GET /api/v1/stocks/{ticker}/earnings-summaries` returns `{isPreview, previewReason, totalCount?,
+`GET /api/v1/stocks/{ticker}/earnings-summaries` returns `{isPreview, previewReason, totalCount,
 data: [...]}` with quarters newest first. `limit` accepts 1 to 40 and defaults to 12; values above
 40 are capped, values below 1 return `400 invalid_limit`.
 
-**`limit` is a ceiling, not a promise of history.** Stored history is still accumulating, and
-most tickers currently return only their latest one or two quarters even at `limit=40`. A PRO response carries no `totalCount`, so the number of quarters you have is the
-length of `data`: count it, say it (LAW 7), and send a multi-quarter trend question to
+**`limit` is a ceiling, not a promise of history.** History began with the mid-2026 reporting
+season and grows each season. Request the number of quarters you need and expect fewer quarters
+for now. A PRO response carries `totalCount` for indexed quarters; the length of `data` counts
+hydrated quarters returned and can be shorter when a body is unavailable or `limit` cuts history:
+count it, say it (LAW 7), and send a multi-quarter trend question to
 `GET /api/v1/stocks/{ticker}/kpis` (PRO), which holds curated series by fiscal period.
 
 Each PRO quarter carries:
@@ -383,8 +385,9 @@ The default. "Analyze the latest AAPL earnings", "how did NVDA's quarter go".
 
 0. If the user named the company rather than typing a symbol, resolve it through
    `kb/entities/search` first (see The fan-out); the calls below assume a canonical ticker.
-1. `GET /api/v1/stocks/{ticker}/earnings-summaries?limit=4` for the latest quarter and whatever
-   prior quarters are stored (often none yet; count what came back).
+1. `GET /api/v1/stocks/{ticker}/earnings-summaries?limit={requested_quarters}` for the latest
+   quarter and whatever prior quarters are stored. History starts mid-2026; request what you need
+   and expect fewer quarters for now. Count what came back.
 2. `GET /api/v1/stocks/{ticker}/what-changed?limit=4` for the filing diffs, joined to quarters.
 3. `GET /api/v1/insights/stock/{ticker}?insightType=earnings_pulse` for the takeaway signal.
 4. `GET /api/v1/calendar/earnings?ticker={ticker}` for the next report date and consensus EPS.
@@ -656,8 +659,9 @@ Same fan-out, different scope. None of them relaxes an Output Law.
 
 For "how did the Street react?", hand off to the `analyst-ratings-tracker` skill when available. Pass the ticker, fiscal quarter, report date, known trading session, and guidance context. Return dated rating actions, firms publishing latest targets, the current target band, and the full firm denominator; never infer target revision direction without prior values. Hand off only when the user changes the question; do not automatically route back. If the sibling is unavailable, answer the supported part here using a connected tool or the inline REST workflow, state any remaining gap, and never require an install.
 
-- **Two-ticker comparison.** Pull both companies at `limit=4` and compare the same fiscal period
-  side by side, guidance against guidance. Fiscal calendars differ between companies, so align on
+- **Two-ticker comparison.** Request the quarters needed for both companies and compare the same
+  fiscal period side by side, guidance against guidance. History starts mid-2026; expect fewer
+  quarters for now. Fiscal calendars differ between companies, so align on
   `reportDate` and label the fiscal periods rather than assuming Q2 means the same months. With
   only the latest quarter stored for each, compare those two and say no history is in hand.
 - **One metric's trend.** Start from the quarter, then `GET /api/v1/stocks/{ticker}/kpis` for the
