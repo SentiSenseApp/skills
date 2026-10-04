@@ -349,7 +349,7 @@ An unknown or unlisted ticker returns `404 entity_not_found` with up to three `s
 `publishers` and `topics` are part of the response shape but are not reachable from a company root today, so treat an empty list there as the expected state rather than as missing theme coverage.
 
 ### GET /api/v1/stocks/{ticker}/ai-summary
-AI-generated stock analysis report. **PRO** (Free: `depth=basic` unlimited, `depth=deep` limited to 10/month). `depth=basic` returns a preheader summary. `depth=deep` returns a full multi-section report. Exhausting the `depth=deep` monthly view allowance returns `429` with `{error: "quota_exceeded", ...}`, the same contract as every other quota-gated endpoint.
+AI-generated stock analysis report. **PRO** (Free: `depth=basic` unlimited, `depth=deep` limited to 10/month). `depth=basic` returns a preheader summary. `depth=deep` returns a full multi-section report. Exhausting the `depth=deep` monthly view allowance returns `429` with `{error: "quota_exceeded", message, ...}`, the same contract as every other quota-gated endpoint: `message` says when the allowance resets (the start of next month) and links PRO, and the response has no `Retry-After` header.
 
 | Param | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|

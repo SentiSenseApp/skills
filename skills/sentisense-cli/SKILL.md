@@ -27,7 +27,7 @@ package from the npm registry and runs it on the user's machine with that proces
 and environment, `SENTISENSE_API_KEY` included, so **ask the user before running it the first time
 and say plainly that it downloads and runs code**. Every command below also has a plain HTTPS
 equivalent documented in the `sentisense` skill, and REST is the path to prefer when the user did
-not ask for a shell command. Commands here pin version 0.52.0 deliberately: pinning prevents version drift, but it does not verify the artifact.
+not ask for a shell command. Commands here pin version 0.63.1 deliberately: pinning prevents version drift, but it does not verify the artifact.
 Install via your package manager's normal review process.
 
 ## Permissions
@@ -40,14 +40,14 @@ Install via your package manager's normal review process.
 ## Quickstart
 
 ```bash
-npx -y sentisense@0.52.0 health --base-url https://app.sentisense.ai
-npx -y sentisense@0.52.0 quote --base-url https://app.sentisense.ai NVDA
-npx -y sentisense@0.52.0 sentiment --base-url https://app.sentisense.ai TSLA --days 30
-npx -y sentisense@0.52.0 mood --base-url https://app.sentisense.ai --json
+npx -y sentisense@0.63.1 health --base-url https://app.sentisense.ai
+npx -y sentisense@0.63.1 quote --base-url https://app.sentisense.ai NVDA
+npx -y sentisense@0.63.1 sentiment --base-url https://app.sentisense.ai TSLA --days 30
+npx -y sentisense@0.63.1 mood --base-url https://app.sentisense.ai --json
 ```
 
 Auth: set `SENTISENSE_API_KEY` in the environment; commands read it directly, without a secret in argv.
-In version 0.52.0, saving a key with `auth` accepts it as a positional argument, not an environment-input option.
+In version 0.63.1, saving a key with `auth` accepts it as a positional argument, not an environment-input option.
 Prefer the environment path and skip key persistence. An argument-free `auth` inspects the resolved configuration;
 it does not save the environment key. `health` confirms reachability, key validity, and latency in one call.
 
@@ -86,7 +86,7 @@ export SENTISENSE_AGENT_NAME=my-research-bot # what your agent is called
 | `options <ticker>` | End-of-day options positioning |
 | `screen --filter ...` | Filter the tracked universe on Score, analyst, and price fields |
 
-Run `npx -y sentisense@0.52.0 --help` for the full list, and `help <command>` for flags and
+Run `npx -y sentisense@0.63.1 --help` for the full list, and `help <command>` for flags and
 copy-paste examples. The help is the reference: every example in it runs as written.
 
 ## Output modes: which one to use
@@ -99,26 +99,29 @@ copy-paste examples. The help is the reference: every example in it runs as writ
 
 ## Exit codes: branch on them
 
-Stable across versions: `0` ok, `2` usage error, `3` auth, `4` not found, `5` rate limited,
-`6` network. Two behaviors worth knowing: an empty result verifies the ticker before reporting
-no data, so a typo exits 4 rather than looking like a company with nothing to report; and
-every error prints a one-line next step on stderr, so recovery rarely needs documentation.
+Stable across versions: `0` ok, `2` usage error, `3` auth, `4` not found, `5` rate limited
+or monthly allowance used up, `6` network. Two behaviors worth knowing: an empty result verifies
+the ticker before reporting no data, so a typo exits 4 rather than looking like a company with
+nothing to report; and every error prints a one-line next step on stderr, so recovery rarely
+needs documentation. The CLI never retries on its own. On exit 5 that next step tells the two
+limits apart: the per-minute limit says how many seconds to wait, while a used-up monthly
+allowance says it resets at the start of next month and links pricing, so do not retry it.
 
 ```bash
-npx -y sentisense@0.52.0 insiders --base-url https://app.sentisense.ai "$TICKER" || echo "exit $? tells you which way it failed"
+npx -y sentisense@0.63.1 insiders --base-url https://app.sentisense.ai "$TICKER" || echo "exit $? tells you which way it failed"
 ```
 
 ## Scripting patterns
 
 ```bash
 # One call, several tickers
-npx -y sentisense@0.52.0 quote --base-url https://app.sentisense.ai NVDA AMD AVGO
+npx -y sentisense@0.63.1 quote --base-url https://app.sentisense.ai NVDA AMD AVGO
 
 # Feed a field into another tool
-npx -y sentisense@0.52.0 quote --base-url https://app.sentisense.ai NVDA --json | jq .changePercent
+npx -y sentisense@0.63.1 quote --base-url https://app.sentisense.ai NVDA --json | jq .changePercent
 
 # Screen, then inspect the top hit
-npx -y sentisense@0.52.0 screen --base-url https://app.sentisense.ai --filter SENTI_SCORE_7D:GTE:13 --limit 5
+npx -y sentisense@0.63.1 screen --base-url https://app.sentisense.ai --filter SENTI_SCORE_7D:GTE:13 --limit 5
 ```
 
 ## Without the CLI
