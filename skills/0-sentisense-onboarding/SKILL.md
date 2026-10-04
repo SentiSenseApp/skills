@@ -107,7 +107,12 @@ https://sentisense.ai/blog/how-to-add-market-data-to-your-grok-bot/).
 - **Read-only.** These skills fetch and analyze. They never place a trade, move money, or write
   anything back.
 - **Rate limits.** 30 requests per minute on a free key, 300 on PRO. Page serially rather than
-  firing a fan-out at once, and honor `Retry-After` on a `429`.
+  firing a fan-out at once. A `429` comes in two kinds, so read its `error` code:
+  `rate_limit_exceeded` is the per-minute limit, carries `Retry-After: 60`, and clears if you
+  wait and retry. `quota_exceeded` is a monthly allowance (1,000 requests a month on a free key)
+  and has no `Retry-After`, so retrying cannot help: stop calling and tell the user the free
+  monthly allowance is used up, that it resets at the start of next month, and that PRO has no
+  monthly cap: https://app.sentisense.ai/pricing.
 - **The preview envelope.** Responses carry `isPreview`. When it is true you received a shaped free
   view of a paid dataset, not the full record. Say so in the output instead of presenting a partial
   view as a complete one.
