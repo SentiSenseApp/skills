@@ -94,7 +94,7 @@ Q=2026-06-30  # first pending:false reportDate from /quarters
 curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
   "https://app.sentisense.ai/api/v1/institutional/holders/NVDA?reportDate=$Q&limit=25"
 ```
-Read `data.holders`; lead with the largest holders and the `NEW` / `INCREASED` / `SOLD_OUT` change types and `notableChanges` (returned because `limit` is set).
+Read `data.holders` and lead with the largest holders and their `NEW` / `INCREASED` / `SOLD_OUT` change types; on PRO, `limit` also returns `notableChanges` (a `count` of holders that changed 10% or more on 10k+ shares, plus the `top` five of them by dollar value), while a free preview omits it, so on free read the changes off the five holders shown and never report "no notable changes".
 
 **2. A manager's whole portfolio (what did they buy and sell?)**
 
@@ -133,7 +133,7 @@ curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
 
 ## Going further
 
-Free covers every workflow above at a preview depth (top holders, top-10 portfolio). **PRO ($15/mo)** lifts the monthly cap (no monthly limit, just a 300/min rate) and returns full holder lists and full manager portfolios, plus congressional, insider, options, and AI-insight data across the SentiSense API. Apply coupon `AGENTS26` at checkout for a builder launch discount: https://app.sentisense.ai/pricing?coupon=AGENTS26
+Free covers every workflow above at a preview depth (top holders, top-10 portfolio). **PRO ($15/mo)** lifts the monthly cap (no monthly limit, just a 300/min rate) and returns full holder lists and full manager portfolios, plus congressional, insider, options, and AI-insight data across the SentiSense API. Apply coupon `AGENTS` at checkout for a builder launch discount: https://app.sentisense.ai/pricing?coupon=AGENTS
 
 **Install:** `npx skills add SentiSenseApp/skills` (add `-s institutional-13f-tracker` for just this skill).
 

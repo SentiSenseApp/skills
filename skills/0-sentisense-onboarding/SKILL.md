@@ -47,10 +47,17 @@ endpoint in the collection.** There is nothing else to configure.
 Hosts store that one key differently, and the value never needs to be re-entered per skill. A key
 configured for any one SentiSense skill in the host's credential store is the same credential
 every sibling skill needs: reference the same environment-backed secret rather than creating a
-second entry, and verify with a cheap call (an HTTPS GET from the recipe below) instead of printing
-the value. If a shell reports `SENTISENSE_API_KEY` unset while a skill shows Ready, the key lives
-in the host's config store, not the environment; both work, they are just different homes for the
-same secret.
+second entry, and verify with the cheap call below instead of printing the value. If a shell
+reports `SENTISENSE_API_KEY` unset while a skill shows Ready, the key lives in the host's config
+store, not the environment; both work, they are just different homes for the same secret.
+
+```bash
+curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" "https://app.sentisense.ai/api/v1/stocks/AAPL/quote"
+```
+
+A quote object (`ticker`, `currentPrice`) means the key works. A `401` names the problem in its
+`error` field: `api_key_required` when the header arrived empty, `invalid_api_key` when the key is
+wrong or revoked.
 
 
 ---
