@@ -74,6 +74,7 @@ The market-wide endpoints are plain REST. All three endpoints return the wrapped
 **1. The insider tape for one stock**
 
 Use: `GET /api/v1/insider/trades/NVDA?lookbackDays=90`. Filter to the directional rows first (code `P` and code `S`, minus code `F`), then report: who bought and sold, their roles, net dollars, and how much of the selling was 10b5-1 planned.
+Only sum a whole window. On a free key the response is a preview: `isPreview` is true, `data` holds the newest 5 rows, and `totalCount` is how many rows the window holds. Describe those as "the newest 5 of `totalCount` filings" and give no window count or dollar total from them. A PRO response (`isPreview: false`) carries every row in the window, so its sums are the window's totals.
 An all-award window is zero insider conviction, not a wave of it; say "no open-market insider activity" rather than presenting awards as trades.
 
 **2. What are insiders buying market-wide?**

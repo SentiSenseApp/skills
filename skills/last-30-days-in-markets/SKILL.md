@@ -1,6 +1,6 @@
 ---
 name: last-30-days-in-markets
-description: "What happened in the stock market over the last 30 days, as one synthesized brief: the day-by-day arc of a fear-to-greed market mood index, the month's biggest AI-clustered story themes ranked by impact, which tickers and sectors dominated the news, the sentiment and smart-money signals that accumulated, where the market stands today, and the earnings ahead. Built for deep research rather than a fast summary: every claim traces to a fetched response and carries its date and its real coverage window, so the reader can check it instead of trusting a generated answer. Works for one stock too: the month's feed filtered to a ticker plus its stock insights. Use for \"last 30 days in markets\", \"what happened in the market this month\", \"what did I miss in the market\", \"monthly market recap\", \"market summary last 30 days\", \"deep research on the stock market\", \"catch me up on stocks\", \"catch me up on NVDA\". Read-only. No trading, no purchases, no write operations, no wallet access."
+description: "What happened in the stock market over the last 30 days, as one synthesized brief: the day-by-day arc of a fear-to-greed market mood index, the month's biggest AI-clustered story themes ranked by impact, which tickers and sectors dominated the news, the sentiment and smart-money signals that accumulated, where the market stands today, and the earnings ahead. Built for deep research rather than a fast summary: every claim traces to a fetched response and carries its date and its real coverage window, so the reader can check it. Works for one stock too: the month's feed filtered to a ticker plus its stock insights. Use for \"last 30 days in markets\", \"what happened in the stock market this month\", \"what did I miss in the market\", \"monthly market recap\", \"market recap\", \"stock market summary last 30 days\", \"stock market news this month\", \"deep research on the stock market\", \"catch me up on stocks\", \"catch me up on NVDA\". Read-only. No trading, no purchases, no write operations, no wallet access."
 license: MIT
 metadata:
   homepage: https://sentisense.ai
@@ -96,8 +96,8 @@ line rather than pretending they came back.
 
 **Page the whole window, then de-duplicate by `id`.** The paging rule is one rule: keep
 requesting the next `offset` until a page comes back with **fewer rows than `limit`**, or empty.
-A 30-day window currently holds close to 600 clusters, so expect about a dozen pages of 50 before
-the short page arrives. Do not stop earlier to save requests. With `filterHours` set, the feed is
+A 30-day window currently holds 500 to 600 clusters (542 across 11 pages when this release was
+checked), so expect eleven or twelve pages of 50 before the short page arrives. Do not stop earlier to save requests. With `filterHours` set, the feed is
 ranked by curation score across the whole window, so every page spans the whole month: a partial
 fetch looks complete from its dates while it drops clusters at every impact level, including some
 of the month's highest-impact ones, and it skews the ticker counts. Pages are built to be
@@ -184,10 +184,14 @@ about, and report its own first and last observed dates in the coverage line lik
 
 ### Reading the arc
 
-`GET /api/v2/market-mood?days=30` returns the current score and phase, a `signals[]` breakdown of
-the component signals behind the latest reading, **and** a daily `history` array carrying the
-composite plus a column per component signal. That one response is the entire quantitative spine,
-so fetch it first and let it set the shape of the brief.
+`GET /api/v2/market-mood?days=30` returns two top-level keys, `market` and `sectors`, and
+everything about the composite sits under `market`: `market.currentScore`, `market.phase`,
+`market.weeklyChange`, `market.signals[]` (the component signals behind the latest reading) **and**
+`market.history[]` (one row per trading day carrying `date`, the composite `score` and a column per
+component signal). `sectors` is a map of sector name to `{ currentScore, phase, weeklyChange }`
+beside `market`, not inside it. A lookup for `signals` or `history` at the top level finds
+nothing, and that is a wrong path, not an empty month. That one response is the entire
+quantitative spine, so fetch it first and let it set the shape of the brief.
 
 - Scale is 0 to 100, fear to greed. Phases: 0-15 Extreme Fear, 16-30 Fear, 31-45 Anxiety, 46-55
   Neutral, 56-70 Optimism, 71-85 Greed, 86-100 Extreme Greed.
@@ -226,8 +230,9 @@ Several of these are preview-gated and return `{isPreview, previewReason, totalC
 - `calendar/earnings` returns one Monday-to-Sunday week on Free: the current week for a bare call,
   next week with `week=next`. PRO gets about a 60-day window. On both tiers a bare call starts on
   the Monday of the current week, so later in the week its first rows are names that have already
-  reported. `metadata.windowStart` and `metadata.windowEnd` describe the window you actually got,
-  so read them rather than assuming.
+  reported. Its `data` is an object, not a list: the rows are `data.earnings[]`, and
+  `data.metadata.windowStart` and `data.metadata.windowEnd` describe the window you actually got
+  (`data.metadata.count` equals the rows returned), so read them rather than assuming.
 
 **A preview is a slice, not the window.** When `isPreview` is true and `totalCount` is larger than
 the rows returned, label the layer with both numbers ("top 5 of 200 insights, free preview") and
