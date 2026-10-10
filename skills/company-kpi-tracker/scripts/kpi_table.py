@@ -48,6 +48,10 @@ MAX_RETRY_WAIT = 60
 QUARTER_DAYS = (60, 120)
 # Four quarters apart: 364 days for a 52-week year, 371 for a 53-week year, plus slack.
 YEAR_DAYS = (320, 400)
+# A quarterly series is BEHIND when its newest close is older than this. One quarter that has
+# closed but not yet been reported (~91 days) plus the slowest routine filing window (a 10-K,
+# up to ~90 days) stays inside it, so crossing it means at least one expected print is missing.
+BEHIND_DAYS = 200
 
 # Every C0 and C1 control character. Newline and tab are in the set on purpose: without them,
 # response prose can forge a table row or a second output line.
@@ -449,8 +453,10 @@ def format_change(delta, series):
 
 # --- series analysis ---------------------------------------------------------------------
 
-def analyse(series):
-    """One series reduced to the numbers the card needs, with reasons for what is missing."""
+def analyse(series, today=None):
+    """One series reduced to the numbers the card needs, with reasons for what is missing.
+
+    `today` is an ISO date; it defaults to the local date and is injectable for tests."""
     raw_points, skipped, nonfinite = clean_points(series)
     points, dupes, conflicts, conflict_labels, collapsed = resolve_duplicates(raw_points)
     result = {
@@ -474,6 +480,10 @@ def analyse(series):
         "accelerationEstimate": False,
         "accelerationPeriods": [],
         "accelerationReason": "fewer than two comparable sequential changes",
+        "accelerationBasis": None,
+        "newestDate": None,
+        "daysSinceNewest": None,
+        "behind": False,
     }
     if not points:
         result["accelerationReason"] = "no usable observations"
@@ -499,26 +509,59 @@ def analyse(series):
         }
         result["rows"].append(row)
 
-    # Acceleration is the change between the two most recent sequential rates, so it needs the
-    # newest row, the row it measured itself against, and a meaningful base under both.
     rows = result["rows"]
+
+    # A quarterly series whose newest close is long past is behind, not current. lastUpdated
+    # cannot say this: it records when curation last touched the file, not what it contains.
+    # Cadence is read from the whole history, not the newest pair: real series skip quarters, so
+    # one long gap at the top must not hide a quarterly series. Any quarter-length gap anywhere
+    # makes it quarterly; with no usable gap (a single observation) a quarter label decides. A
+    # series reported only once a year (Q4-only, or FY labels) has no quarter-length gap and is
+    # never judged on a quarterly clock.
+    if not today:
+        from datetime import date
+        today = date.today().isoformat()
+    result["newestDate"] = rows[0]["date"]
+    age = days_between(today, rows[0]["date"])
+    result["daysSinceNewest"] = age
+    gaps = [g for g in (days_between(rows[i]["date"], rows[i + 1]["date"])
+                        for i in range(len(rows) - 1)) if g is not None and g > 0]
+    if gaps:
+        quarterly = min(gaps) <= QUARTER_DAYS[1]
+    else:
+        quarterly = parse_period(rows[0]["period"]) is not None
+    result["behind"] = bool(
+        quarterly and age is not None and age > BEHIND_DAYS and not result["discontinued"])
+
+    # Acceleration is the change between the two most recent sequential rates, so it needs the
+    # newest row, the row it measured itself against, and a meaningful base under both. On a
+    # series whose values are already percentages, the sequential rate IS the pp change, so the
+    # acceleration is the difference of two pp changes. A relative change of a percentage
+    # ("Azure growth rose 7.5%") is not a rate anyone reads, and printing it as pp mislabels it.
+    pp_series = percent_scale(series)
     if len(rows) >= 2 and rows[0]["qoq"] and rows[1]["qoq"]:
         if rows[0]["qoqAgainst"] != rows[1]["period"]:
             result["accelerationReason"] = "the two latest sequential changes are not successive"
+        elif pp_series:
+            result["acceleration"] = rows[0]["qoq"][0] - rows[1]["qoq"][0]
+            result["accelerationBasis"] = "pp_changes"
+            result["accelerationReason"] = None
         elif rows[0]["qoq"][1] is None or rows[1]["qoq"][1] is None:
             result["accelerationReason"] = "a sequential change had no meaningful percentage base"
         else:
             result["acceleration"] = rows[0]["qoq"][1] - rows[1]["qoq"][1]
+            result["accelerationBasis"] = "growth_rates"
             result["accelerationReason"] = None
-            # An acceleration figure is only as final as its weakest input, and one of those
-            # inputs can sit below the visible rows. The flag travels with the number.
-            result["accelerationPeriods"] = [p for p in (
-                rows[0]["period"], rows[1]["period"], rows[1]["qoqAgainst"]) if p]
-            result["accelerationEstimate"] = bool(
-                rows[0]["isEstimate"] or rows[0]["qoqEstimate"]
-                or rows[1]["isEstimate"] or rows[1]["qoqEstimate"])
     elif len(rows) >= 2:
         result["accelerationReason"] = "only one sequential change is available"
+    if result["acceleration"] is not None:
+        # An acceleration figure is only as final as its weakest input, and one of those
+        # inputs can sit below the visible rows. The flag travels with the number.
+        result["accelerationPeriods"] = [p for p in (
+            rows[0]["period"], rows[1]["period"], rows[1]["qoqAgainst"]) if p]
+        result["accelerationEstimate"] = bool(
+            rows[0]["isEstimate"] or rows[0]["qoqEstimate"]
+            or rows[1]["isEstimate"] or rows[1]["qoqEstimate"])
     return result
 
 
@@ -528,8 +571,14 @@ def print_card(analysis, series, rows_shown):
     flags = []
     if analysis["discontinued"]:
         flags.append("DISCONTINUED")
+    if analysis["behind"]:
+        flags.append("BEHIND")
     print(f"\n{analysis['name']} ({analysis['id']})"
           + (f"  [{', '.join(flags)}]" if flags else ""))
+    if analysis["behind"]:
+        print(f"  Behind: the newest period closed {analysis['newestDate']}, "
+              f"{analysis['daysSinceNewest']} days ago, so expected quarterly observations may "
+              "be missing. Present it as the latest available here, not the latest reported.")
     meta = [analysis["category"] or "uncategorized", analysis["unit"] or "unit unstated"]
     print(f"  {' | '.join(m for m in meta if m)}")
     if analysis["discontinued"] and analysis["rows"]:
@@ -575,7 +624,10 @@ def print_card(analysis, series, rows_shown):
         if analysis["accelerationEstimate"]:
             note = (" (built on a preliminary value in "
                     + ", ".join(analysis["accelerationPeriods"]) + ")")
-        print(f"  Acceleration (latest q/q rate minus the previous q/q rate): "
+        what = ("latest q/q change minus the previous q/q change, both already in pp"
+                if analysis["accelerationBasis"] == "pp_changes"
+                else "latest q/q rate minus the previous q/q rate")
+        print(f"  Acceleration ({what}): "
               f"{direction}{trim(analysis['acceleration'].quantize(Decimal('0.01')))} "
               f"percentage points{note}")
     else:

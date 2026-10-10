@@ -947,5 +947,137 @@ class N2DisplayHints(unittest.TestCase):
         self.assertEqual(kpi.format_value(Decimal("301630000"), documented), "301.63M subscribers")
 
 
+
+AZURE_GROWTH = series(id="azure_growth_pct", name="Azure growth", unit="%",
+                      displayFormat="percent", values=[
+    point("Q4 FY2026", "2026-06-30", 43),
+    point("Q3 FY2026", "2026-03-31", 40),
+    point("Q2 FY2026", "2025-12-31", 39),
+])
+
+
+class PercentSeriesAcceleration(unittest.TestCase):
+    """A percent-unit series accelerates in pp changes, never in relative changes of a percent.
+
+    Live case 2026-10-10: Azure growth 39 -> 40 -> 43 printed "+3 pp" q/q on the row and
+    "+4.94 percentage points" of acceleration, which was 7.5% minus 2.56%, relative changes of
+    a percentage labeled as pp."""
+
+    def test_acceleration_is_the_difference_of_two_pp_changes(self):
+        card = kpi.analyse(AZURE_GROWTH)
+        self.assertEqual(card["rows"][0]["qoq"][0], Decimal("3"))
+        self.assertEqual(card["rows"][1]["qoq"][0], Decimal("1"))
+        self.assertEqual(card["acceleration"], Decimal("2"))
+        self.assertEqual(card["accelerationBasis"], "pp_changes")
+
+    def test_a_nonpositive_percent_level_still_has_a_pp_acceleration(self):
+        # A margin moving through zero has no relative rate, but its pp changes are defined.
+        card = kpi.analyse(series(unit="%", values=[
+            point("Q3 FY2026", "2026-06-27", 4),
+            point("Q2 FY2026", "2026-03-29", -1),
+            point("Q1 FY2026", "2025-12-27", -5),
+        ]))
+        self.assertEqual(card["acceleration"], Decimal("1"))
+
+    def test_money_series_still_uses_growth_rates(self):
+        card = kpi.analyse(series(values=[
+            point("Q1 FY2026", "2025-12-27", 100),
+            point("Q2 FY2026", "2026-03-29", 110),
+            point("Q3 FY2026", "2026-06-27", 132),
+        ]))
+        self.assertEqual(card["acceleration"], Decimal("10"))
+        self.assertEqual(card["accelerationBasis"], "growth_rates")
+
+    def test_text_names_the_pp_basis(self):
+        code, out = run(envelope(AZURE_GROWTH), ["TEST"])
+        self.assertEqual(code, 0)
+        self.assertIn("both already in pp", out)
+        self.assertIn("+2 percentage points", out)
+
+
+QUARTERLY = [
+    point("Q3 2025", "2025-09-30", 120),
+    point("Q2 2025", "2025-06-30", 110),
+    point("Q1 2025", "2025-03-31", 100),
+]
+
+
+class BehindSeries(unittest.TestCase):
+    """A quarterly series whose newest close is long past is flagged, not shown as current.
+
+    Live case 2026-10-10: HUBG's newest period was Q3 2025 while the script printed
+    "KPI data last refreshed 2026-08-01", which read as fresh."""
+
+    def test_a_quarterly_series_three_quarters_behind_is_flagged(self):
+        card = kpi.analyse(series(values=QUARTERLY), today="2026-10-10")
+        self.assertTrue(card["behind"])
+        self.assertEqual(card["daysSinceNewest"], 375)
+        self.assertEqual(card["newestDate"], "2025-09-30")
+
+    def test_one_unreported_quarter_is_normal_not_behind(self):
+        # Q2 2026 closed 102 days ago and Q3 2026 has not been reported yet: routine.
+        card = kpi.analyse(series(values=[
+            point("Q2 2026", "2026-06-30", 120),
+            point("Q1 2026", "2026-03-31", 110),
+        ]), today="2026-10-10")
+        self.assertFalse(card["behind"])
+
+    def test_an_annual_series_is_not_judged_on_a_quarterly_clock(self):
+        card = kpi.analyse(series(values=[
+            point("FY2025", "2025-12-31", 120),
+            point("FY2024", "2024-12-31", 110),
+        ]), today="2026-10-10")
+        self.assertFalse(card["behind"])
+
+    def test_a_discontinued_series_is_history_not_behind(self):
+        card = kpi.analyse(series(values=QUARTERLY, discontinued=True), today="2026-10-10")
+        self.assertFalse(card["behind"])
+
+    def test_text_flags_it_on_the_card(self):
+        old = series(values=[point("Q2 2020", "2020-06-30", 2), point("Q1 2020", "2020-03-31", 1)])
+        code, out = run(envelope(old), ["TEST"])
+        self.assertEqual(code, 0)
+        self.assertIn("[BEHIND]", out)
+        self.assertIn("latest available here, not the latest reported", out)
+
+
+
+class BehindCadence(unittest.TestCase):
+    """Pre-publish tryout 2026-10-10 (Codex sol): cadence from the newest pair alone let a
+    skipped quarter or a single observation hide a stale quarterly series."""
+
+    def test_a_skipped_quarter_at_the_top_still_flags(self):
+        card = kpi.analyse(series(values=[
+            point("Q3 2025", "2025-09-30", 120),
+            # Q2 2025 skipped
+            point("Q1 2025", "2025-03-31", 100),
+            point("Q4 2024", "2024-12-31", 95),
+        ]), today="2026-10-10")
+        self.assertTrue(card["behind"])
+
+    def test_a_single_quarterly_observation_flags(self):
+        card = kpi.analyse(series(values=[point("Q3 2025", "2025-09-30", 120)]),
+                           today="2026-10-10")
+        self.assertTrue(card["behind"])
+
+    def test_a_single_annual_observation_does_not(self):
+        card = kpi.analyse(series(values=[point("FY2025", "2025-09-30", 120)]),
+                           today="2026-10-10")
+        self.assertFalse(card["behind"])
+
+    def test_a_q4_only_series_is_annual_not_quarterly(self):
+        card = kpi.analyse(series(values=[
+            point("Q4 FY2026", "2026-01-31", 30),
+            point("Q4 FY2025", "2025-01-31", 28),
+        ]), today="2026-10-10")
+        self.assertFalse(card["behind"])
+
+    def test_threshold_edges(self):
+        rows = [point("Q1 2026", "2026-03-24", 2), point("Q4 2025", "2025-12-31", 1)]
+        self.assertFalse(kpi.analyse(series(values=rows), today="2026-10-10")["behind"])  # 200
+        rows[0] = point("Q1 2026", "2026-03-23", 2)
+        self.assertTrue(kpi.analyse(series(values=rows), today="2026-10-10")["behind"])   # 201
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

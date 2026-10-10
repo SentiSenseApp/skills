@@ -288,9 +288,9 @@ Response: bare array of `{ symbol, name, price, changePercent }`. The key is `sy
 ### GET /api/v1/stocks/{ticker}/sentiment
 One-call sentiment picture for a stock: the SentiSense Score with its 30-day regime, where the conversation is happening by source, and what is driving it. **Public.** **Quota-gated** when called with a key.
 
-This endpoint also answers without an API key, and returns the same full payload either way. The tradeoff is real in both directions: a keyed call is attributed to your account but spends monthly quota and per-minute rate limit, while a keyless call costs you neither and is not attributed. Send the key when you want the usage on your account; either way the data is identical.
+Send your free API key on every call. Without a key this endpoint returns only a words preview: `isPreview` is `true`, the labels, directions, trend, related tickers and driver headlines are present, and every number (the Score, its 30-day average and change, the sparkline, mentions, share of voice, per-source shares and values, driver tone) is `null` or empty. The numbers need a key; a free one covers this endpoint in full.
 
-Response: `{ isPreview, previewReason, data }`. Everything below lives under `data`, which carries `ticker`, `companyName`, `asOf`, then the fields in the table. This endpoint is Free but still uses the wrapper (`isPreview` is `false` and `previewReason` is `null` on every tier), so unwrap first: reading `sentisenseScore` off the root returns nothing, and the full path is `data.sentisenseScore`.
+Response: `{ isPreview, previewReason, data }`. Everything below lives under `data`, which carries `ticker`, `companyName`, `asOf`, then the fields in the table. This endpoint is Free but still uses the wrapper (with a key, `isPreview` is `false` and `previewReason` is `null` on every tier), so unwrap first: reading `sentisenseScore` off the root returns nothing, and the full path is `data.sentisenseScore`.
 
 | Field (under `data`) | Type | Description |
 |-------|------|-------------|
@@ -1128,6 +1128,8 @@ AI-generated signals for stocks and the overall market. Each insight identifies 
 
 **Response shape (all tiers):** `{ isPreview, previewReason, data: [...] }`. Free: top N insights, PRO: full list.
 
+**Corporate deals:** `m_and_a_activity` insights (category `FUNDAMENTAL`) say a stock is being acquired, taken private or merged: the terms per share, the approvals left and the next dated milestone (vote, expected close), with `docRefs` linking the company's SEC filings. Only each deal's latest milestone is served, so the text describes where the deal stands now; filter with `insightType=m_and_a_activity` to ask "is this company being bought" before reading anything else about it.
+
 ### GET /api/v1/insights/stock/{ticker}
 AI insights for a specific stock, ranked by importance (relevance, confidence, and recency); `data[0]` is the top insight. **Public (preview)** -- Free: top 3, PRO: full list.
 
@@ -1935,8 +1937,10 @@ Reported by the earnings family alongside the five endpoints above:
 SentiSense also runs a hosted Model Context Protocol server at `https://app.sentisense.ai/mcp`,
 for connecting inside Claude, ChatGPT, or Grok chat rather than calling the REST API directly. It is a
 read-only, curated slice of the same data, authenticated with zero-config OAuth (no API key to
-paste; sign in with a SentiSense account and approve access). To add it in Claude: open Settings,
-then Connectors, add the URL above as a custom connector, and sign in. In ChatGPT: turn on
+paste; sign in with a SentiSense account and approve access). To add it in Claude: open the
+SentiSense listing in Claude's connector directory (https://claude.ai/directory/sentisense), choose
+Connect, and sign in; or open Settings, then Connectors, and add the URL above as a custom
+connector. In ChatGPT: turn on
 developer mode under Settings, then Security, then add the connector by URL under Settings, then
 Connectors (ChatGPT has renamed this settings area more than once, so look for "Plugins",
 previously "Apps", originally "Connectors"). In Grok: open Connectors, choose New Connector, then
