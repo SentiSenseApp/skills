@@ -84,7 +84,7 @@ export SENTISENSE_AGENT_NAME=my-research-bot # what your agent is called
 | `news [ticker]` | Clustered news stories |
 | `flows [ticker]` | Institutional 13F flows, or one ticker's holders |
 | `options <ticker>` | End-of-day options positioning |
-| `screen --filter ...` | Filter the tracked universe on Score, analyst, and price fields |
+| `screen --filter ...` | Filter the tracked universe on Score, analyst, technical, price and end-of-day options fields |
 
 Run `npx -y sentisense@0.63.1 --help` for the full list, and `help <command>` for flags and
 copy-paste examples. The help is the reference: every example in it runs as written.

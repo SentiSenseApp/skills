@@ -39,7 +39,7 @@ Twenty-one skills, each also published on its own if you want just one:
 |---|---|
 | `0-sentisense-onboarding` | Read first: API key setup and which skill owns each task |
 | `stock-sentiment` | News and social sentiment per ticker, and the SentiSense Score |
-| `stock-screener` | Filter stocks and ETFs on Score, analyst, technical, and price fields, or run 28 curated screens |
+| `stock-screener` | Filter stocks and ETFs on Score, analyst, technical, and price fields, or run 30 curated screens |
 | `stock-market-dashboard` | Writes a self-contained HTML dashboard you keep |
 | `market-heatmap` | An interactive treemap of an index, coloured by today's move, sentiment, Score or options interest |
 | `unusual-options-activity` | Options flow, unusual activity, positioning |

@@ -57,7 +57,7 @@ Every skill runs on a free SentiSense API key. Create one at https://app.sentise
 | Skill | What it does |
 |-------|--------------|
 | `stock-sentiment` | Sentiment and smart-money positioning for US stocks. |
-| `stock-screener` | Filter US stocks and ETFs on the SentiSense Score and Rating, sentiment direction, analyst ratings and upside, technicals, momentum, price and market cap in one query, or run 28 curated screens. |
+| `stock-screener` | Filter US stocks and ETFs on the SentiSense Score and Rating, sentiment direction, analyst ratings and upside, technicals, momentum, price and market cap in one query, or run 30 curated screens. |
 | `analyst-ratings-tracker` | Who covers a stock and where each firm stands, upgrades and downgrades by ticker and market-wide, one analyst's call history, the Street versus crowd comparison, and which firms moved after an earnings print. |
 | `insider-trading-tracker` | SEC Form 4 insider buying and selling by ticker and market-wide, cluster-buy signals, and 10b5-1 plan detection. |
 | `institutional-13f-tracker` | Quarterly 13F holdings by ticker or by manager: top holders, quarter-over-quarter buying and selling, and activist positions. |

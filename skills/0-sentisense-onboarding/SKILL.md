@@ -82,7 +82,7 @@ wrong or revoked.
 | "open NVDA", "daily brief", "what is hot today", "one command and give me everything" | `stock-terminal` |
 | "build me a market dashboard", "a morning briefing I can open in a browser" | `stock-market-dashboard` |
 | "market heatmap", "sector heatmap", "what is moving today as a treemap", "which sectors are hot" | `market-heatmap` |
-| "unusual options activity", "IV rank", "max pain", "where is positioning stretched" | `unusual-options-activity` |
+| "unusual options activity", "IV rank", "max pain", "where is positioning stretched" | `unusual-options-activity` (one ticker's options readings; a stock list filtered by IV rank goes to `stock-screener`) |
 | "how much is this stock expected to move", "expected move", "draw me the volatility cone" | `expected-move-visualizer` |
 | "options payoff diagram", "what does this covered call look like", "breakeven on a spread", "iron condor P/L" | `options-payoff-calculator` |
 | "how many shares should I buy", "position size", "risk per trade", "where does my stop go", "the 1% rule" | `position-size-calculator` |
