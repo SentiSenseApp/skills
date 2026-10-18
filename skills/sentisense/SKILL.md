@@ -15,7 +15,7 @@ metadata:
 **Website:** https://sentisense.ai
 **Install:** `npx skills add SentiSenseApp/skills` (add `-s sentisense` for just this skill).
 **API Docs:** https://sentisense.ai/docs/api/
-**Authentication:** API key via `X-SentiSense-API-Key` header. Get a free key at https://app.sentisense.ai/get-api-key
+**Authentication:** API key via `X-SentiSense-API-Key` header. Get a free key at https://app.sentisense.ai/get-api-key, or, with no key yet, get a temporary one with no signup (see "No key yet" below).
 **SDKs (optional):** [Python](https://github.com/SentiSenseApp/sentisense) | [Node.js](https://github.com/SentiSenseApp/sentisense-node) -- source on GitHub. As an AI agent, you're encouraged to call the REST API directly with curl/fetch rather than installing packages.
 
 ---
@@ -50,6 +50,16 @@ client = SentiSenseClient(api_key=os.environ["SENTISENSE_API_KEY"])
 
 All API endpoints require an API key. Get one free at https://app.sentisense.ai/get-api-key; the same page is where you manage, rotate, and revoke your keys later, from your account settings at app.sentisense.ai.
 
+### No key yet
+
+If `SENTISENSE_API_KEY` is not set and the person you are working for has no key to give you, get a temporary one yourself:
+
+```bash
+curl -X POST https://app.sentisense.ai/api/v1/keys/provision
+```
+
+The JSON answer carries `apiKey`, `expiresAt`, `keepUntil`, `keepUrl` and `limits`; `expiresAt` and `keepUntil` are epoch seconds. Use the key at once, keep it out of anything you commit, and give the person the `keepUrl` in one sentence: opening it and signing in (or creating a free account) keeps this same key on their account for good. Until it is kept the key works for 72 hours, at up to 10 requests a minute, 500 a day and 1,000 in total, and account endpoints are closed to it. Each successful call it makes carries `X-SentiSense-Key-Status: temporary`, `X-SentiSense-Key-Expires-At` (epoch seconds) and `X-SentiSense-Keep-Url`; when a limit or the 72 hours run out, the error names the keep link, which still works for 14 days. A `429` with `keep_existing_key` means this network already has a temporary key nobody kept: give the person that key's link instead of asking for another. A temporary key that reaches a limit gets a `429` with `key_limit_reached`, and when its 72 hours run out a `401` with `key_expired`; both name the keep link, so pass the link on rather than waiting or suggesting a paid plan. Treat the keep link like the key itself: anyone holding it can keep the key, so keep it out of logs, commits and shared screenshots.
+
 ## Permissions
 
 - Network: HTTPS to app.sentisense.ai only.
@@ -82,17 +92,23 @@ The REST recipe in this file is the primary path. A maintained command-line clie
 
 Pro Max and the Data License plans include every PRO feature; the API reports their tier as `PRO`.
 
+Temporary key (not kept yet): 10 requests a minute, 500 a day, 1,000 in total; account endpoints closed.
+
 ### Ticker Symbols
 
-Endpoints that take a `{ticker}` path parameter accept the canonical primary ticker for each company. For dual-class share companies, the API also accepts the secondary class as an alias and resolves it server-side, so you can pass whichever ticker your data source provides.
+Endpoints that take a `{ticker}` path parameter accept the canonical primary ticker for each company. For dual-class share companies, research endpoints also accept the secondary class and resolve it server-side, so you can pass whichever ticker your data source provides.
 
 | You pass | Resolves to | Reason |
 |----------|-------------|--------|
 | `GOOG` | `GOOGL` | Alphabet Class C resolves to Class A |
 | `BRK.A`, `BRK-A`, `BRKA` | `BRK.B` | Berkshire Class A resolves to Class B |
+| `Z` | `ZG` | Zillow Class C resolves to Class A |
 | `BRK-B`, `BRKB` | `BRK.B` | Punctuation variants normalized |
 
-Aliasing applies to research endpoints (analyst, KPIs, insights, insider, institutional holders, politicians filings, options). Quote and chart endpoints leave the ticker as-is, since market-data providers handle their own symbology. Tickers are case-insensitive. News Corp (`NWSA`/`NWS`) and Fox (`FOXA`/`FOX`) are NOT aliased to each other (each class is tracked separately).
+Aliasing applies to company-level research endpoints (analyst, KPIs, insights, insider, politicians filings). Quote and chart endpoints leave the ticker as-is, since market-data providers handle their own symbology. Tickers are case-insensitive. News Corp (`NWSA`/`NWS`) and Fox (`FOXA`/`FOX`) are NOT aliased to each other (each class is tracked separately).
+
+One exception, because the data is per share class:
+- **Institutional holders**: `GOOG` returns the Class C roster, `GOOGL` the Class A roster, `BRK.A` the Class A roster only. Spellings and recognized former tickers still resolve. Read `resolvedTicker` and `resolution` (`exact`, `spelling`, `share_class`, `rename`) in the response before quoting a roster.
 
 ---
 
@@ -686,7 +702,7 @@ Response is a flat object, no `{isPreview, data}` wrapper. When the stock was gr
 
 `riskConditions` is a closed vocabulary, each worth up to 12 points. Graded (the cost scales, read it from `riskAdjustments`): `thin_coverage` (currently 6 points per missing dimension once fewer than 6 of the 7 are available, so 5 dimensions cost 6 and 4 cost 12 while 6 or 7 cost nothing; below 6 it also floors the score at 10), `institutional_outflow` (scaled by how deep in the bottom quarter of net institutional change), `high_leverage` (currently 6 points per unit of debt to equity above 2), `weak_dimension` (weakest available dimension below the 20th percentile, currently 0.6 points per percentile below 20), `small_market_cap` (graded on a log scale of market capitalization: nothing at 50 billion dollars and above, 10 points at 10 billion, 12 at 2 billion and below; below 10 billion the charge alone keeps the score out of the A band), `thin_liquidity` (currently under 10 million dollars in the latest session, scaled by the shortfall), `extended_price` (currently within 5 percent of the 52-week high and more than 25 percent above the 200-day moving average, scaled by the excess above 25 percent), `rich_valuation` (the trailing price to earnings multiple is high in absolute terms and in the top tail of the day's cross section, scaled by how far into that tail it sits; a multiple we could not establish costs nothing, which covers a company with no trailing profit and a filer reporting in a currency its price is not quoted in). Flat 12: `insider_selling`, `unprofitable` (trailing twelve month operating or net margin not positive), `no_fundamentals`, `unseasoned_listing` (currently fewer than 250 trading sessions in the past 400 days). Thresholds and graded rates are tuned as calibration data accumulates; the constituents, their maximum and the formula are versioned. Treat an unrecognized value as a condition this client does not know about, costing whatever `riskAdjustments` says, not as an error.
 
-`dimensions` always carries all seven rows in a fixed order: `crowd`, `smart_money`, `options`, `analysts`, `fundamentals`, `earnings`, `technicals`. `technicals` reads where the price sits versus its own history: distance from its 200-day and 50-day averages, its twelve-month path, and how calm or violent its recent sessions have been, with calmer ranking higher. Its trend readings earn credit up to a point: a price far above its own averages scores no better on them than one sitting on them, and a deep downtrend costs the same however deep it goes. It is a description of the current trend state, not a forecast, and its `raw` is the distance from the 200-day average in percent. Each is `{ key, label, percentile, raw, rawLabel, present }`. **Branch on `present`, not on `raw != null`**: `smart_money` is `present` with a `null` raw because it has no single underlying number, and instead carries a `subLegs` array of `{ key, label, raw, unit }` for `inst_13f`, `insider` and `congress`.
+`dimensions` always carries all seven rows in a fixed order: `crowd`, `smart_money`, `options`, `analysts`, `fundamentals`, `earnings`, `technicals`. `technicals` reads where the price sits versus its own history: distance from its 200-day and 50-day averages, its twelve-month path, and how calm or violent its recent sessions have been, with calmer ranking higher. Its trend readings earn credit up to a point: a price far above its own averages scores no better on them than one sitting on them, and a deep downtrend costs the same however deep it goes. It is a description of the current trend state, not a forecast, and its `raw` is the distance from the 200-day average in percent. `options` averages the stock's options sentiment over its last five trading sessions, so its `raw` is that average and its `rawLabel` says so. Each is `{ key, label, percentile, raw, rawLabel, present }`. **Branch on `present`, not on `raw != null`**: `smart_money` is `present` with a `null` raw because it has no single underlying number, and instead carries a `subLegs` array of `{ key, label, raw, unit }` for `inst_13f`, `insider` and `congress`.
 
 `flags` holds only the anomaly flags that could be evaluated for this stock, each `{ key, label, active }`, over `clustered_insider_selling`, `institutional_outflow_against_price` and `unusual_options_flow`. The first two are also risk conditions and take points off the score while active, `clustered_insider_selling` a flat 12 and `institutional_outflow_against_price` a graded amount; `unusual_options_flow` is informational only. A flag absent from the array means "not assessable here", which is not the same as `active: false`, so look flags up by `key` rather than by position.
 
@@ -2023,7 +2039,7 @@ On `/api/v2/metrics`, a tracked entity with no readings in your window returns a
 
 ## Getting Started
 
-1. **Get a free API key** at https://app.sentisense.ai/get-api-key (creates your account if you do not have one)
+1. **Get a free API key** at https://app.sentisense.ai/get-api-key (creates your account if you do not have one). An agent with no key can mint a temporary one first: see "No key yet" above.
 2. **Start calling** -- all you need is the API key in a header. No SDK install required:
 
 ```bash

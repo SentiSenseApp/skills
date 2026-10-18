@@ -41,6 +41,16 @@ Get a free API key at https://app.sentisense.ai/get-api-key, then put it in the 
 export SENTISENSE_API_KEY="your-key-here"
 ```
 
+### No key yet
+
+If `SENTISENSE_API_KEY` is unset and the user has no key to give you, get a temporary one yourself instead of stopping:
+
+```bash
+curl -sS --fail-with-body -X POST https://app.sentisense.ai/api/v1/keys/provision
+```
+
+(The `init` command of the `sentisense-cli` skill does the same and prints the key as `SENTISENSE_API_KEY=<key>`.) The answer carries `apiKey` and `keepUrl`, plus `expiresAt` and `keepUntil` as epoch seconds. Export the key for this session, keep it out of anything you commit, and give the user the `keepUrl` in one sentence: opening it and signing in, or creating a free account, keeps this same key on their account for good, so nothing in the project changes. Until then the key works for 72 hours at up to 10 requests a minute, 500 a day and 1,000 in total, and account endpoints refuse it. When a limit or the 72 hours run out, the error names the keep link again; that link works for 14 days. A `429` with `keep_existing_key` means this network already has a temporary key nobody kept: pass that key's link to the user rather than asking for another. A temporary key that reaches a limit gets a `429` with `key_limit_reached`, and when its 72 hours run out a `401` with `key_expired`; both name the keep link, so pass the link on rather than waiting or suggesting a paid plan. Treat the keep link like the key itself: anyone holding it can keep the key, so keep it out of logs, commits and shared screenshots.
+
 Calls authenticate with the `X-SentiSense-API-Key` header. **One key covers every skill and every
 endpoint in the collection.** There is nothing else to configure.
 
@@ -113,10 +123,10 @@ https://sentisense.ai/blog/how-to-add-market-data-to-your-grok-bot/).
 
 - **Read-only.** These skills fetch and analyze. They never place a trade, move money, or write
   anything back.
-- **Rate limits.** 30 requests per minute on a free key, 300 on PRO. Page serially rather than
+- **Rate limits.** 30 requests per minute on a free key, 300 on PRO (account keys; a temporary key follows the "No key yet" section). Page serially rather than
   firing a fan-out at once. A `429` comes in two kinds, so read its `error` code:
   `rate_limit_exceeded` is the per-minute limit, carries `Retry-After: 60`, and clears if you
-  wait and retry. `quota_exceeded` is a monthly allowance (1,000 requests a month on a free key)
+  wait and retry. `quota_exceeded` is a monthly allowance (1,000 requests a month on a free key; this applies to account keys, while temporary keys follow the "No key yet" section)
   and has no `Retry-After`, so retrying cannot help: stop calling and tell the user the free
   monthly allowance is used up, that it resets at the start of next month, and that PRO has no
   monthly cap: https://app.sentisense.ai/pricing.

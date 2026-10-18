@@ -27,7 +27,7 @@ package from the npm registry and runs it on the user's machine with that proces
 and environment, `SENTISENSE_API_KEY` included, so **ask the user before running it the first time
 and say plainly that it downloads and runs code**. Every command below also has a plain HTTPS
 equivalent documented in the `sentisense` skill, and REST is the path to prefer when the user did
-not ask for a shell command. Commands here pin version 0.63.1 deliberately: pinning prevents version drift, but it does not verify the artifact.
+not ask for a shell command. Commands here pin version 0.66.0 deliberately: pinning prevents version drift, but it does not verify the artifact.
 Install via your package manager's normal review process.
 
 ## Permissions
@@ -37,22 +37,26 @@ Install via your package manager's normal review process.
 - Shell: none required.
 - Files: none.
 
+This block describes the REST fallback. Running the CLI itself writes nothing into your project, but the CLI keeps its configuration, including a random install id, in its own config folder, and nothing else.
+
 ## Quickstart
 
 ```bash
-npx -y sentisense@0.63.1 health --base-url https://app.sentisense.ai
-npx -y sentisense@0.63.1 quote --base-url https://app.sentisense.ai NVDA
-npx -y sentisense@0.63.1 sentiment --base-url https://app.sentisense.ai TSLA --days 30
-npx -y sentisense@0.63.1 mood --base-url https://app.sentisense.ai --json
+npx -y sentisense@0.66.0 health --base-url https://app.sentisense.ai
+npx -y sentisense@0.66.0 quote --base-url https://app.sentisense.ai NVDA
+npx -y sentisense@0.66.0 sentiment --base-url https://app.sentisense.ai TSLA --days 30
+npx -y sentisense@0.66.0 mood --base-url https://app.sentisense.ai --json
 ```
 
 Auth: set `SENTISENSE_API_KEY` in the environment; commands read it directly, without a secret in argv.
-In version 0.63.1, saving a key with `auth` accepts it as a positional argument, not an environment-input option.
+In version 0.66.0, saving a key with `auth` accepts it as a positional argument, not an environment-input option.
 Prefer the environment path and skip key persistence. An argument-free `auth` inspects the resolved configuration;
 it does not save the environment key. `health` confirms reachability, key validity, and latency in one call.
 
+No key yet? `npx -y sentisense@0.66.0 init` prints a temporary one and a link the user opens to keep it.
+
 The permission block describes the REST fallback, which needs no shell or file writes.
-Explicit CLI use downloads and executes a package and may use the package manager's local cache as disclosed above.
+Explicit CLI use downloads and executes a package, and npx keeps the downloaded package in npm's own cache folder, outside your project.
 Every data command in this file sets `--base-url https://app.sentisense.ai` explicitly, overriding stored or environment base settings.
 Keep that flag when adapting examples; never send the key to another origin.
 
@@ -85,8 +89,9 @@ export SENTISENSE_AGENT_NAME=my-research-bot # what your agent is called
 | `flows [ticker]` | Institutional 13F flows, or one ticker's holders |
 | `options <ticker>` | End-of-day options positioning |
 | `screen --filter ...` | Filter the tracked universe on Score, analyst, technical, price and end-of-day options fields |
+| `init [--new] [--json]` | A temporary key with no signup, printed as `SENTISENSE_API_KEY=<key>` with a link the user opens to keep it. Writes nothing into your project; it keeps a random install id in its own config folder. `--new` asks for a fresh key when one is already configured; `--json` returns the key, link, expiry and limits. Needs CLI 0.66.0 or later |
 
-Run `npx -y sentisense@0.63.1 --help` for the full list, and `help <command>` for flags and
+Run `npx -y sentisense@0.66.0 --help` for the full list, and `help <command>` for flags and
 copy-paste examples. The help is the reference: every example in it runs as written.
 
 ## Output modes: which one to use
@@ -108,20 +113,20 @@ limits apart: the per-minute limit says how many seconds to wait, while a used-u
 allowance says it resets at the start of next month and links pricing, so do not retry it.
 
 ```bash
-npx -y sentisense@0.63.1 insiders --base-url https://app.sentisense.ai "$TICKER" || echo "exit $? tells you which way it failed"
+npx -y sentisense@0.66.0 insiders --base-url https://app.sentisense.ai "$TICKER" || echo "exit $? tells you which way it failed"
 ```
 
 ## Scripting patterns
 
 ```bash
 # One call, several tickers
-npx -y sentisense@0.63.1 quote --base-url https://app.sentisense.ai NVDA AMD AVGO
+npx -y sentisense@0.66.0 quote --base-url https://app.sentisense.ai NVDA AMD AVGO
 
 # Feed a field into another tool
-npx -y sentisense@0.63.1 quote --base-url https://app.sentisense.ai NVDA --json | jq .changePercent
+npx -y sentisense@0.66.0 quote --base-url https://app.sentisense.ai NVDA --json | jq .changePercent
 
 # Screen, then inspect the top hit
-npx -y sentisense@0.63.1 screen --base-url https://app.sentisense.ai --filter SENTI_SCORE_7D:GTE:13 --limit 5
+npx -y sentisense@0.66.0 screen --base-url https://app.sentisense.ai --filter SENTI_SCORE_7D:GTE:13 --limit 5
 ```
 
 ## Without the CLI
