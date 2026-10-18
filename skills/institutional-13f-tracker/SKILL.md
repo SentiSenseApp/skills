@@ -4,7 +4,7 @@ description: "13F institutional ownership tracker: quarterly hedge fund and mutu
 license: MIT
 metadata:
   homepage: https://sentisense.ai
-  requires_env: SENTISENSE_API_KEY
+  optional_env: SENTISENSE_API_KEY
 ---
 # Institutional 13F Tracker (SentiSense)
 
@@ -36,7 +36,7 @@ Do not use it for order entry, portfolio management, or personalized advice. It 
 
 ## Prerequisites
 
-- A free `SENTISENSE_API_KEY`. Get one at https://app.sentisense.ai/get-api-key. Required on every call; anonymous requests return `401 api_key_required`.
+- A free `SENTISENSE_API_KEY`. Get one at https://app.sentisense.ai/get-api-key. Required on every call; anonymous requests return `401 api_key_required`. No key yet? Follow "No key yet" in the `0-sentisense-onboarding` skill: one POST returns a temporary free key the agent can use right away and a link the user opens to keep it.
 - Any HTTP client. Plain `curl` works, or Python 3.8+ using only the standard library. On macOS python.org installs can raise `CERTIFICATE_VERIFY_FAILED`: run `Install Certificates.command`, use the system `/usr/bin/python3`, or use `curl`.
 - Network access to `https://app.sentisense.ai`.
 - Read-only scope. Every endpoint here is a GET.

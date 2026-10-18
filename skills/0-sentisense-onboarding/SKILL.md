@@ -4,7 +4,7 @@ description: "Read first when using any SentiSense stock market skill: API key s
 license: MIT
 metadata:
   homepage: https://sentisense.ai
-  requires_env: SENTISENSE_API_KEY
+  optional_env: SENTISENSE_API_KEY
 ---
 
 # SentiSense Skills: Start Here

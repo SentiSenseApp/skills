@@ -4,7 +4,7 @@ description: "Track Wall Street analyst ratings and price targets: who covers a 
 license: MIT
 metadata:
   homepage: https://sentisense.ai
-  requires_env: SENTISENSE_API_KEY
+  optional_env: SENTISENSE_API_KEY
 ---
 # Analyst Ratings Tracker (SentiSense)
 
@@ -40,7 +40,7 @@ Do not use it for order entry, portfolio management, or personalized advice. It 
 
 ## Prerequisites
 
-- A free `SENTISENSE_API_KEY`. Get one at https://app.sentisense.ai/get-api-key. Send it on every REST call as the `X-SentiSense-API-Key` header (`curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" ...`). A call without it: a request without a valid key gets at most a shaped crawler-facing preview slice, never the dataset, and that fallback is not a contract you can build on.
+- A free `SENTISENSE_API_KEY`. Get one at https://app.sentisense.ai/get-api-key. Send it on every REST call as the `X-SentiSense-API-Key` header (`curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" ...`). A call without it: a request without a valid key gets at most a shaped crawler-facing preview slice, never the dataset, and that fallback is not a contract you can build on. No key yet? Follow "No key yet" in the `0-sentisense-onboarding` skill: one POST returns a temporary free key the agent can use right away and a link the user opens to keep it.
 - Any HTTP client. Plain `curl` works, or Python 3.8+ using only the standard library.
 - Network access to `https://app.sentisense.ai`.
 - Read-only scope. Every endpoint here is a GET. Nothing this skill does can place a trade, move money, or modify account state.

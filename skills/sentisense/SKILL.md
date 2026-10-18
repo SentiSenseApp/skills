@@ -4,7 +4,7 @@ description: "US stock market data API for AI agents: news and social sentiment,
 license: MIT
 metadata:
   homepage: https://sentisense.ai
-  requires_env: SENTISENSE_API_KEY
+  optional_env: SENTISENSE_API_KEY
 ---
 
 # SentiSense API - Skill File for AI Agents

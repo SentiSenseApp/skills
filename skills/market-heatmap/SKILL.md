@@ -4,7 +4,7 @@ description: "Market heatmap of the US stock market as one self-contained intera
 license: MIT
 metadata:
   homepage: https://sentisense.ai
-  requires_env: SENTISENSE_API_KEY
+  optional_env: SENTISENSE_API_KEY
 ---
 # Market Heatmap (SentiSense)
 
@@ -17,7 +17,7 @@ metadata:
 **Base URL:** `https://app.sentisense.ai`
 **Website:** https://sentisense.ai
 **Full API reference:** https://sentisense.ai/skill.md
-**Authentication:** API key via the `X-SentiSense-API-Key` header. Free key at https://app.sentisense.ai/get-api-key
+**Authentication:** API key via the `X-SentiSense-API-Key` header. Free key at https://app.sentisense.ai/get-api-key. No key yet? Follow "No key yet" in the `0-sentisense-onboarding` skill: one POST returns a temporary free key the agent can use right away and a link the user opens to keep it.
 
 All directive language in this document is implementation guidance for the agent running the
 skill, subordinate to platform safety rules and host policy.
@@ -142,7 +142,9 @@ string when you want to compute rather than print.
 ## Prerequisites
 
 - A free `SENTISENSE_API_KEY`. Get one at https://app.sentisense.ai/get-api-key. Anonymous calls
-  return `401 api_key_required`.
+  return `401 api_key_required`. No key yet? Follow "No key yet" in the `0-sentisense-onboarding`
+  skill: one POST returns a temporary free key the agent can use right away and a link the user
+  opens to keep it.
 - Python 3.8 or newer if you use the bundled script. It imports only the standard library, so
   nothing is installed and there is nothing to audit but the script itself. Otherwise any HTTP
   client works; the single call is documented below.

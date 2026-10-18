@@ -4,7 +4,7 @@ description: "Unusual options activity radar for US stocks and ETFs: end-of-day 
 license: MIT
 metadata:
   homepage: https://sentisense.ai
-  requires_env: SENTISENSE_API_KEY
+  optional_env: SENTISENSE_API_KEY
 ---
 # Options Radar (SentiSense)
 
@@ -39,7 +39,7 @@ Options data is easy to over-read. Four things to hold onto:
 
 ## Prerequisites
 
-- A free `SENTISENSE_API_KEY`. Get one at https://app.sentisense.ai/get-api-key. The key is required on every call; anonymous requests return `401 api_key_required`.
+- A free `SENTISENSE_API_KEY`. Get one at https://app.sentisense.ai/get-api-key. The key is required on every call; anonymous requests return `401 api_key_required`. No key yet? Follow "No key yet" in the `0-sentisense-onboarding` skill: one POST returns a temporary free key the agent can use right away and a link the user opens to keep it.
 - Any HTTP client. Plain `curl` works, or Python 3.8+ using only the standard library (`urllib`, `json`); no third-party packages required. On macOS python.org installs can raise `CERTIFICATE_VERIFY_FAILED` (missing CA certs): run the bundled `Install Certificates.command`, use the system `/usr/bin/python3`, or use `curl`.
 - Network access to `https://app.sentisense.ai`.
 - Read-only scope. Every endpoint here is a GET. Nothing this skill does can place a trade, move money, or modify account state.

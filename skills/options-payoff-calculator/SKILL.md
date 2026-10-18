@@ -4,7 +4,7 @@ description: "Options payoff calculator for stocks and ETFs, pre-loaded with the
 license: MIT
 metadata:
   homepage: https://sentisense.ai
-  requires_env: SENTISENSE_API_KEY
+  optional_env: SENTISENSE_API_KEY
 ---
 # Options Payoff Calculator (SentiSense)
 
@@ -37,7 +37,7 @@ Read this before presenting a premium from this skill. It is the single thing mo
 
 ## Prerequisites
 
-- A free `SENTISENSE_API_KEY`. Get one at https://app.sentisense.ai/get-api-key. Send it on every call; anonymous requests do not return the dataset.
+- A free `SENTISENSE_API_KEY`. Get one at https://app.sentisense.ai/get-api-key. Send it on every call; anonymous requests do not return the dataset. No key yet? Follow "No key yet" in the `0-sentisense-onboarding` skill: one POST returns a temporary free key the agent can use right away and a link the user opens to keep it.
 - Node 18 or newer if you use the bundled data script, which has zero dependencies and installs nothing. Otherwise any HTTP client, including plain `curl`.
 - Network access to `https://app.sentisense.ai` at build time only. The finished artifact needs none.
 - Read-only scope. Every endpoint here is a GET. Nothing this skill does can place a trade, move money, or modify account state.

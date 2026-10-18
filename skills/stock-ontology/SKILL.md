@@ -4,7 +4,7 @@ description: "Company knowledge graph for AI agents: resolve the people and prod
 license: MIT
 metadata:
   homepage: https://sentisense.ai
-  requires_env: SENTISENSE_API_KEY
+  optional_env: SENTISENSE_API_KEY
 ---
 # Stock Ontology (SentiSense)
 
@@ -30,7 +30,7 @@ This skill resolves names and follows the entity set attached to one ticker. It 
 
 ## Prerequisites
 
-- A free `SENTISENSE_API_KEY`. Get one at https://app.sentisense.ai/get-api-key. Send it on every REST call as the `X-SentiSense-API-Key` header.
+- A free `SENTISENSE_API_KEY`. Get one at https://app.sentisense.ai/get-api-key. Send it on every REST call as the `X-SentiSense-API-Key` header. No key yet? Follow "No key yet" in the `0-sentisense-onboarding` skill: one POST returns a temporary free key the agent can use right away and a link the user opens to keep it.
 - Any HTTPS client. Plain `curl` works.
 - Network access to `https://app.sentisense.ai`.
 - Read-only scope. Every endpoint in this skill is a GET.

@@ -4,7 +4,7 @@ description: "Build a stock market dashboard as a single self-contained HTML fil
 license: MIT
 metadata:
   homepage: https://sentisense.ai
-  requires_env: SENTISENSE_API_KEY
+  optional_env: SENTISENSE_API_KEY
 ---
 
 # Market Dashboard: build a real one as a single HTML file
@@ -19,7 +19,7 @@ metadata:
 **Base URL:** `https://app.sentisense.ai`
 **Website:** https://sentisense.ai
 **Full API reference:** https://sentisense.ai/skill.md
-**Authentication:** API key via `X-SentiSense-API-Key` header. Get a free key at https://app.sentisense.ai/get-api-key
+**Authentication:** API key via `X-SentiSense-API-Key` header. Get a free key at https://app.sentisense.ai/get-api-key. No key yet? Follow "No key yet" in the `0-sentisense-onboarding` skill: one POST returns a temporary free key the agent can use right away and a link the user opens to keep it.
 
 ## Permissions
 

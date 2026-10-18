@@ -4,7 +4,7 @@ description: "Stock screener for US stocks and ETFs: screen stocks in plain lang
 license: MIT
 metadata:
   homepage: https://sentisense.ai
-  requires_env: SENTISENSE_API_KEY
+  optional_env: SENTISENSE_API_KEY
 ---
 # Stock Screener (SentiSense)
 
@@ -27,7 +27,7 @@ Not this skill: single-ticker deep dives (`stock-sentiment`, `stocks-analysis`; 
 
 ## Prerequisites
 
-- A free `SENTISENSE_API_KEY`. Get one at https://app.sentisense.ai/get-api-key. The key is required on every call; anonymous requests return `401 api_key_required`.
+- A free `SENTISENSE_API_KEY`. Get one at https://app.sentisense.ai/get-api-key. The key is required on every call; anonymous requests return `401 api_key_required`. No key yet? Follow "No key yet" in the `0-sentisense-onboarding` skill: one POST returns a temporary free key the agent can use right away and a link the user opens to keep it.
 - Any HTTP client.
 - Read-only scope: everything here is a `GET` or a filter-only `POST`. Nothing this skill does can place a trade, move money, or modify account state.
 

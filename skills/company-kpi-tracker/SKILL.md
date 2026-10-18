@@ -4,7 +4,7 @@ description: "Track company KPIs from earnings filings: segment and product reve
 license: MIT
 metadata:
   homepage: https://sentisense.ai
-  requires_env: SENTISENSE_API_KEY
+  optional_env: SENTISENSE_API_KEY
 ---
 # Company KPI Tracker (SentiSense)
 
@@ -44,7 +44,7 @@ Not this skill: today's stock price, order entry, portfolio management, internal
 
 ## Prerequisites
 
-- A free `SENTISENSE_API_KEY`. Get one at https://app.sentisense.ai/get-api-key. Send it on every REST call as the `X-SentiSense-API-Key` header (`curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" ...`). A call with no key returns `401 api_key_required`.
+- A free `SENTISENSE_API_KEY`. Get one at https://app.sentisense.ai/get-api-key. Send it on every REST call as the `X-SentiSense-API-Key` header (`curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" ...`). A call with no key returns `401 api_key_required`. No key yet? Follow "No key yet" in the `0-sentisense-onboarding` skill: one POST returns a temporary free key the agent can use right away and a link the user opens to keep it.
 - Any HTTP client. Plain `curl` works, or Python 3.8+ using only the standard library.
 - Network access to `https://app.sentisense.ai`.
 - Read-only scope. Every endpoint here is a GET. Nothing this skill does can place a trade, move money, or modify account state.

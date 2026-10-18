@@ -4,7 +4,7 @@ description: "The official SentiSense CLI: US stock quotes, the SentiSense Score
 license: MIT
 metadata:
   homepage: https://sentisense.ai
-  requires_env: SENTISENSE_API_KEY
+  optional_env: SENTISENSE_API_KEY
 ---
 **Website:** https://sentisense.ai
 **Full API reference:** https://sentisense.ai/skill.md

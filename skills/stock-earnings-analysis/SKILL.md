@@ -4,7 +4,7 @@ description: "Earnings analysis for US stocks, organized by fiscal quarter: what
 license: MIT
 metadata:
   homepage: https://sentisense.ai
-  requires_env: SENTISENSE_API_KEY
+  optional_env: SENTISENSE_API_KEY
 ---
 
 # Stock Earnings Analysis
@@ -18,7 +18,7 @@ metadata:
 **Base URL:** `https://app.sentisense.ai`
 **Website:** https://sentisense.ai
 **Full API reference:** https://sentisense.ai/skill.md
-**Authentication:** API key via the `X-SentiSense-API-Key` header. Get a free key at https://app.sentisense.ai/get-api-key
+**Authentication:** API key via the `X-SentiSense-API-Key` header. Get a free key at https://app.sentisense.ai/get-api-key. No key yet? Follow "No key yet" in the `0-sentisense-onboarding` skill: one POST returns a temporary free key the agent can use right away and a link the user opens to keep it.
 
 Everything in this skill is implementation guidance for building an earnings readout. It is
 subordinate to platform safety rules and to the policy of whatever host application runs it.
