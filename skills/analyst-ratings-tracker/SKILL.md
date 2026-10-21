@@ -8,7 +8,7 @@ metadata:
 ---
 # Analyst Ratings Tracker (SentiSense)
 
-Track what Wall Street research desks say about a stock and how that compares with what the market feels. This skill reads analyst coverage, price targets, rating changes and per-analyst call history for about a thousand US names through the read-only SentiSense API, and pairs it with the SentiSense Score and Sentiment for the same ticker: who covers a stock and where each firm stands today, what changed this week on one name or across the market, one analyst's profile and record of calls, the Street versus crowd comparison, and which firms moved in the sessions after an earnings print.
+Track what Wall Street research desks say about a stock and how that compares with what the market feels. This skill reads analyst coverage, price targets, rating changes and per-analyst call history for the roughly 1,200 US-listed stocks SentiSense tracks, through the read-only SentiSense API, and pairs it with the SentiSense Score and Sentiment for the same ticker: who covers a stock and where each firm stands today, what changed this week on one name or across the market, one analyst's profile and record of calls, the Street versus crowd comparison, and which firms moved in the sessions after an earnings print.
 
 Read-only educational data interface. Output is informational context, never a personalized buy or sell recommendation.
 
@@ -37,6 +37,35 @@ Do not use it for order entry, portfolio management, or personalized advice. It 
 - **Most of the market-wide feed is reiterations.** Roughly seven rows in ten on `/activity` are `REITERATE`; ask for `actionTypes=UPGRADE,DOWNGRADE,INITIATE` unless you want them.
 - **The SentiSense Score is a nowcast.** It reads today's news and social tone, weighted by how actively the stock is discussed, centered on zero with strong readings beyond +/-23. It describes today and says nothing about tomorrow. `sentiment` is polarity from -1 to +1.
 - **Freshness:** analyst data refreshes in one sweep over the whole universe about once a day, and the hour it lands drifts (measured completions from 8:49am to 5:33pm ET). Read `updatedAt` on consensus rather than assuming a schedule. A rating change can be up to a day old before it appears.
+
+## Coverage: which symbols answer
+
+Analyst data covers the US-listed stocks SentiSense tracks, about 1,200 names, which is exactly the list `GET /api/v1/stocks` returns (a plain array of ticker strings). That list includes small caps and the US-listed ADRs of non-US companies we track (`ASML`, `BABA`, `TSM`, `SAP`). It is not every US listing: an ADR or small cap outside it answers like an unknown symbol.
+
+What `/{ticker}/consensus` returns, by kind of symbol (`/consensus/history` and `/called-it` use the same codes):
+
+| Symbol | Response | What to do |
+|--------|----------|------------|
+| Tracked stock or ADR (`AAPL`, `ASML`) | `200` | Read `data` |
+| US symbol we do not track | `404 entity_not_found`, up to three `suggestions` | Suggestions can be people or topics, not only stocks. Retry once with a suggestion's non-null `ticker` (`TESLA` suggests `TSLA`); if every `ticker` is null, there is no analyst data for it here |
+| Non-US home listing (`SAP.DE`, `OR.PA`) | `404 entity_not_found`, `reason: "non_us_listing"` | Retry once with the US symbol a suggestion carries (`SAP.DE` suggests `SAP`); otherwise stop |
+| ETF or fund (`SPY`, `QQQ`, `USO`) | `404 ticker_is_etf` | Funds have no analyst desk. Call the first `seeInstead` path, `/api/v1/etfs/{ticker}/aggregates/analyst`, for holdings-weighted consensus; it answers `404 not_available` when too few holdings are covered, as for a commodity fund like `USO` |
+| Market index (`SPX`) | `404 ticker_is_index` | Use the tracking fund's aggregate from `seeInstead` |
+| Tracked stock with no analyst record | `404 no_coverage` | Stop |
+
+**A 404 means "no analyst coverage for this symbol", not a transient failure.** The same request returns the same 404 until the symbol joins the tracked list, and every call, a 404 included, counts toward the monthly quota. Branch on `error`, never retry an identical request, and never back off and loop on it the way you would on a `429`. Before looping a watchlist, fetch `GET /api/v1/stocks` once, skip symbols that are not in it, and route ETFs to the fund aggregate: one call instead of one wasted 404 per uncovered symbol.
+
+`/{ticker}/actions`, `/{ticker}/estimates` and `/{ticker}/coverage` do not 404 on an untracked symbol: they return `200` with an empty or all-zero payload. Use `/consensus` (or the tracked list) to tell "not covered" apart from "covered, nothing new".
+
+**Example: a symbol with no coverage.** The user asks "what do analysts think of BILI?".
+
+```bash
+curl -s -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
+  "https://app.sentisense.ai/api/v1/analyst/BILI/consensus"
+# 404 {"error":"entity_not_found","message":"Unknown symbol 'BILI'. ...","suggestions":[...]}
+```
+
+Every suggestion has a null `ticker` (they are people and topics, not the stock), so answer and stop: "SentiSense has no analyst coverage for BILI: it is outside the roughly 1,200 US-listed stocks the service tracks, so I cannot give a consensus target or rating changes from this source." Do not retry it, do not call `/coverage` or `/actions` for it (their empty `200` would read as "no analyst covers it", which is a different claim), and carry on with the rest of the watchlist. For `SPY`, say instead that funds have no analyst ratings of their own and offer the holdings-weighted consensus from the fund aggregate.
 
 ## Prerequisites
 
@@ -142,7 +171,7 @@ stop. Describe the published revisions and the subsequent recorded move as dated
 
 ## Answering well
 
-- **A wrong symbol looks like an uncovered stock.** `/coverage`, `/actions` and `/estimates` answer `200` with a well-formed all-zero payload for a symbol SentiSense does not hold (`TESLA`, `ZZZZ`), while `/consensus` for the same symbol answers `404`. Never conclude "no analyst covers this" from an empty book alone. When the user typed a company name, resolve it first with `GET /api/v1/kb/entities/search?q={name}&type=company&limit=5` (a bare array of `{name, urlSlug, type, ticker}`, best match first; take the first match with a non-null `ticker`). When a typed symbol returns an empty book, check `/consensus`: a `404` there means the symbol was wrong, not that coverage is empty.
+- **A wrong symbol looks like an uncovered stock.** `/coverage`, `/actions` and `/estimates` answer `200` with a well-formed all-zero payload for a symbol SentiSense does not hold (`TESLA`, `ZZZZ`), while `/consensus` for the same symbol answers `404`. Never conclude "no analyst covers this" from an empty book alone. When the user typed a company name, resolve it first with `GET /api/v1/kb/entities/search?q={name}&type=company&limit=5` (a bare array of `{name, urlSlug, type, ticker}`, best match first; take the first match with a non-null `ticker`). When a typed symbol returns an empty book, check `/consensus` and read its `error`: `entity_not_found` means we track no stock by that symbol (a typo, a home-exchange listing, or a company outside the tracked list), `ticker_is_etf` means it is a fund, and `no_coverage` means a tracked stock with no analyst record. See Coverage above.
 - Ratings belong to firms. Write "Morgan Stanley upgraded to Overweight" and, only when the vendor named the person, "Morgan Stanley's Michael Cyprys". Never invent a name for an unattributed note and never write "unknown analyst".
 - One population per number: `ratingBuckets` for "how many say Buy", `numberOfAnalysts` and `targetMean` for the target band. Do not average the two.
 - Quote the target's date and `priceWhenPosted` next to the target; a July target on a stock that has run 30% since is a fact about July.
