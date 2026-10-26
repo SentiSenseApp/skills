@@ -596,10 +596,10 @@ Time series metrics for stocks and entities: mentions, sentiment, social dominan
 
 Which handle to store: the `urlSlug`, or the ticker for a listed company. It is the only identifier these paths accept. Internal KB ids, in any spelling (`kb/person/65`, `kb-person-65`, `p65`), are not part of the public API and resolve to nothing. If a rename ever breaks a stored handle, find the entity again by name with `GET /api/v1/kb/entities/search?q=`.
 
-Every metric type (`mentions`, `sentiment`, `sentisense`, `social_dominance`, `sentisense_rating`, `app_review_count`, `app_rating`) is available on the Free tier: no PRO subscription needed. All metrics endpoints are **Quota-gated**: an API key is required and each request counts against your monthly quota (Free: 1,000 requests/month; PRO: no monthly cap). Per-minute rate limits apply on every tier.
+Every metric type (`mentions`, `sentiment`, `sentisense`, `social_dominance`, `sentisense_rating`, `app_review_count`, `app_rating`, `app_all_ratings_count`, `app_all_ratings_avg`) is available on the Free tier: no PRO subscription needed. All metrics endpoints are **Quota-gated**: an API key is required and each request counts against your monthly quota (Free: 1,000 requests/month; PRO: no monthly cap). Per-minute rate limits apply on every tier.
 
 ### GET /api/v2/metrics/entity/{entityId}/metric/{metricType}
-Time series metric data for a stock or entity. **Quota-gated** -- all metric types (`mentions`, `sentiment`, `sentisense`, `social_dominance`, `sentisense_rating`, `app_review_count`, `app_rating`) are available on the Free tier. `sentisense_rating` is stocks-only and its `value` is the daily Rating score, 0 to 100, which is the number the letter is banded from and not the percentile; see the SentiSense Rating API section below.
+Time series metric data for a stock or entity. **Quota-gated** -- all metric types (`mentions`, `sentiment`, `sentisense`, `social_dominance`, `sentisense_rating`, `app_review_count`, `app_rating`, `app_all_ratings_count`, `app_all_ratings_avg`) are available on the Free tier. `sentisense_rating` is stocks-only and its `value` is the daily Rating score, 0 to 100, which is the number the letter is banded from and not the percentile; see the SentiSense Rating API section below.
 
 What each metric type means:
 
@@ -608,15 +608,17 @@ What each metric type means:
 - `sentiment` -- mean polarity of those documents, a float in [-1, 1], unweighted by volume and therefore thin-sample sensitive. Use it for raw tone, or with `mean-by/source` for per-source tone.
 - `social_dominance` -- the entity's share of the day's total conversation.
 - `sentisense_rating` -- the daily Rating score, 0 to 100 (not the percentile). Stocks only.
-- `app_review_count` -- count of new Apple App Store reviews for a product's iOS app that day. Products only, and only those with a tracked app.
-- `app_rating` -- mean star rating (1 to 5) of that day's new App Store reviews. Same coverage as `app_review_count`.
+- `app_review_count` -- count of new written Apple App Store reviews for a product's iOS app that day. Products only, and only those with a tracked app. Pass the product's slug: a stock ticker, or a product with no tracked app, returns `200` with an empty array. Find the slug with `GET /api/v1/kb/entities/search?q={name}&type=product` or the `PRODUCT` rows of `GET /api/v1/stocks/{ticker}/entities`.
+- `app_rating` -- mean star rating (1 to 5) of that day's new written reviews, which skew lower than all ratings. Same coverage as `app_review_count`. Over a range, weight each day by `app_review_count`; a day with only a handful of reviews says little.
+- `app_all_ratings_count` -- new App Store ratings, star-only and written together, derived from changes in the store's public rating counts; written reviews (`app_review_count`) are a small share of them. One change is split evenly over the days it covers, so consecutive days can carry the same count and the same `app_all_ratings_avg`: a single day is not a measured day. Sum or count-weight over a window and compare periods, not adjacent days. The series ends the day before the latest review day and is absent where the store showed no net new ratings or its totals fell. Same coverage.
+- `app_all_ratings_avg` -- mean star rating (1 to 5) of those new ratings. Same absence and splitting rules. Over a range, weight each day by `app_all_ratings_count` for the period average.
 
-**From 2026-09-05, `mentions` no longer includes App Store reviews.** A review is a rating, not chatter, and for review-heavy products the two used to read as one number. The App Store slice itself is unchanged and still appears under `distribution/mentions?dimension=source`; only the root `mentions` total stopped summing it. Read review volume from `app_review_count` instead, and expect a step down in the root series around that date for products with an app (history has been restated, so a long window should be continuous).
+**`mentions` excludes App Store reviews, from both the root total and `distribution/mentions?dimension=source`.** A review is a rating, not chatter. The source distribution renormalizes the visible mention-eligible sources to about 100% when volume is positive; headline mentions also includes inputs with no public source slice. Read written-review volume from `app_review_count` and their mean stars from `app_rating`; review tone still counts toward `sentiment` and `sentisense`.
 
 | Param | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `entityId` | path | Yes | - | Stock ticker (e.g., `AAPL`) or entity `urlSlug` (e.g., `Nancy-Pelosi`) |
-| `metricType` | path | Yes | - | `mentions`, `sentiment`, `sentisense`, `social_dominance`, `sentisense_rating`, `app_review_count`, `app_rating` |
+| `metricType` | path | Yes | - | `mentions`, `sentiment`, `sentisense`, `social_dominance`, `sentisense_rating`, `app_review_count`, `app_rating`, `app_all_ratings_count`, `app_all_ratings_avg` |
 | `startTime` | long | No | 7 days ago | Epoch milliseconds |
 | `endTime` | long | No | now | Epoch milliseconds |
 | `maxDataPoints` | int | No | - | Return at most N of the window's points, unmerged, in ascending order, evenly spaced back from the latest point, which is always included. It caps the points and does not set the window, so pair it with `startTime` |
