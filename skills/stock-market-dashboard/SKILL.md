@@ -325,6 +325,8 @@ with unconfirmed dates, an options radar built from one session's chains.
   46-55 Neutral, 56-70 Optimism, 71-85 Greed, 86-100 Extreme Greed.
 - **Risk Appetite is inverse VIX.** A *high* value means a calm, risk-on market. This one reads
   backwards from what people expect, so label it in the tooltip.
+- **Social Momentum and Options Flow describe the previous session** (a Monday row describes
+  Friday); the other four signals describe the row's own date. Say so when they diverge from them.
 - **Analyst counts do not reconcile, and that is correct.** The price-target population and the
   buy/hold/sell survey are different samples. Report "58 analysts" against the target band and
   "61 rated" against the distribution rather than forcing them to match. On a free-key preview

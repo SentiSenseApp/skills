@@ -207,10 +207,14 @@ quantitative spine, so fetch it first and let it set the shape of the brief.
 - **Risk Appetite (`key: fear_gauge`) reads backwards from expectation.** It is an inverse
   volatility gauge, so a *high* value means a calm, risk-on market. Label it when you use it or you
   will invert the month's story.
+- **Social Momentum (`key: social_momentum`) and Options Flow (`key: options_flow`) describe the
+  previous session** (a Monday row describes Friday), so label them that way and leave them out of
+  the "moved with it" list for the row's own date.
 - **History skips weekends.** A 30-day request returns roughly 20 points, and weekends are
   absent by construction rather than missing. Do not interpolate across them and do not report "20
-  of 30 days" as a data gap. Market holidays are not removed: a weekday holiday such as Labor Day
-  can carry a reading of its own. Keep such a row only if you label it as a holiday reading.
+  of 30 days" as a data gap. A day whose price signals were not all available is not written
+  either, so the newest point can be the previous session's. Exchange holidays are not written
+  either: Labor Day has no row.
 
 For theme indexes, call `GET /api/v1/indexes` for the live list rather than hardcoding ids, then
 pull history for the ones relevant to the month. **Read each index's `scale` field instead of
@@ -394,8 +398,7 @@ as a research report with an agenda.
 Say these where they apply rather than burying them all in a footnote.
 
 - **Market Mood is a daily composite on weekdays**, computed from the latest analytical batch. It
-  is not a real-time tick. No value exists for a weekend; a weekday market holiday can still carry
-  one.
+  is not a real-time tick. No value exists for a weekend or an exchange holiday.
 - **Story clusters are AI-generated groupings with AI-written titles.** `brokeAt` is when the story
   broke and `clusteredAt` is when it was clustered; they can differ by hours. Date by `brokeAt`
   with `clusteredAt` as the fallback, the same rule as the fetch step.
