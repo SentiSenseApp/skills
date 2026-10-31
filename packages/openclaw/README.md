@@ -4,7 +4,7 @@ Every SentiSense market-data skill in a single install. Ask your agent about a s
 real prices, real filings, and real positioning data, with one free API key covering every endpoint.
 
 ```
-openclaw plugins install clawhub:@sentisenseapp/stock-analysis
+openclaw plugins install clawhub:stock-analysis
 ```
 
 ## Setup

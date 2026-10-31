@@ -24,17 +24,10 @@
     "ai-agent-skills"
   ],
   "type": "module",
-  "main": "./plugin.ts",
-  "exports": {
-    ".": "./plugin.ts"
-  },
   "peerDependencies": {
     "openclaw": ">=2026.4.5"
   },
   "openclaw": {
-    "extensions": [
-      "./plugin.ts"
-    ],
     "compat": {
       "pluginApi": ">=2026.4.5"
     },
