@@ -330,7 +330,7 @@ since the preview carries no skew, OI walls or unusual contracts.
 | E12 | Insider net 90d (buys/sells, $) | __    | last 90d            | batch     | D1   | SS /insider/trades |
 | E13 | Congressional net 90d           | __    | last 90d            | batch     | D1   | SS /politicians/filings |
 | E14 | 13F top-holder motion           | __    | quarter __          | quarterly | D1   | SS /institutional |
-| E15 | Analyst consensus band + label  | $__-$__ (mean $__, N) | as-of __ | batch | D1 | SS /analyst/consensus |
+| E15 | Analyst consensus band + label  | $__-$__ (mean $__, N) | as-of __ | batch | D1 | SS /analyst/{T}/consensus |
 | E16 | Next earnings date              | __    | confirmed? __       | point     | D1   | SS /calendar/earnings |
 | E17 | Market mood composite + sector  | __ (__) | as-of __          | batch     | D1   | SS /market-mood |
 | E18 | 10Y Treasury yield + 3m direction | __% (__) | as-of __       | daily     | P    | FRED DGS10 |
