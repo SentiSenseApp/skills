@@ -315,7 +315,7 @@ Call `GET /api/v1/calendar/earnings?week={this|next}` or use `?ticker={T}` for o
 Read `.data.earnings[]`, group by date, and show `earningsDate`, `earningsTime`, and `estimatedEps` when present.
 Map `before_open` to BMO, `after_close` to AMC, `during_market` to MID, and leave unknown sessions blank.
 Mark `confirmed:true`; projected dates remain explicitly unconfirmed.
-A calendar is forward-looking, not proof of what the company reported.
+Before a company reports, its row is a schedule with estimates, not proof of results; once it reports, `actualEps`, `actualRevenue`, `epsSurprisePct` and `revenueSurprisePct` carry the result (all null until then).
 Read the served window from `data.metadata.windowStart` and `windowEnd`; an empty window is not proof no report is scheduled.
 A Free key sees only the first Monday-to-Sunday week of the requested window (`isPreview: true`), while `totalCount` counts the full window.
 An empty preview with `totalCount > 0` means the report falls outside the free week, not that nothing is scheduled.
