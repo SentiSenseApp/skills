@@ -300,7 +300,13 @@ Read `isPreview` on every response and shape the output to what you actually rec
 top N), not the whole set. Label it ("top 3 of 15 reporters, free preview") and never infer
 absence from it.
 
-On the earnings analysis report, a FREE key receives **the latest quarter only, shaped rather than
+For the sample companies (TSLA, MSFT, NFLX, UBER, SPOT, ABNB, PYPL, COST, RDDT, DUOL and RBLX), a
+FREE key receives the full response instead, marked `sampleCompany: true` on the envelope (not on each quarter): every quarter within `limit`,
+with its body, plus `totalCount`. Each of those quarters also keeps the preview fields described
+below, beside the full data, so code written against the preview keeps working. Read the full
+fields first; the rules below are for the shaped quarter.
+
+For every other ticker, a FREE key receives **the latest quarter only, shaped rather than
 truncated**, plus `totalCount` of the quarters that exist. The shaped quarter carries
 `fiscalPeriod`, `reportDate` and `headline` in full, up to two `kpiHighlights` as `{label, value}`
 cards, `kpiHighlightCount` for how many the full quarter holds, `summaryTopics` and
@@ -321,7 +327,9 @@ no KPI history and no guidance language or figure.
   neither carries guidance language, or management said it gives none. It is a keyword check, so a
   call that only said "we expect" without naming a guide, outlook or forecast reads as false.
 - `guidanceDirection` is a keyword classification of the guidance language from that same source,
-  computed by the API. It is not management's own label, and PRO responses do not carry it at all.
+  computed by the API. It is not management's own label. PRO responses do not carry it; a sample
+  company's full response carries it when the API could read a direction and omits it otherwise, so
+  read the direction from the guidance text yourself when it is absent.
 
 Four rules follow, and they are the difference between an honest brief and a misleading one:
 
@@ -347,7 +355,8 @@ Four rules follow, and they are the difference between an honest brief and a mis
 - **State the history you did not get.** "Latest quarter only; `totalCount` quarters are available"
   is one line and it keeps a one-quarter view from reading as the whole record.
 
-Elsewhere: `what-changed` gives FREE the per-filing summary without `diff`, plus a
+Elsewhere (for non-sample tickers; the sample companies get full rows that keep these fields):
+`what-changed` gives FREE the per-filing summary without `diff`, plus a
 `materialityLabel` (`NO_MATERIAL_CHANGES` when the flag is set, otherwise `MAJOR_REWRITE` at a
 `materialityScore` of 0.6 or more, `NOTABLE_CHANGES` at 0.3 or more, else `MINOR`); `insights/stock`
 gives FREE the top 3; `stocks/{ticker}/kpis` gives FREE metadata with an empty `kpis` list.
@@ -381,7 +390,7 @@ how many calls you make.
 
 ### 1. Single-ticker deep readout
 
-The default. "Analyze the latest AAPL earnings", "how did NVDA's quarter go".
+The default. "Analyze the latest TSLA earnings", "how did MSFT's quarter go".
 
 0. If the user named the company rather than typing a symbol, resolve it through
    `kb/entities/search` first (see The fan-out); the calls below assume a canonical ticker.

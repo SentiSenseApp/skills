@@ -1,6 +1,6 @@
 ---
 name: company-kpi-tracker
-description: "Track company KPIs from earnings filings: segment and product revenue, deliveries, subscribers, unit sales and non-GAAP operating metrics. Show the latest reported fiscal period, filing citation, quarter-over-quarter and year-over-year changes, preliminary values and discontinued histories. Discover covered companies and available series, compare compatible metrics across a watchlist, and prepare the numbers to watch before earnings. Use for company KPIs, segment revenue, operating metrics, key metrics, non-GAAP metrics, iPhone revenue, AWS revenue, Tesla deliveries, subscriber counts, unit sales by quarter, KPI API, quarterly KPI growth, compare cloud revenue. Free discovers coverage and series; numeric history requires PRO. Read-only. No trading, no purchases, no write operations, no wallet access."
+description: "Track company KPIs from earnings filings: segment and product revenue, deliveries, subscribers, unit sales and non-GAAP operating metrics. Show the latest reported fiscal period, filing citation, quarter-over-quarter and year-over-year changes, preliminary values and discontinued histories. Discover covered companies and available series, compare compatible metrics across a watchlist, and prepare the numbers to watch before earnings. Use for company KPIs, segment revenue, operating metrics, key metrics, non-GAAP metrics, iPhone revenue, AWS revenue, Tesla deliveries, subscriber counts, unit sales by quarter, KPI API, quarterly KPI growth, compare cloud revenue. Free discovers coverage and series and returns full history for sample companies such as Tesla and Microsoft; other companies' numbers require PRO. Read-only. No trading, no purchases, no write operations, no wallet access."
 license: MIT
 metadata:
   homepage: https://sentisense.ai
@@ -37,7 +37,7 @@ Not this skill: today's stock price, order entry, portfolio management, internal
 - **Discontinued means the company stopped reporting.** When `discontinued` is true, show the last reported period and `discontinuedNote` as historical context, never carry the value forward or imply another print is due. Netflix's membership series end at Q4 2024 at 301,630,000 global paid memberships and belong in a history panel, not on a live card. Explain why only when the returned note or the cited source supplies a reason; otherwise give the cutoff and say plainly that the supplied data does not explain the decision. Describe the state from what the response actually returned, because one id can arrive in different states as curation lands: if NVIDIA's `gaming_revenue` comes back `discontinued: true` with a note naming a successor, give the last reported quarter and follow the note to that successor id; if it comes back live with a `sourceRef` stating the figure is computed from other lines, label it derived and use the name the response gives it. Either way, do not splice a discontinued line and its successor into one continuous series without a documented reconciliation of the two definitions. Absent that reconciliation, keep the histories separate.
 - **Read the name and the source, not just the id.** Use `id` to select a series, but describe it from `name` and `sourceRef`; when the source identifies a derived calculation, label it derived and do not rename it as a directly reported segment. An id is stable per company, so it can outlive the line it was created for, and there is no `isDerived` field to lean on.
 - **Provenance and estimates.** Print `sourceRef` as the series-level citation, flag every `isEstimate: true` value and any comparison using it, and do not claim that one citation independently verifies every historical observation. Two provenance classes sit side by side on the same ticker: company-reported operating and non-GAAP measures taken from earnings releases, and GAAP anchors such as `gross_profit`, `operating_income`, `diluted_eps` and `r_and_d`. Absent evidence of origin, the class is unknown rather than guessed, and a larger cost metric is not automatically an improvement.
-- **The free tier returns emptiness that is not zero.** On a preview response, report the company and available metadata, use `/kpis/types` for series names if needed, and say numeric history requires PRO; an empty `kpis` list or empty `values` never means zero business activity. Do not turn a paid empty response into an automatic upsell either: that one is a curation gap. The bundled helper answers a preview before it validates any requested series id, because a paid metric absent from a free response is unavailable, not unknown.
+- **The free tier returns emptiness that is not zero.** On a preview response, report the company and available metadata, use `/kpis/types` for series names if needed, and say numeric history for this company requires PRO (a free key reads full history only for the sample companies: TSLA, MSFT, NFLX, UBER, SPOT, ABNB, PYPL, COST, RDDT, DUOL and RBLX); an empty `kpis` list or empty `values` never means zero business activity. Do not turn a paid empty response into an automatic upsell either: that one is a curation gap. The bundled helper answers a preview before it validates any requested series id, because a paid metric absent from a free response is unavailable, not unknown.
 - **A 404 is coverage, not a business fact.** A KPI 404 means this endpoint has no curated KPIs for the supplied ticker; check the coverage list and identifier, then report the gap without concluding that the company is invalid or does not disclose operating metrics. A coverage entry with `kpiCount: 0` is curation in flight, not a set ready for numeric analysis. A fund answers with its own error code, because company KPIs describe operating companies.
 - **Dual-class tickers.** Keep the user's requested ticker visible, use the returned company identity for KPI attribution, and deduplicate only documented aliases: GOOG resolves to GOOGL and BRK-B to BRK.B, which does not license merging NWSA with NWS or FOXA with FOX. The secondary class may be missing from the coverage list while the series endpoint still resolves it, so a coverage-list miss must not reject a supported alias before normalization.
 - **Quarterly history is not current sentiment.** State the KPI period and the sentiment window separately; their disagreement is context, not proof of market mispricing or a reaction to the KPI announcement.
@@ -51,10 +51,10 @@ Not this skill: today's stock price, order entry, portfolio management, internal
 
 | Tier | Quota | Rate | KPI data |
 |------|-------|------|----------|
-| Free | 1,000 requests/month | 30 requests/min | coverage list and per-company series names; the series call returns company metadata with an empty `kpis` list |
+| Free | 1,000 requests/month | 30 requests/min | coverage list and per-company series names; the series call returns full history for the sample companies (TSLA, MSFT, NFLX, UBER, SPOT, ABNB, PYPL, COST, RDDT, DUOL and RBLX) and company metadata with an empty `kpis` list for every other company |
 | PRO ($15/mo) | Unlimited | 300 requests/min | every curated series with its full history |
 
-Coverage discovery and the per-company type list are Discovery tier: a key is required for identity, but neither call consumes the monthly quota, so a client can refresh the shape of its universe far more often than it fetches values. Only the series call is quota-gated and PRO-gated. Free answers "do you cover this company, and what does it report" in full; it does not answer "what were the numbers".
+Coverage discovery and the per-company type list are Discovery tier: a key is required for identity, but neither call consumes the monthly quota, so a client can refresh the shape of its universe far more often than it fetches values. Only the series call is quota-gated and PRO-gated (free for the sample companies). Free answers "do you cover this company, and what does it report" in full, and returns the numbers for the sample companies (TSLA, MSFT, NFLX, UBER, SPOT, ABNB, PYPL, COST, RDDT, DUOL and RBLX; the response carries `sampleCompany: true`). For any other company it does not answer "what were the numbers".
 
 ## Permissions
 
@@ -76,16 +76,16 @@ Coverage discovery and the per-company type list are Discovery tier: a key is re
 ```bash
 python3 scripts/kpi_table.py TSLA --series vehicle_deliveries,energy_storage_deployed
 python3 scripts/kpi_table.py AMZN --json
-python3 scripts/kpi_table.py AAPL --stdin < saved_response.json
+python3 scripts/kpi_table.py TSLA --stdin < saved_response.json
 ```
 
 `--series` is client-side; an unknown id lists the ids the response actually carried and exits non-zero. `--json` prints the same analysis as machine-readable text on stdout, including the reason whenever a delta is unavailable. Integral values are JSON numbers; fractional values are exact decimal strings, so nothing is rounded in transit. `--stdin` reads a saved response instead of calling the API, which is how the bundled fixture tests run with no network. The script treats every string in a response as display text, replaces every control character including newlines and tabs before printing so response prose cannot forge a row, and never fetches a URL it found in a response. It rejects non-finite values such as `NaN` and `Infinity` rather than formatting them, counts what it rejected, waits exactly the delay a `429` declares in `Retry-After` and stops with a retry time when that delay exceeds 60 seconds, and names a discovery response piped in by mistake instead of failing on its shape. Run its tests with `python3 scripts/test_kpi_table.py`.
 
 ## Endpoints
 
-- **`GET /api/v1/stocks/with-kpis`** : the whole covered universe, alphabetical. Root-level `count` and `tickers`, each entry `{ ticker, companyName, lastUpdated, kpiCount }`. Key required, no quota cost. Cache it for a day.
+- **`GET /api/v1/stocks/with-kpis`** : the whole covered universe, alphabetical. Root-level `count` and `tickers`, each entry `{ ticker, companyName, lastUpdated, kpiCount }` plus `sampleCompany: true` on the sample companies. Key required, no quota cost. Cache it for a day.
 - **`GET /api/v1/stocks/{ticker}/kpis/types`** : one company's metric list as a bare array of `{ id, name, category, chartType }`. Key required, no quota cost. Free reads this in full, which is what makes discovery a complete answer on a free key. `404` when the ticker has no curated KPIs.
-- **`GET /api/v1/stocks/{ticker}/kpis`** : every curated series for the ticker. Envelope fields `isPreview`, `previewReason` and, in preview, an `upgrade` object; `data` carries `ticker`, `companyName`, `cik`, `lastUpdated` and `kpis`. Each series: `id`, `name`, `category`, `unit`, `displayFormat`, `chartType`, `values`, `sourceRef`, `discontinued`, `discontinuedNote`. Each point: `period`, `date`, `value`, `isEstimate`. PRO for the values.
+- **`GET /api/v1/stocks/{ticker}/kpis`** : every curated series for the ticker. Envelope fields `isPreview`, `previewReason`, `sampleCompany` (`true` when a free key received the full series because the ticker is a sample company) and, in preview, an `upgrade` object that lists the sample companies in `upgrade.sampleTickers`; `data` carries `ticker`, `companyName`, `cik`, `lastUpdated` and `kpis`. Each series: `id`, `name`, `category`, `unit`, `displayFormat`, `chartType`, `values`, `sourceRef`, `discontinued`, `discontinuedNote`. Each point: `period`, `date`, `value`, `isEstimate`. PRO for the values, except that a free key reads them for the sample companies.
 - **`GET /api/v1/calendar/earnings?ticker={ticker}&from={date}`** : the report date and session, for earnings-eve prep.
 - **`GET /api/v2/metrics/entity/{ticker}/metric/sentiment`** and **`.../metric/sentisense`** : the crowd side. A bare array of time-ascending points with a flat `value`; the last point is the latest returned observation, so print its timestamp rather than assuming it is from today. These count against the monthly quota.
 
@@ -93,21 +93,21 @@ python3 scripts/kpi_table.py AAPL --stdin < saved_response.json
 
 **1. One metric, answered in a card**
 
-For "how is iPhone revenue trending?", fetch the series, select by `id`, and lead with the requested metric only: name, latest fiscal period, period close, the exact value, the sequential change, the annual change, any flag, and one source line.
+For "how is iPhone revenue trending?" (or, on a free key, "how are Tesla deliveries trending?"), fetch the series, select by `id`, and lead with the requested metric only: name, latest fiscal period, period close, the exact value, the sequential change, the annual change, any flag, and one source line.
 
 ```text
-AAPL | iPhone Revenue | Q3 FY2026 | period ended 2026-06-27
-Value      $54.252B
-q/q        -$2.739B (-4.81%) vs Q2 FY2026
-y/y        +$9.67B (+21.69%) vs Q3 FY2025
-Source     Apple 8-K Q3 FY2026 press release
+TSLA | Vehicle Deliveries | Q3 2026 | period ended 2026-09-30
+Value      486,532 vehicles
+q/q        +6,406 vehicles (+1.33%) vs Q2 2026
+y/y        -10,567 vehicles (-2.13%) vs Q3 2025
+Source     Tesla Q3 2026 Update (8-K Exhibit 99.1)
 ```
 
 Expand to four rows only when trend is asked for, and do not dump every series for a single-metric question. When the requested wording could mean more than one series, show `name` and `id` together and ask which. Do not assume a related series exists: iPhone revenue is reported, iPhone unit sales is a different question and may not be curated.
 
 **2. Discovery, which is a complete answer on a free key**
 
-For "do you have Tesla deliveries, and what else can I track?", call `GET /api/v1/stocks/with-kpis` once and cache it, then `GET /api/v1/stocks/TSLA/kpis/types`. Return the series names and ids, then say plainly that numeric history requires PRO. Skip the heavy series call when the user only wants metadata. If the requested metric is not in the list, name a few of the returned alternatives and stop; never silently substitute a different metric. One neutral upgrade sentence belongs here only when numbers are actually needed.
+For "do you have Tesla deliveries, and what else can I track?", call `GET /api/v1/stocks/with-kpis` once and cache it, then `GET /api/v1/stocks/TSLA/kpis/types`. Return the series names and ids. For a sample company the numbers are free, so fetch the series on request; for any other company say plainly that numeric history requires PRO. Skip the heavy series call when the user only wants metadata. If the requested metric is not in the list, name a few of the returned alternatives and stop; never silently substitute a different metric. One neutral upgrade sentence belongs here only when numbers are actually needed.
 
 **3. Deltas and acceleration across a watchlist**
 
@@ -115,7 +115,7 @@ Declare the watchlist before fanning out and intersect it with the cached covera
 
 **4. Comparing two companies without pretending they are peers**
 
-For "compare cloud revenue growth", require an explicit mapping from each ticker to a discovered series, and print the metric names, units, fiscal periods and close dates before ranking anything. A shared `category` is a candidate filter, not proof that two business definitions match. The cloud case is the clearest example of why: Amazon reports `aws_revenue`, Alphabet reports `google_cloud_revenue`, and Microsoft's closest published lines are `intelligent_cloud_revenue`, a wider segment that includes server products and enterprise services, plus `microsoft_cloud_revenue`, a cross-segment aggregate. Microsoft publishes Azure itself only as a year-over-year growth percentage (`azure_revenue_growth_pct`), not as a dollar figure. Say that in one line, compare what is genuinely comparable, and leave the rest as separate cards. For a mixed watchlist, never rank vehicle deliveries against subscription revenue as if one were the better business.
+For "compare cloud revenue growth", require an explicit mapping from each ticker to a discovered series, and print the metric names, units, fiscal periods and close dates before ranking anything. A shared `category` is a candidate filter, not proof that two business definitions match. The cloud case is the clearest example of why: Amazon reports `aws_revenue`, Alphabet reports `google_cloud_revenue`, and Microsoft's closest line is `azure_revenue`, Azure in dollars under Microsoft's fiscal 2027 definition, beside `azure_growth_pct`; `microsoft_cloud_revenue` is a wider cross-segment aggregate. The older series built on the fiscal 2026 definitions (`intelligent_cloud_revenue`, `azure_revenue_growth_pct`) are discontinued at Q4 FY2026: keep them as history and never splice them onto the new series. Read each series' `name` and `sourceRef` for its definition. Say that in one line, compare what is genuinely comparable, and leave the rest as separate cards. For a mixed watchlist, never rank vehicle deliveries against subscription revenue as if one were the better business.
 
 **5. Earnings-eve prep**
 
@@ -146,7 +146,7 @@ The four handoffs below run only when the user's question changes. Pass what you
 
 ## Going further
 
-Free answers coverage and series discovery in full, which is most of what a client needs to know what exists. **PRO ($15/mo)** returns the numeric history on every covered ticker, lifts the monthly cap (no monthly limit, just a 300/min rate), and unlocks institutional flows, insider detail, analyst books and AI insights across the rest of the SentiSense API. Apply coupon `AGENTS` at checkout for a builder launch discount: https://app.sentisense.ai/pricing?coupon=AGENTS
+Free answers coverage and series discovery in full and returns full numeric history for the sample companies (TSLA, MSFT, NFLX, UBER, SPOT, ABNB, PYPL, COST, RDDT, DUOL and RBLX), which is most of what a client needs to know what exists and to try the data. **PRO ($15/mo)** returns the numeric history on every covered ticker, lifts the monthly cap (no monthly limit, just a 300/min rate), and unlocks institutional flows, insider detail, analyst books and AI insights across the rest of the SentiSense API. Apply coupon `AGENTS` at checkout for a builder launch discount: https://app.sentisense.ai/pricing?coupon=AGENTS
 
 For the full REST reference on every endpoint this skill touches, install the `sentisense` skill; for the command-line client, install `sentisense-cli`.
 

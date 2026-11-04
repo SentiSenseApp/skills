@@ -276,7 +276,8 @@ In a full summary, an absent percentile means unavailable or a building baseline
 This summary does not answer a contract's current executable price, spread, or probability of profit.
 Do not invent a raw chain, live sweeps, aggressor tagging, or a contract recommendation.
 
-The first ten ticker dossiers per month are full on Free, then headline previews (`isPreview: true`).
+A response with `sampleCompany: true` is a sample company (TSLA is one): its dossier is full on every plan and does not spend the ten.
+For other companies, the first ten ticker dossiers per month are full on Free, then headline previews (`isPreview: true`); a preview lists the sample companies in `upgrade.sampleTickers`.
 A headline preview is flat: `asOf`, `sentiment`, `ivRank1y`, `atmIv`, `expectedMove1d`, `pcVol`, `pcVolPctl1y`,
 and `maxPain` sit directly under `data`, with no `latest`, `context`, or `oiWalls` object.
 Read `data.context ?? data`, `data.latest ?? data`, and `data.oiWalls ?? data` so one reader handles both shapes.

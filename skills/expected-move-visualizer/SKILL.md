@@ -56,7 +56,7 @@ Read this before presenting a number from this skill.
 
 One artifact costs five requests, or six for an ETF: the stock quote endpoint declines a fund ticker and the quote is refetched from the ETF quote endpoint, so the declined call counts too. Two of the calls are tiered on a free key:
 
-- **The options dossier.** A free key gets the full dossier on ten covered calls each calendar month (repeat calls for the same ticker count, and the allowance resets on the first of the month, US Eastern time), then a headline preview with `atmIv` and `ivRank1y` flattened directly under `data`. On that preview the 30 day cone still draws while the 60 and 90 day bands and the skew tilt drop out.
+- **The options dossier.** A free key gets the full dossier on ten covered calls each calendar month (repeat calls for the same ticker count, and the allowance resets on the first of the month, US Eastern time), then a headline preview with `atmIv` and `ivRank1y` flattened directly under `data`. On that preview the 30 day cone still draws while the 60 and 90 day bands and the skew tilt drop out. Full data on a set of sample companies is free: their dossier comes back in full on a free key, marked `sampleCompany: true`, and never spends one of the ten (read the list from `upgrade.sampleTickers` on an options dossier preview, or see https://sentisense.ai/docs/api/#full-sample-responses-with-a-free-key). The commands below use TSLA, one of them.
 - **The earnings calendar.** A free key gets only the first week of the requested window, through the coming Sunday, while the envelope's `totalCount` still counts the whole window. A report further out than that week is missing from the rows, so its date is unknown on a free key, not unscheduled.
 
 The bundled script reads both previews, and the artifact says so on its face: a preview label, and the next report shown as unknown when the free calendar left it out.
@@ -73,7 +73,7 @@ The bundled script does every call and prints exactly the JSON the template expe
 
 ```bash
 export SENTISENSE_API_KEY=...      # or however your host supplies secrets
-node scripts/prepare_data.mjs NVDA > /tmp/nvda.json
+node scripts/prepare_data.mjs TSLA > /tmp/tsla.json
 ```
 
 It is a single file with no dependencies, so nothing is installed and there is nothing to audit but the script itself. It exits non-zero with a specific message when the key is missing or rejected, when the symbol is not a ticker, when the ticker has no options coverage, and when the latest session carries no at-the-money implied volatility. A free headline preview is not an error: the script binds its 30 day reading and sets `isPreview: true`.
@@ -83,11 +83,11 @@ It is a single file with no dependencies, so nothing is installed and there is n
 `scripts/template.html` carries two JSON blocks, each holding exactly one placeholder token, and each token appears exactly once in the file so a plain text replacement is unambiguous:
 
 - `/*__SENTISENSE_DATA__*/` takes the script's JSON output verbatim
-- `/*__SENTISENSE_META__*/` takes a small object, `{"title": "Expected move: NVDA", "subtitle": "..."}`; the subtitle is optional
+- `/*__SENTISENSE_META__*/` takes a small object, `{"title": "Expected move: TSLA", "subtitle": "..."}`; the subtitle is optional
 
 Replace the token text inside each block and leave everything else alone. **Do not rewrite the math, the chart code, or the styling.** They live in the template so that they are written once and reviewed once: an expected-move chart that is re-derived per conversation is a chart that is eventually wrong on someone's screen, and a wrong one is worse than none. Your job is binding, not deriving.
 
-Write the result to a new file, for example `expected_move_NVDA.html`, and give the user that path. An unbound template renders a clear "no data bound" message rather than an empty chart, so a failed bind is visible rather than silent.
+Write the result to a new file, for example `expected_move_TSLA.html`, and give the user that path. An unbound template renders a clear "no data bound" message rather than an empty chart, so a failed bind is visible rather than silent.
 
 ### 3. Hand it over
 
@@ -107,7 +107,7 @@ All of them take the header `X-SentiSense-API-Key: $SENTISENSE_API_KEY`. The opt
 
 ```bash
 curl -H "X-SentiSense-API-Key: $SENTISENSE_API_KEY" \
-  "https://app.sentisense.ai/api/v1/stocks/NVDA/options/summary"
+  "https://app.sentisense.ai/api/v1/stocks/TSLA/options/summary"
 ```
 
 The REST recipe in this file is the primary path. A maintained command-line client is available as the separate `sentisense-cli` skill for hosts that prefer one.

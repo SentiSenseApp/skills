@@ -90,13 +90,18 @@ with what the slice does show. What a Free key gets back on the calls this skill
 | E12, Quick Reads 1 and 4 | `insider/trades/{T}` | the newest 5 trades |
 | E13 | `politicians/filings/{T}` | the newest 3 filings by disclosure date |
 | E14 | `institutional/holders/{T}` | the top 5 holders by shares |
-| E15, Quick Read 1 | `analyst/{T}/consensus` | band, mean, analyst count and label; the buy/hold/sell counts are withheld and arrive as zeros, so never report them |
+| E15, Quick Read 1 | `analyst/{T}/consensus` | band, mean, analyst count and label; the buy/hold/sell counts are withheld and arrive as zeros on a preview (`isPreview: true`), so never report them from one |
 | E16, Quick Read 4 | `calendar/earnings` | the first Monday-to-Sunday week of the requested window (by default the current week); an empty `earnings[]` with `totalCount` above 0 means the report falls outside that week, not that none is scheduled |
-| E19 | `stocks/{T}/options/summary` | 10 full summaries per calendar month (repeat calls count), then a flat headline preview (see E19 below) |
+| E19 | `stocks/{T}/options/summary` | 10 full summaries per calendar month (repeat calls count), then a flat headline preview (see E19 below); a sample company's summary is always full and spends none |
 | Quick Read 1 | `insights/stock/{T}` | the top 3 insights |
 | Quick Read 2 | `insider/cluster-buys`, `politicians/activity` | the top 5 rows of each |
 | Quick Read 4 | `analyst/{T}/estimates`, `analyst/{T}/actions` | the current-quarter estimate and the 2 most recent surprises; the 3 most recent actions |
 | Quick Read 5 | `insights/market` | the top 5 insights |
+
+Sample companies are the exception to the per-ticker rows (`{T}` in the path): for them a Free key
+receives the full response, with `isPreview: false` and `sampleCompany: true`, so build from the full
+data and drop the slice label. The market-wide rows do not change. Read the list from
+`upgrade.sampleTickers` on a per-ticker preview, or see https://sentisense.ai/docs/api/#full-sample-responses-with-a-free-key.
 
 Price, chart, profile, the statements (`/stocks/fundamentals*`), the sentiment and Score series,
 `/stocks/{T}/sentiment`, market mood and `/stocks/popular` are not preview-gated.
@@ -153,7 +158,7 @@ Each is a natural-language intent, an ordered set of REST calls, and a synthesis
 4. `GET /api/v1/analyst/{T}/consensus`; unwrap the envelope and read `.data`, including the target band and its `updatedAt`.
 5. `GET /api/v1/insights/stock/{T}`; unwrap `.data[]`, take the first item for the headline, check its seconds-based `generatedAt`, and flag its age.
 
-**Synthesize as:** "AAPL $190.20 (+1.2%). Sentiment +0.34 and rising (+0.06 over 7d). 3 insider buys in 90d, no sells. Analyst band $180-$250 (mean $210, 33 analysts, Buy). Latest insight: 'Margin guide raised, services beating consensus.'" Five signals, one tight brief, done. On a Free key the insider call is a preview: when `totalCount` exceeds the rows returned, the clause reads "newest 5 of 61 insider filings (free preview): 5 awards, no open-market trades among them", never "0 buys, 0 sells in 90d".
+**Synthesize as:** "AAPL $190.20 (+1.2%). Sentiment +0.34 and rising (+0.06 over 7d). 3 insider buys in 90d, no sells. Analyst band $180-$250 (mean $210, 33 analysts, Buy). Latest insight: 'Margin guide raised, services beating consensus.'" Five signals, one tight brief, done. On a Free key a non-sample ticker's insider call is a preview (`isPreview: true`; a sample company's rows are the full window): when `totalCount` exceeds the rows returned, the clause reads "newest 5 of 61 insider filings (free preview): 5 awards, no open-market trades among them", never "0 buys, 0 sells in 90d".
 
 ### Quick Read 2: "What's the smart money doing this week?"
 
@@ -300,8 +305,8 @@ The current `sentisenseScore` can be null until the day's batch lands. In that c
 Pass `limit` on the E14 holders call: without it the endpoint returns every holder, which for a
 mega-cap is 6,000+ rows and well over a megabyte, while the row needs the top 10.
 
-**On a Free key, check every enveloped row against "Free-tier previews" before filling it.** E12,
-E13 and E14 are slices: write them as "newest 5 of 61 filings (free preview): 0 open-market buys,
+**On a Free key, check `isPreview` on every enveloped row against "Free-tier previews" before filling it;
+a sample company (`sampleCompany: true`) is full, so fill it as on PRO.** On a preview, E12, E13 and E14 are slices: write them as "newest 5 of 61 filings (free preview): 0 open-market buys,
 0 sells among them", never as the 90-day net. E15 keeps its band, mean, count and label but not the
 buy/hold/sell split. E16 can be empty because of the one-week window. E19, once the month's 10 full
 summaries are spent, comes back as `isPreview: true` with the headline fields flat under `data`
@@ -1026,7 +1031,7 @@ the missing fact is load-bearing.
 | Capability | Free | PRO |
 |------------|------|-----|
 | Quick Reads 1-5 | Full workflows on previews: newest 5 insider trades, top 3 or 5 insights, top 5 of each smart-money feed, one week of the earnings calendar, 3 analyst actions; label slices, never infer absence | Full lists and history |
-| Committee run | Full pipeline on a sliced ledger: E12 newest 5 insider trades, E13 newest 3 congressional filings, E14 top 5 holders, E15 without the rating split, E16 one week, E19 headline-only after 10 full summaries; statements, price, sentiment, Score and mood complete | Full windows for every row |
+| Committee run | Full pipeline on a sliced ledger (a sample company such as TSLA is not sliced): E12 newest 5 insider trades, E13 newest 3 congressional filings, E14 top 5 holders, E15 without the rating split, E16 one week, E19 headline-only after 10 full summaries; statements, price, sentiment, Score and mood complete | Full windows for every row |
 | Options positioning (E19) | 10 full summaries per calendar month, repeat calls included, then a headline preview (IV rank, ATM IV, 1-day expected move, put/call and its percentile, max pain; no skew, OI walls or unusual contracts) + top-25 board + 1y history | Unlimited full summaries, full board, full history |
 | Divergence screen | Against `/popular`: 1 call plus 2 per ticker, so compute 1 + 2 x the list length before running (83 tickers currently, 167 calls, about 17% of the Free 1,000/month quota and over 5 minutes at 30/min) | Full universe |
 | Monthly quota | ~30 committee runs + daily quick reads | Unlimited |

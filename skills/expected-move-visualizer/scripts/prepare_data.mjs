@@ -2,7 +2,7 @@
 //
 // prepare_data.mjs: fetch everything the expected-move template needs, in one command.
 //
-//   SENTISENSE_API_KEY=... node scripts/prepare_data.mjs NVDA
+//   SENTISENSE_API_KEY=... node scripts/prepare_data.mjs TSLA
 //
 // Emits one JSON object on stdout, shaped exactly for the template's data slot. Nothing is
 // derived here that the template also derives: the expected-move math lives in the template,
@@ -232,10 +232,10 @@ function realizedVol(closes, n) {
 async function main() {
   const ticker = (process.argv[2] || "").trim().toUpperCase();
   if (!ticker) {
-    die("no ticker given", "Usage: node scripts/prepare_data.mjs NVDA");
+    die("no ticker given", "Usage: node scripts/prepare_data.mjs TSLA");
   }
   if (!/^[A-Z][A-Z0-9.\-]{0,9}$/.test(ticker)) {
-    die(`"${ticker}" does not look like a ticker`, "Use a symbol such as NVDA, SPY or BRK.B");
+    die(`"${ticker}" does not look like a ticker`, "Use a symbol such as TSLA, SPY or BRK.B");
   }
   if (!KEY) {
     die(
