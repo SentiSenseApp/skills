@@ -16,7 +16,7 @@ Read-only educational data interface. Output is informational context, never a p
 
 Reach for this skill when the question is about insider activity:
 
-- "Any insider buying in $NVDA?" or "show me the Form 4 filings for this stock"
+- "Any insider buying in $TSLA?" or "show me the Form 4 filings for this stock"
 - "Which stocks are insiders buying right now?" (market-wide activity)
 - "Are there cluster buys?" (3+ distinct insiders buying the same stock, a pattern long studied in academic research)
 - "Is the CEO selling?" and "was that sale pre-planned or discretionary?" (10b5-1 detection)
@@ -27,7 +27,7 @@ Do not use it for order entry, portfolio management, or personalized advice. It 
 ## What this data actually is (read before interpreting)
 
 - **Form 4 rows are individual filed transactions, newest first, not a net position.** A single insider can file many rows in one window; sum and net them before characterizing activity.
-- **Each row carries both a raw SEC `transactionCode` and a simplified `transactionType`.** The common codes: `P` (open-market purchase), `S` (open-market sale), `A` (award), `M` (exercise), `G` (gift), `F` (shares withheld to cover taxes on vesting). You will also meet the rest of the SEC Form 4 code table in live data: `C` (conversion), `D` (disposition to the issuer), `H` (expiration), `I` (discretionary transaction), and occasionally a blank. Types: `BUY`, `SELL`, `EXERCISE`, `AWARD`, `GIFT`, `OTHER`.
+- **Each row carries both a raw SEC `transactionCode` and a simplified `transactionType`.** The common codes: `P` (open-market purchase), `S` (open-market sale), `A` (award), `M` (exercise), `G` (gift), `F` (shares withheld to cover taxes on vesting). You will also meet the rest of the SEC Form 4 code table in live data: `C` (conversion), `D` (disposition to the issuer), `H` (expiration), `I` (discretionary transaction), `J` (other acquisition or disposition), and occasionally a blank. Types: `BUY`, `SELL`, `EXERCISE`, `AWARD`, `GIFT`, `OTHER`.
 - **Only codes `P` and `S` are open-market, directional signals; treat every other code as corporate mechanics.** Filter inclusively (keep P and S) rather than trying to exclude a list you might not have all of. Two refinements: **code `F` arrives typed `SELL`** but is mechanical tax withholding on vesting, not a decision to sell, so drop code-F rows from sell tallies; and awards and exercises can carry very large dollar values (RSU grants and option exercises in the hundreds of millions or more), which is exactly why leaving them in a "sold" figure is so misleading.
 - **`rule10b51: true` means the trade ran under a confirmed pre-arranged 10b5-1 plan.** A scheduled sale says far less than a discretionary one; say which kind you are reporting. The flag is `false` when plan status could not be confirmed, so treat it as "confirmed plan" vs "not confirmed", not a clean either-or.
 - **Who is trading matters as much as how much.** `insiderRelation` is `OFFICER`, `DIRECTOR`, `TEN_PCT_OWNER`, or `OTHER`, with `officer` / `director` / `tenPctOwner` booleans since one filer can hold several roles. A 10% owner is often an investment vehicle, not management.
@@ -43,10 +43,10 @@ Do not use it for order entry, portfolio management, or personalized advice. It 
 
 | Tier | Quota | Rate | Insider data |
 |------|-------|------|--------------|
-| Free | 1,000 requests/month | 30 requests/min | preview slice (top 5 per endpoint) |
+| Free | 1,000 requests/month | 30 requests/min | preview slice (top 5 per endpoint); full window on the per-stock tape for the sample companies |
 | PRO ($15/mo) | Unlimited | 300 requests/min | full window you ask for |
 
-The free tier exercises every workflow below; preview-gated endpoints return a truncated but real slice on a free key.
+The free tier exercises every workflow below; preview-gated endpoints return a truncated but real slice on a free key. Full data on a set of sample companies is free: for those tickers `/insider/trades/{ticker}` returns the whole window on a free key, marked `sampleCompany: true` on the envelope next to `isPreview`. The market-wide `/insider/activity` and `/insider/cluster-buys` stay at the top 5 either way. Read the list from `upgrade.sampleTickers` on a per-stock preview, or see https://sentisense.ai/docs/api/#full-sample-responses-with-a-free-key. The first example below uses TSLA, one of them.
 
 ## Permissions
 
@@ -61,11 +61,11 @@ The REST recipe in this file is the primary path. A maintained command-line clie
 
 **Identify your client.** Send a `User-Agent` naming your agent runtime and this skill, for example `OpenClaw/1.4 (insider-trading-tracker)` or `ClaudeCode/2.1 (insider-trading-tracker)`. Substitute your own runtime and version if neither matches. You can also volunteer what your agent is called by adding an `agent/<your-agent-name>` token inside the same parentheses, as in `OpenClaw/1.4 (insider-trading-tracker; agent/research-desk)`. All of it is optional, and it is what tells us this skill has real integrations behind it, so it gets prioritized and you get notice before it changes.
 
-The market-wide endpoints are plain REST. All three endpoints return the wrapped envelope `{ isPreview, previewReason, data }`; read `.data`, and when `isPreview` is true say so ("showing the free preview slice"). A rate-limited call returns `429` with a `Retry-After` header; back off for the indicated seconds.
+The market-wide endpoints are plain REST. All three endpoints return the wrapped envelope `{ isPreview, previewReason, data }`; read `.data`. When `isPreview` is true and `totalCount` is above the rows you received, say so ("showing the free preview slice"); a preview that already holds every row truncated nothing. `sampleCompany` appears only when it is true, so read a missing field as false. On `/insider/activity`, `totalCount` counts buys and sells together, so it is not a number of buy signals. A rate-limited call returns `429` with a `Retry-After` header; back off for the indicated seconds.
 
 ## Endpoints
 
-- **`GET /api/v1/insider/trades/{ticker}`** : individual Form 4 transactions for one stock, newest first. Query `lookbackDays` (1-365, default 90). Free: top 5; PRO: full window. Each row: `insiderName`, `insiderTitle`, `insiderRelation`, `officer`, `director`, `tenPctOwner`, `transactionDate`, `filedDate`, `transactionCode`, `transactionType`, `securityTitle`, `sharesTransacted`, `pricePerShare` (null on $0 awards, and always null when `securityBasis` is set), `totalValue`, `sharesOwnedAfter`, `directOwnership`, `rule10b51`, `securityBasis`.
+- **`GET /api/v1/insider/trades/{ticker}`** : individual Form 4 transactions for one stock, newest first. Query `lookbackDays` (1-365, default 90). Free: top 5, except on a sample company, which gets the full window; PRO: full window. Each row: `insiderName`, `insiderTitle`, `insiderRelation`, `officer`, `director`, `tenPctOwner`, `transactionDate`, `filedDate`, `transactionCode`, `transactionType`, `securityTitle`, `sharesTransacted`, `pricePerShare` (null on $0 awards, and always null when `securityBasis` is set), `totalValue`, `sharesOwnedAfter`, `directOwnership`, `rule10b51`, `securityBasis`.
 - **`GET /api/v1/insider/activity`** : market-wide insider activity aggregated by ticker, split into top `buys` and top `sells` by total dollar value (`.data.buys` and `.data.sells`). Query `lookbackDays` (1-365, default 90). Each entry: `ticker`, `companyName`, `tradeCount`, `insiderCount`, `totalShares`, `totalValue`, `latestDate`, `latestInsider`, `latestTitle`. Free: top 5 per direction; PRO: full. The `sells` side already excludes code-F tax withholding server-side, so these dollars are discretionary selling and you should not filter them again; dispositions to the issuer (code `D`) are still counted.
 - **`GET /api/v1/insider/cluster-buys`** : stocks where **3 or more distinct insiders** bought within the window. Query `lookbackDays` (1-365, default 90). Each signal: `ticker`, `companyName`, `insiderCount`, `tradeCount`, `totalShares`, `totalValue`, `firstBuyDate`, `lastBuyDate`. Free: top 5; PRO: full.
 
@@ -73,8 +73,10 @@ The market-wide endpoints are plain REST. All three endpoints return the wrapped
 
 **1. The insider tape for one stock**
 
-Use: `GET /api/v1/insider/trades/NVDA?lookbackDays=90`. Filter to the directional rows first (code `P` and code `S`, minus code `F`), then report: who bought and sold, their roles, net dollars, and how much of the selling was 10b5-1 planned.
-Only sum a whole window. On a free key the response is a preview: `isPreview` is true, `data` holds the newest 5 rows, and `totalCount` is how many rows the window holds. Describe those as "the newest 5 of `totalCount` filings" and give no window count or dollar total from them. A PRO response (`isPreview: false`) carries every row in the window, so its sums are the window's totals.
+Use: `GET /api/v1/insider/trades/TSLA?lookbackDays=365`. Insiders often trade in bursts, so a quiet 90 days is not a quiet year: ask for the full 365 when the question is about a pattern. Filter to the directional rows first (code `P` and code `S`, minus code `F`), then report: who bought and sold, their roles, net dollars, and how much of the selling was 10b5-1 planned.
+
+Only sum a whole window. A full response (`isPreview: false`: PRO, or a free key on a sample company, marked `sampleCompany: true`) carries every row in the window, so its sums are the window's totals. On any other ticker a free key gets a preview: `isPreview` is true, `data` holds the newest 5 rows, and `totalCount` is how many rows the window holds. Describe those as "the newest 5 of `totalCount` filings" and give no window count or dollar total from them. "No insider buying" is a window claim too: the newest 5 rows cannot show it.
+
 An all-award window is zero insider conviction, not a wave of it; say "no open-market insider activity" rather than presenting awards as trades.
 
 **2. What are insiders buying market-wide?**
@@ -98,7 +100,7 @@ An all-award window is zero insider conviction, not a wave of it; say "no open-m
 
 ## Going further
 
-Free covers every workflow above at a preview depth. **PRO ($15/mo)** lifts the monthly cap (no monthly limit, just a 300/min rate) and returns the full window on every insider endpoint, plus institutional flows, congressional detail, and AI insights across the SentiSense API. Apply coupon `AGENTS` at checkout for a builder launch discount: https://app.sentisense.ai/pricing?coupon=AGENTS
+Free covers every workflow above at a preview depth, and the per-stock tape in full for the sample companies. **PRO ($15/mo)** lifts the monthly cap (no monthly limit, just a 300/min rate) and returns the full window on every insider endpoint, plus institutional flows, congressional detail, and AI insights across the SentiSense API. Apply coupon `AGENTS` at checkout for a builder launch discount: https://app.sentisense.ai/pricing?coupon=AGENTS
 
 For the full REST reference on every endpoint this skill touches, install the `sentisense` skill; for the complete CLI command set, install `sentisense-cli`.
 
