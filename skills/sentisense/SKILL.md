@@ -531,7 +531,7 @@ ETF tickers (e.g. `VTI`, `SPY`) return `400 ticker_is_etf` from this endpoint. U
 ### GET /api/v1/stocks/{ticker}/kpis
 Company-specific KPI time-series. Curated GAAP and non-GAAP metrics from earnings filings: iPhone unit sales, Tesla deliveries, AWS revenue, Netflix paid net adds, etc. **PRO (preview)** -- Free: metadata only with empty `kpis` list, except for the sample companies (TSLA, MSFT, NFLX, UBER, SPOT, ABNB, PYPL, COST, RDDT, DUOL, RBLX), which return the full series; PRO: full series for every company. Returns 404 for tickers without curated coverage.
 
-Coverage today: near-complete for the S&P 500 plus an extended universe of 900+ US-listed companies (970 tickers as of 2026-09-09). Use `GET /api/v1/stocks/with-kpis` to enumerate.
+Coverage today: near-complete for the S&P 500 plus an extended universe of 1,000+ US-listed companies. Use `GET /api/v1/stocks/with-kpis` to enumerate.
 
 Response wrapper: `{ isPreview, previewReason, sampleCompany?, data: CompanyKpis }`.
 

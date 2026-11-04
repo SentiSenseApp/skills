@@ -2,8 +2,8 @@
 //
 // prepare_data.mjs: fetch everything the position size template needs, in one command.
 //
-//   SENTISENSE_API_KEY=... node scripts/prepare_data.mjs NVDA
-//   SENTISENSE_API_KEY=... node scripts/prepare_data.mjs NVDA --out size_NVDA.html
+//   SENTISENSE_API_KEY=... node scripts/prepare_data.mjs TSLA
+//   SENTISENSE_API_KEY=... node scripts/prepare_data.mjs TSLA --out size_TSLA.html
 //
 // With no --out it emits one JSON object on stdout, shaped exactly for the template's data
 // slot, and the caller binds it. With --out it does the binding too, writing the finished
@@ -233,7 +233,7 @@ async function main() {
   const outIndex = args.indexOf("--out");
   const outPath = outIndex === -1 ? null : args[outIndex + 1];
   if (outIndex !== -1 && !outPath) {
-    die("--out needs a file path", "Usage: node scripts/prepare_data.mjs NVDA --out size.html");
+    die("--out needs a file path", "Usage: node scripts/prepare_data.mjs TSLA --out size.html");
   }
   // Drop the flag and its value before reading the ticker, but only when the flag is actually
   // present: with outIndex at -1, `outIndex + 1` is 0 and a naive filter would discard the
@@ -241,10 +241,10 @@ async function main() {
   const rest = outIndex === -1 ? args : args.filter((a, i) => i !== outIndex && i !== outIndex + 1);
   const ticker = (rest[0] || "").trim().toUpperCase();
   if (!ticker) {
-    die("no ticker given", "Usage: node scripts/prepare_data.mjs NVDA [--out size.html]");
+    die("no ticker given", "Usage: node scripts/prepare_data.mjs TSLA [--out size.html]");
   }
   if (!/^[A-Z][A-Z0-9.\-]{0,9}$/.test(ticker)) {
-    die(`"${ticker}" does not look like a ticker`, "Use a symbol such as NVDA, SPY or BRK.B");
+    die(`"${ticker}" does not look like a ticker`, "Use a symbol such as TSLA, SPY or BRK.B");
   }
   if (!KEY) {
     die(

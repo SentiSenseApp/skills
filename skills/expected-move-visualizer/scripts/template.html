@@ -374,7 +374,10 @@ function reactionsPanel(data, hz) {
   var ref = null, refDays = 0, refPct = null;
   if (data.nextEarnings && data.nextEarnings.date && data.asOf) {
     var dd = daysBetween(data.asOf, data.nextEarnings.date);
-    if (dd !== null && dd > 0) {
+    // A report dated on asOf itself is still ahead only when it comes after that session's
+    // close; before the open (or unknown timing) the session already priced it.
+    var tm = String(data.nextEarnings.timing || "").toLowerCase();
+    if (dd !== null && (dd > 0 || (dd === 0 && tm === "after_close"))) {
       ref = hz[0];
       for (var i = 0; i < hz.length; i++) { if (hz[i].days >= dd) { ref = hz[i]; break; } }
       refDays = ref.days;
