@@ -77,7 +77,7 @@ the two apart and so should you: the sector header shows the mood, the tiles sho
 already drew one in this session, show that file again and change `--metric` only if the user
 wants a different opening view; do not re-fetch unless the user asks for a refresh, asks for a
 different scope, or the as-of in the summary has gone stale (prices move every 15 minutes; the
-mood and sentiment layers are daily batches).
+mood and sentiment layers are batch reads).
 
 ### The reply templates
 
@@ -313,7 +313,10 @@ number of rows in it, because no tier is served a shortened board. Everything el
   same set. The three `marketMood...` fields are not: they are the market-wide Market Mood reading
   for that GICS sector, identical in every scope, so a Nasdaq-100 board carries the same sector
   mood as the S&P 500 board. Print the rollup rather than recomputing a sector's size from the rows.
-- `meta.layers` names the layers that ran, each with its own `asOf`, and `prices` with
+- `meta.layers` names the layers that ran, each with its own `asOf`. On `sentiment` that is a date,
+  and `computedAt` beside it is the instant the read was computed: the read is rewritten a few
+  times a day, far slower than the board, so quote `computedAt` when you say how fresh a Score is.
+  `prices` carries
   `delayMinutes: 15` and `asOfSource`: `vendor` when the quotes carry their own time, or
   `lastRegularClose` when they do not and the as-of is the previous regular session's close,
   which is the case outside regular hours. On `lastRegularClose`, "today's change" is the last
@@ -353,7 +356,9 @@ exist and vanish, which reads as a quiet sector rather than as a broken join.
 - **A weekly change on a sector is a mood change, not a return.** `-6.7` means the sector's
   fear-to-greed reading fell by 6.7 points, not that it lost 6.7 percent.
 - **Sentiment is a mean daily tone from -1 to +1 over seven days.** The **SentiSense Score** is
-  that tone weighted by how much a name is discussed, centred on zero. **Mentions** are today's
+  how bullish or bearish today's news and social coverage reads, weighted by how much a name is
+  discussed. Above zero leans bullish, below zero leans bearish. It reads what people write, not
+  what the price did, so it can stay positive on a down day. **Mentions** are today's
   volume in standard deviations of that name's own 30-day baseline, so it says "unusually busy",
   not "bullish". **Options interest** is a 0 to 100 composite of how unusual the options activity
   is, and it has no direction either.
@@ -374,33 +379,25 @@ previous day, so answer "what is moving today" with that session's moves and say
 Never describe any of it as real time, and never diff a delayed price against a batch reading
 and call the gap a finding.
 
-**2. Absent is not zero, and on the Score the board's split is a screen, not a measurement.** An
+**2. Absent is not zero, and on the Score a zero is a measurement.** An
 overlay with no reading for a ticker is missing from the row, and the page draws it in the neutral
 no-reading tone with the words "no reading", never as a zero that would read as the middle of the
 scale. A served zero gets its own flat tone, which is a different thing and is drawn differently.
-This matters most on the **SentiSense Score**, which is centred on zero, so `0.0` there can be a
-genuine neutral or a day on which nothing was measured. Before it serves the row, the board
-applies this screen:
+This matters most on the **SentiSense Score**, which is centred on zero. The board decides from
+the day's own sample:
 
 ```
-same-day == 0.0  AND  |30-day average| >= 5   ->  omitted, no field at all
-same-day == 0.0  AND  |30-day average| <  5   ->  served as 0.0
+no bullish or bearish analyses today   ->  omitted, no field at all
+bullish or bearish analyses today      ->  served, and 0.0 means they balanced
 ```
 
-Both values come from the board's own once-a-day snapshots, and the 30-day average includes the
-same day, so the split does not always reproduce from the `metric/sentisense` series, and a
-screen on an average can misread a day in either direction: a usually bullish name with no
-analyses that day can still be served as `0.0`, and a balanced day (as many bullish as bearish
-analyses) can be omitted. So read a served `0.0` as "flat on this board", not as a confirmed
-neutral, and an omitted Score as "no reading on this board", not as a confirmed hole. The overlay
-template's "No reading" row counts the tiles served without a Score; word it that way.
-
-When one name's reading matters to what you write, settle it from that day's point on
-`GET /api/v2/metrics/entity/{ticker}/metric/sentisense`, whose `metricValue.properties` carry
-`bull`, `bear` and `directional` (their sum): no point for the day, or `directional` of 0, means
-nothing was measured, while `bull == bear > 0` is a measured neutral. That is one more call per
-name, so spend it on the names you name, not on the board. If you read the payload yourself, do
-not default a missing reading to zero and do not count an absent field as a bearish one.
+So a served `0.0` is a measured neutral, and an omitted Score means nothing directional was
+measured today, including for a name that has an older reading. The overlay template's "No
+reading" row counts the tiles served without a Score; word it that way. To see one name's counts,
+read that day's point on `GET /api/v2/metrics/entity/{ticker}/metric/sentisense`, whose
+`metricValue.properties` carry `bull`, `bear` and `directional` (their sum). If you read the
+payload yourself, do not default a missing reading to zero and do not count an absent field as a
+bearish one.
 
 **3. Mood and sentiment are nowcasts, not forecasts.** They read how fearful or greedy the market
 currently is and how a name is currently discussed, weighted by how actively. They do not predict

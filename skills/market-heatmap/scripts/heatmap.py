@@ -116,11 +116,11 @@ METRICS = [
         "key": "sentisenseScore",
         "layer": "sentiment",
         "label": "SentiSense Score",
-        "short": "Score",
+        "short": "SentiSense Score",
         "kind": "diverging",
         "unit": "score",
         "floor": 5.0,
-        "blurb": "Tone weighted by how much a name is discussed. Centred on zero.",
+        "blurb": "How bullish or bearish today's news and social coverage reads, weighted by how much a name is discussed. Above zero leans bullish, below zero leans bearish. It reads what people write, not what the price did, so it can stay positive on a down day.",
         "low": "bearish",
         "high": "bullish",
     },
@@ -784,7 +784,9 @@ def layer_lines(board):
         if not isinstance(layer, dict):
             continue
         label = LAYER_LABEL.get(key, key)
-        raw = layer.get("asOf")
+        # computedAt, where served, is the time of the read. asOf on that layer is only a date, and
+        # the numbers behind it are rewritten several times a day.
+        raw = layer.get("computedAt") or layer.get("asOf")
         delay = layer.get("delayMinutes")
         if raw:
             line = "%s %s" % (label, fmt_stamp(raw))

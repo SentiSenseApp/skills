@@ -72,7 +72,7 @@ the same 30 days.
 | Layer | Call | Answers |
 |---|---|---|
 | **The arc** | `GET /api/v2/market-mood?days=30` | How the market felt, day by day, and which signal drove each turn |
-| **Theme indexes** | `GET /api/v1/indexes` then `GET /api/v1/indexes/{indexId}/history?days=30` | Whether a named theme (AI complex, Fed) ran hot or cold across the month |
+| **Alternative Indexes** | `GET /api/v1/indexes` then `GET /api/v1/indexes/{indexId}/history?days=30` | Whether a named theme (AI complex, Fed) ran hot or cold across the month |
 | **The events** | `GET /api/v1/documents/stories?filterHours=720&limit=50&offset=N` | What was actually being discussed, clustered and impact-ranked |
 | **Signals** | `GET /api/v1/insights/latest?limit=200` | Insider, institutional, sentiment and volume signals that fired |
 | **Where it stands** | `GET /api/v1/market-summary` and `GET /api/v1/insights/market` | The standing read. Both are batch surfaces, recomputed on a schedule rather than per tick, so report their `generatedAt` age rather than presenting them as this moment |
@@ -216,7 +216,7 @@ quantitative spine, so fetch it first and let it set the shape of the brief.
   either, so the newest point can be the previous session's. Exchange holidays are not written
   either: Labor Day has no row.
 
-For theme indexes, call `GET /api/v1/indexes` for the live list rather than hardcoding ids, then
+For the Alternative Indexes, call `GET /api/v1/indexes` for the live list rather than hardcoding ids, then
 pull history for the ones relevant to the month. **Read each index's `scale` field instead of
 assuming its range**: `SENTIMENT` is signed, -1 to +1, while `PERCENT_0_100` is 0 to 100, and the
 listing and history responses both carry the field. Never plot or compare two series on one axis

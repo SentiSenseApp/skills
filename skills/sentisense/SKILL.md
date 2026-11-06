@@ -1747,11 +1747,11 @@ Date the summary with `generatedAt` (epoch seconds), never with `lastUpdated` (e
 
 ---
 
-## Indexes API (`/api/v1/indexes`)
+## Alternative Indexes API (`/api/v1/indexes`)
 
-Every SentiSense composite index on one standardized envelope: a single scalar, its history, and where applicable the constituent breakdown behind it. **Free (API key required)** on every index today. Full docs: <https://sentisense.ai/docs/api/indexes>.
+Every SentiSense composite index, together called the Alternative Indexes, on one standardized envelope: a single scalar, its history, and where applicable the constituent breakdown behind it. **Free (API key required)** on every index today. Full docs: <https://sentisense.ai/docs/api/indexes>.
 
-Market Mood is a member of this family. Read it here when you want every index to answer the same shape, or at `/api/v2/market-mood` above when you want its phase band, weekly change, per-signal breakdown, and sector map.
+Market Mood is one of the Alternative Indexes. Read it here when you want every index to answer the same shape, or at `/api/v2/market-mood` above when you want its phase band, weekly change, per-signal breakdown, and sector map.
 
 ### GET /api/v1/indexes
 Discovery endpoint. Returns every published index.
@@ -1848,7 +1848,7 @@ Column headers are the metric labels on `rows[0]`. Common metric `unit` values a
 
 Per-row fields: `ticker`, `sector` (canonical GICS-11 or `Unclassified`), `industry`, `marketCap`, `price`, `previousClose`, `changePercent`, `volume`, `priceAsOf`, `sentiment7d`, `sentimentChange7d`, `sentisenseScore`, `mentionsZ`, `optionsInterestScore`. `meta` carries `scope`, `universeSize`, `tileCount`, `missingPrice[]`, `breadthUp`, `breadthDown`, `capWeightedChangePct`, `equalWeightedChangePct`, `marketMoodScore`, `marketMoodPhase`, `layers` and `sectors[]`.
 
-Within the layers you were served, an absent field means no reading for that tile, never a zero. `sentisenseScore` is the latest daily Score with one exception: a `0.0` on a name whose 30-day average sits 5 or more points from zero is treated as a missing reading and left out, so a genuinely balanced day on such a name is absent too, while a `0.0` on a quieter name is served and does not say whether that day's analyses were balanced or there were none. To settle one name's day, read its own `bull`, `bear` and `directional` counts from `GET /api/v2/metrics/entity/{ticker}/metric/sentisense` rather than the tile. Whether an overlay ran at all is answered by `meta.layers`, which omits any layer that failed or is not shipped. Snapshots rewrite every 15 minutes during the US regular session and hourly outside it, with prices delayed about 15 minutes (`meta.layers.prices.delayMinutes`), so do not present the board as real time.
+Within the layers you were served, an absent field means no reading for that tile, never a zero. `sentisenseScore` is today's Score, and it is served only when today's coverage produced bullish or bearish analyses: a `0.0` is a measured balanced day, and an absent field means nothing directional was measured today, including for a name with an older reading. One name's counts are the `bull`, `bear` and `directional` properties on `GET /api/v2/metrics/entity/{ticker}/metric/sentisense`. Whether an overlay ran at all is answered by `meta.layers`, which omits any layer that failed or is not shipped. Snapshots rewrite every 15 minutes during the US regular session and hourly outside it, with prices delayed about 15 minutes (`meta.layers.prices.delayMinutes`), so do not present the board as real time. The Score and sentiment overlays move more slowly: their read is computed a few times a day, and `meta.layers.sentiment.computedAt` says when.
 
 Errors: `404 unknown_tracker`, `404 no_snapshot` (a scope whose first snapshot has not been written yet: a warm-up state, retry in 15 minutes), `400 invalid_scope`, `503 tracker_unavailable`.
 
