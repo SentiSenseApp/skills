@@ -20,6 +20,21 @@ metadata:
 
 ---
 
+## Getting a key as an agent
+
+There is one supported path. Follow it in order and stop at the first step that works.
+
+1. **Use the key you were given:** `SENTISENSE_API_KEY` in the environment. A person gets a free one at https://app.sentisense.ai/get-api-key (they sign in or sign up there; that step is theirs).
+2. **No key, and the person you work for has none to give you: mint a temporary one** with `POST https://app.sentisense.ai/api/v1/keys/provision`, the only call that makes a key without a person. It needs no key and no body. Use the key at once.
+3. **Give the person the `keepUrl` from the answer.** Only a person can keep the key: they open the link, sign in or create a free account, and confirm. The same key then stays on their account.
+4. **If the call is refused or you cannot make it** (a `403`, a `429` with `provision_limit_reached`, no network or shell), stop and tell the person to get a free key at the link in step 1. Do not work around it.
+
+**Never create an account yourself.** Do not call sign-up, sign-in or other `/api/auth/*` or account endpoints, do not guess payloads for them, and do not use throwaway or invented email addresses. Those routes are the human path, not an agent path, and an account made that way has no person behind it to keep or own the key. The full steps, limits and errors are under "No key yet" below.
+
+Connected through the MCP connector (Claude, ChatGPT, Grok, Codex or Cursor)? You need no key for those tools: the person signed in with OAuth when they added it.
+
+---
+
 ## Use & Disclaimer
 
 This skill is an **educational data interface** to SentiSense's read-only Data API. Output is informational only. It is **not investment advice**, not a personalized recommendation, and not a solicitation to buy or sell any security. The user is responsible for their own decisions. Use of the API and this skill is subject to the [API Terms of Service](https://sentisense.ai/agreement/API-Terms-of-Service.pdf) and [Terms of Service](https://sentisense.ai/agreement/Terms-of-Service.pdf).
@@ -324,7 +339,7 @@ Response: `{ isPreview, previewReason, data }`. Everything below lives under `da
 | `scoreSparkline` | number[] | Daily Score series |
 | `mentions` / `mentionsAvg30d` | number | Mention volume of the latest New York daily bucket with data (today's once it lands, otherwise an earlier day; `narrative` names which), and the 30-day daily average |
 | `socialDominance` | number | Latest share of voice, as a fraction (`0.021` = 2.1%) |
-| `bySource[]` | array | Per-source tone, loudest first: `source` (`News`, `Reddit`, `X`, `YouTube`, `Hacker News`, `Substack`), `direction`, `mentionShare` (whole-number percent; rounding can make the array sum to 99 or 101 rather than exactly 100), `value` (per-source polarity, -1 to +1) |
+| `bySource[]` | array | Per-source tone, loudest first: `source` (`News`, `Reddit`, `X`, `YouTube`, `Hacker News`, `Substack`), `direction`, `mentionShare` (whole-number percent; rounding can make the array sum to 99 or 101 rather than exactly 100), `value` (per-source polarity, -1 to +1: the mean of that source's daily `sentiment` readings over the last 30 days, each day counting once) |
 | `relatedTickers[]` | array | Curated peers: `ticker`, `name` |
 | `drivers[]` | array | Top story drivers: `title`, `tone` (-1 to +1) |
 | `narrative` | string | Plain-language summary of why the Score sits where it does |
@@ -607,7 +622,7 @@ What each metric type means:
 
 - `mentions` -- count of documents that mentioned the entity that day, across news, social and other tracked sources.
 - `sentisense` -- the SentiSense Score, an unbounded composite of sentiment and attention (`sentisense_score` also resolves). **Prefer this over `sentiment` for any bullish-or-bearish read**: it weights tone by how actively the name is discussed, so a single post on a quiet day cannot swing it, and each point carries the counts behind it under `metricValue.properties` (see "Reading direction" below).
-- `sentiment` -- mean polarity of those documents, a float in [-1, 1], unweighted by volume and therefore thin-sample sensitive. Use it for raw tone, or with `mean-by/source` for per-source tone.
+- `sentiment` -- mean polarity of those documents, a float in [-1, 1]: each scored mention counts +1 bullish, 0 neutral or -1 bearish, so `-0.33` means bearish mentions outnumbered bullish ones by 33 percentage points. Unweighted by volume and therefore thin-sample sensitive. Use it for raw tone, or with `mean-by/source` for per-source tone.
 - `social_dominance` -- the entity's share of the day's total conversation.
 - `sentisense_rating` -- the daily Rating score, 0 to 100 (not the percentile). Stocks only.
 - `app_review_count` -- count of new written Apple App Store reviews for a product's iOS app that day. Products only, and only those with a tracked app. Pass the product's slug: a stock ticker, or a product with no tracked app, returns `200` with an empty array. Find the slug with `GET /api/v1/kb/entities/search?q={name}&type=product` or the `PRODUCT` rows of `GET /api/v1/stocks/{ticker}/entities`.
@@ -674,8 +689,9 @@ Mean of a metric per dimension value over a time window (e.g., per-source mean s
 | `dimension` | path | Yes | - | Dimension to group by. Use `source`; see the `/slices` note below |
 | `startTime` | long | No | 7 days ago | Epoch milliseconds |
 | `endTime` | long | No | now | Epoch milliseconds |
+| `weighting` | string | No | - | `mentions` (`sentiment` only): weight each day by its mention count, so each mention counts once; values with fewer than 10 mentions are omitted |
 
-Response: flat map of dimension value to mean, e.g. `{ "News": 0.37, "Reddit": 0.04, "X": 0.22, "YouTube": 0.25, "Hacker News": -0.57, "Substack": 0.5 }`. The keys are display names, title case and possibly containing a space (`Hacker News`), not the uppercase `source` parameter values; `distribution` uses the same keys. Look them up case-insensitively, or iterate the map, rather than indexing a fixed `"NEWS"`. For sentiment by source, each value is the average of that source's daily mean readings inside the window; a window with no data returns `{}`. Returns `400` for an unknown metric type or when `startTime` is after `endTime`.
+Response: flat map of dimension value to mean, e.g. `{ "News": 0.37, "Reddit": 0.04, "X": 0.22, "YouTube": 0.25, "Hacker News": -0.57, "Substack": 0.5 }`. The keys are display names, title case and possibly containing a space (`Hacker News`), not the uppercase `source` parameter values; `distribution` uses the same keys. Look them up case-insensitively, or iterate the map, rather than indexing a fixed `"NEWS"`. For sentiment by source, each value is the average of that source's daily mean readings inside the window, each day counting once whatever its volume. Pass `weighting=mentions` when a loud day should count for more than a quiet one (for example, a story breaking): each day is then weighted by its mentions, and thin sources drop out. A window with no data returns `{}`. Returns `400` for an unknown metric type, for a `weighting` other than `mentions` or on a metric other than `sentiment`, or when `startTime` is after `endTime`.
 
 ### GET /api/v2/metrics/entity/{entityId}/metric/{metricType}/slices
 Slice keys stored for a metric. **Quota-gated**, available on the Free tier. Response: array of `{ metricType, dimension, values, displayName }`. It currently returns only `{ dimension: "type", values: ["root"] }`, the marker for the unsliced series, so it is not a guide to what `distribution` and `mean-by` accept: pass `source` to those two. `type` is not a usable split there (it currently fails with a `500` after a long wait), and an unrecognized dimension returns `400`.
