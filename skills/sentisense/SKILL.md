@@ -25,9 +25,9 @@ metadata:
 There is one supported path. Follow it in order and stop at the first step that works.
 
 1. **Use the key you were given:** `SENTISENSE_API_KEY` in the environment. A person gets a free one at https://app.sentisense.ai/get-api-key (they sign in or sign up there; that step is theirs).
-2. **No key, and the person you work for has none to give you: mint a temporary one** with `POST https://app.sentisense.ai/api/v1/keys/provision`, the only call that makes a key without a person. It needs no key and no body. Use the key at once.
-3. **Give the person the `keepUrl` from the answer.** Only a person can keep the key: they open the link, sign in or create a free account, and confirm. The same key then stays on their account.
-4. **If the call is refused or you cannot make it** (a `403`, a `429` with `provision_limit_reached`, no network or shell), stop and tell the person to get a free key at the link in step 1. Do not work around it.
+2. **No key, and the person you work for has none to give you: run `npx sentisense init`.** It mints a temporary key with no account and prints it as `SENTISENSE_API_KEY=<key>` with its keep link. It needs Node and a shell, and it downloads and runs the official `sentisense` npm package. No Node? `POST https://app.sentisense.ai/api/v1/keys/provision`, with no key and no body, makes the same key. These two are the only ways to make a key without a person. Use the key at once.
+3. **Give the person the keep link** (`keepUrl` in a JSON answer). Only a person can keep the key: they open the link, sign in or create a free account, and confirm. The same key then stays on their account.
+4. **If step 2 is refused or you can run neither** (a `403`, a `429` with `provision_limit_reached`, no network or shell), stop and tell the person to get a free key at the link in step 1. Do not work around it.
 
 **Never create an account yourself.** Do not call sign-up, sign-in or other `/api/auth/*` or account endpoints, do not guess payloads for them, and do not use throwaway or invented email addresses. Those routes are the human path, not an agent path, and an account made that way has no person behind it to keep or own the key. The full steps, limits and errors are under "No key yet" below.
 
@@ -67,15 +67,19 @@ All API endpoints require an API key. Get one free at https://app.sentisense.ai/
 
 ### No key yet
 
-If `SENTISENSE_API_KEY` is not set and the person you are working for has no key to give you, get a temporary one yourself:
+If `SENTISENSE_API_KEY` is not set and the person you are working for has no key to give you, get a temporary one yourself. With Node, run the official CLI's `init` command:
+
+```bash
+npx sentisense init
+```
+
+It prints `SENTISENSE_API_KEY=<key>` and the keep link, and `--json` returns the key, link, expiry and limits for a program to read. It goes beyond the Permissions block below: it needs a shell, downloads and runs an npm package, and keeps a random install id in the CLI's own config folder. The `sentisense-cli` skill has the exact pinned command. Without Node, one HTTPS call makes the same key and needs none of that:
 
 ```bash
 curl -X POST https://app.sentisense.ai/api/v1/keys/provision
 ```
 
-A host with Node can get a temporary key of the same kind from the official CLI's `init` command instead: it prints `SENTISENSE_API_KEY=<key>` and the keep link, and `--json` returns the key, link, expiry and limits for a program to read. That path is optional and goes beyond the Permissions block below: it needs a shell, downloads and runs an npm package, and keeps a random install id in the CLI's own config folder. The `sentisense-cli` skill has the exact pinned command; the curl call above needs none of that.
-
-The curl call's JSON answer carries `apiKey`, `expiresAt`, `keepUntil`, `keepUrl` and `limits`; `expiresAt` and `keepUntil` are epoch seconds. Use the key at once, keep it out of anything you commit, and give the person the `keepUrl` in one sentence: opening it and signing in (or creating a free account) keeps this same key on their account for good. Until it is kept the key works for 72 hours, at up to 10 requests a minute, 500 a day and 1,000 in total, and account endpoints are closed to it. Each successful call it makes carries `X-SentiSense-Key-Status: temporary`, `X-SentiSense-Key-Expires-At` (epoch seconds) and `X-SentiSense-Keep-Url`; when a limit or the 72 hours run out, the error names the keep link, which still works for 14 days. A `429` with `keep_existing_key` means this network already has a temporary key nobody kept: give the person that key's link instead of asking for another. A temporary key that reaches a limit gets a `429` with `key_limit_reached`, and when its 72 hours run out a `401` with `key_expired`; both name the keep link, so pass the link on rather than waiting or suggesting a paid plan. Treat the keep link like the key itself: anyone holding it can keep the key, so keep it out of logs, commits and shared screenshots.
+The call's JSON answer carries `apiKey`, `expiresAt`, `keepUntil`, `keepUrl` and `limits`; `expiresAt` and `keepUntil` are epoch seconds. Use the key at once, keep it out of anything you commit, and give the person the `keepUrl` in one sentence: opening it and signing in (or creating a free account) keeps this same key on their account for good. Until it is kept the key works for 72 hours, at up to 10 requests a minute, 500 a day and 1,000 in total, and account endpoints are closed to it. Each successful call it makes carries `X-SentiSense-Key-Status: temporary`, `X-SentiSense-Key-Expires-At` (epoch seconds) and `X-SentiSense-Keep-Url`; when a limit or the 72 hours run out, the error names the keep link, which still works for 14 days. A `429` with `keep_existing_key` means this network already has a temporary key nobody kept: give the person that key's link instead of asking for another. A temporary key that reaches a limit gets a `429` with `key_limit_reached`, and when its 72 hours run out a `401` with `key_expired`; both name the keep link, so pass the link on rather than waiting or suggesting a paid plan. Treat the keep link like the key itself: anyone holding it can keep the key, so keep it out of logs, commits and shared screenshots.
 
 ## Permissions
 
@@ -319,6 +323,9 @@ Peer/similar stocks. **Public.**
 | `limit` | int | No | 5 | Max results |
 
 Response: bare array of `{ symbol, name, price, changePercent }`. The key is `symbol`, not `ticker`, and the array can hold fewer than `limit` entries.
+
+### GET /api/v1/stocks/{ticker}/etfs
+The tracked ETFs that hold a stock, heaviest weight first (optional `limit`; omitted or 0 returns every row). **Public.** Response: bare array of `{ etfTicker, etfName, weightPct, asOfDate }`, where `weightPct` is the stock's weight in the fund in percent and `asOfDate` is that fund's holdings date. Only tracked funds with a holdings file are searched and some are partial, so an empty array means no tracked fund lists the stock, not that no fund holds it.
 
 ### GET /api/v1/stocks/{ticker}/sentiment
 One-call sentiment picture for a stock: the SentiSense Score with its 30-day regime, where the conversation is happening by source, and what is driving it. **Public.** **Quota-gated** when called with a key.
@@ -1323,7 +1330,9 @@ Recent analyst upgrade/downgrade actions for a ticker, newest first. **PRO (prev
 | `ticker` | path | Yes | - | Stock ticker |
 | `lookbackDays` | int | No | 90 | Days of history to return |
 
-Action object: `{ ticker, actionDate, firm, actionType (UPGRADE/DOWNGRADE/INITIATE/REITERATE/OTHER), fromGrade, toGrade }`.
+Action object: `{ ticker, actionDate, firm, actionType (UPGRADE/DOWNGRADE/INITIATE/REITERATE/OTHER), fromGrade, toGrade, priceTarget, priorPriceTarget }`.
+
+**`priceTarget` and `priorPriceTarget` are the target the firm stated with the action and the target it moved from**, as the firm stated them on the day; read the pair as "$400 to $200". Each is a number or `null`, never zero: `null` when the firm stated no target or SentiSense does not hold it, and `priorPriceTarget` is also `null` when the firm kept its target unchanged and always `null` when `priceTarget` is. So a lone `priceTarget` reads "target $210", not "raised to $210". Most rows carry a target; the rest are mostly ratings changed or restated without one. Both are PRO and sample companies only: every other free preview row carries `null` for both. Firms do not restate old targets after a stock split, so rows dated before a split of the ticker carry `null` for both. Example, "which firms cut their NVDA target this week, from what to what": `GET /api/v1/analyst/NVDA/actions?lookbackDays=7`, keep rows with both fields set and `priceTarget < priorPriceTarget` (reiterations included, since a firm often keeps its rating and moves its target), and report each as "Bernstein, Outperform to Market Perform, target $400 to $200".
 
 **`fromGrade` and `toGrade` use one spelling per rating, and ratings group into six tiers.** Tier 5 `Strong Buy`, `Conviction Buy`, `Top Pick`; tier 4 `Buy`, `Overweight`, `Outperform`, `Positive`, `Accumulate`, `Speculative Buy`, `Long-Term Buy`, `Market Outperform`, `Sector Outperform`, `Outperformer`; tier 3 `Neutral`, `Hold`, `Equal-Weight`, `Market Perform`, `Sector Perform`, `In-Line`, `Peer Perform`, `Perform`, `Sector Weight`, `Hold Neutral`, `Mixed`, `Fair Value`; tier 2 `Underweight`, `Underperform`, `Reduce`, `Sector Underperform`, `Market Underperform`, `Negative`, `Cautious`; tier 1 `Sell`; tier 0 `Strong Sell`. Two spellings in one tier are the same rating (`Market Perform` and `Perform`), so compare tiers rather than strings when you want to know whether a desk actually moved. A spelling outside the list is passed through as the firm published it, so do not treat the list as a closed enum.
 
@@ -1358,7 +1367,7 @@ Response: `{ isPreview, previewReason, totalCount, data: [...] }`. `totalCount` 
 
 On the order of a hundred rating actions land on an active market day, and most of them (roughly three in four, varying by week) are `REITERATE` (an analyst confirming an unchanged rating). Weekend and holiday dates carry a handful of stragglers at most, so a 7-day window runs to several hundred rows and a 30-day window into the thousands; size your paging from `totalCount` rather than from these figures. For actual rating changes, pass `actionTypes=UPGRADE,DOWNGRADE,INITIATE` -- otherwise the newest-first page is mostly reiterations. Since rows come back newest first, the default 50-row page is typically filled by the newest day alone, and raising `lookbackDays` by itself returns nothing new. Raise `limit` for a wider slice, or walk the window with `offset`.
 
-Same per-action shape as `/api/v1/analyst/{ticker}/actions`.
+Same per-action shape as `/api/v1/analyst/{ticker}/actions`, including `priceTarget` and `priorPriceTarget`, which are `null` on every free row even inside the free first page. This feed does not make the split check, and its rows from the current day can carry `null` targets that `/api/v1/analyst/{ticker}/actions` already shows, so read one stock's targets from `/api/v1/analyst/{ticker}/actions`. To find target moves market-wide, leave `actionTypes` unset: most target moves come with a `REITERATE`.
 
 ### GET /api/v1/analyst/{ticker}/coverage
 Who covers this stock and what they most recently said, grouped by firm, most recently active firm first. The one-call answer to "who covers AMD and what do they say". **PRO (preview)** -- Free: the 5 most recently active firms with every response-level count intact. PRO: all firms.
