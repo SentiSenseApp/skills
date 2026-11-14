@@ -1,6 +1,6 @@
 ---
 name: stock-earnings-analysis
-description: "Earnings analysis for US stocks, organized by fiscal quarter: what the company reported, the editorial headline, marquee KPI highlights with year-over-year deltas, guidance as management phrased it, and an earnings-call summary, plus SEC risk-factor diffs attached to their quarter, the AI takeaway signal, recent reporters, the forward calendar, the importance-ranked view of who just reported and who reports next, the market-wide beat rate baseline, and the measured price reaction to each past announcement. Every claim carries its fiscal period and report date, and absence is stated rather than skipped. Use for \"analyze AAPL earnings\", \"earnings report analysis\", \"earnings call summary\", \"who reported earnings this week\", \"post earnings review\", \"upcoming earnings preview\", \"which earnings mattered this week\", \"earnings beat rate\", \"how does NVDA move on earnings\". Read-only. No trading, no purchases, no write operations, no wallet access."
+description: "Earnings analysis for US stocks, organized by fiscal quarter: what the company reported, the editorial headline, marquee KPI highlights with year-over-year deltas, guidance as management phrased it, and an earnings-call summary, plus SEC risk-factor diffs attached to their quarter, the AI takeaway signal, recent reporters, the forward calendar, the importance-ranked view of who just reported and who reports next, the market-wide beat rate baseline, and the measured price reaction to each past announcement beside what options price for the next one. Every claim carries its fiscal period and report date, and absence is stated rather than skipped. Use for \"analyze AAPL earnings\", \"earnings report analysis\", \"earnings call summary\", \"who reported earnings this week\", \"post earnings review\", \"upcoming earnings preview\", \"which earnings mattered this week\", \"earnings beat rate\", \"how does NVDA move on earnings\". Read-only. No trading, no purchases, no write operations, no wallet access."
 license: MIT
 metadata:
   homepage: https://sentisense.ai
@@ -67,6 +67,7 @@ Two consequences that follow, and are not optional:
 | **The ranked layer** | `GET /api/v1/earnings/ranked` | Cross-ticker: recent reporters and upcoming reports ordered by importance, each with EPS surprise, next-session move, market cap and the 7-day Score |
 | **The market baseline** | `GET /api/v1/earnings/statistics` | How the market's reported quarters landed: beat, miss and inline counts, average move, baseline and deviation |
 | **The reaction series** | `GET /api/v1/stocks/{ticker}/earnings/reactions` | How the stock moved on each of its last twelve announcements, with the session it traded |
+| **The priced move** | `GET /api/v1/stocks/{ticker}/options/history?window=1y` | What options price ahead of the next report, beside the same reading before the stock's past reports |
 
 A single-ticker readout is four to seven calls. A sweep is one or two cross-ticker calls plus one
 earnings-summaries call per ticker you follow up on, so bound the follow-up list before you start
@@ -270,6 +271,49 @@ The reactions payload is direct: `{ticker, asOf, reactions}`. It has no `isPrevi
 
 **Drop `timing: null` rows when certainty matters, and say how many were dropped.**
 
+### What options price for the next report
+
+`earnings/reactions` says how far the stock moved on its past reports.
+`GET /api/v1/stocks/{ticker}/options/history?window=1y` says how much movement the options market
+priced before each of them. Together they answer "is the market pricing more than usual for this
+one?" The payload is `{isPreview, previewReason, data: {ticker, window, series}}`, one row per
+trading session, oldest first.
+
+1. Count the trading sessions (weekdays minus exchange holidays) from the newest `series` row's
+   `date` up to and including the upcoming `earningsDate` from the Calendar. Call it k. A FREE key
+   sees one Calendar week, so find a later date with `calendar/earnings?ticker={ticker}&week=next`;
+   an empty `earnings` with `totalCount` above 0 means the date sits outside the free week.
+2. For each past row in `earnings/reactions` with the same session timing as the upcoming report
+   (`AMC` beside `after_close`, `BMO` beside `before_open`; this is the one sanctioned pairing of the
+   two vocabularies, and `during_market` or `unknown` has no partner), take the `series` row dated k
+   trading sessions before that `reportDate`. If the series skips a session inside that span, or
+   the row falls outside the window, skip the report and say how many were skipped. Say how many
+   were dropped for `timing: null`; if every row is `null`, compare them anyway and label them
+   "session inferred", and if too few remain, say there is no like-for-like history.
+3. Read the same field from every one of those rows and from the newest row: `expectedMove1s5d`
+   (the one-sigma move over five sessions, as a fraction of price), `expectedMove1s1d` for the
+   one-session scale, or `atmIv`. Readings move in steps of about 0.005 in `atmIv`, so a smaller
+   difference carries no signal.
+4. Put each past reading beside that report's `movePct`.
+
+Three rules keep the comparison honest:
+
+- **Compare readings with readings.** The expected-move fields scale `atmIv`, which reads the listed
+  expiry closest to 30 calendar days out. They are not a straddle on the earnings expiry, so a
+  five-session reading is not a forecast of one session's move. Compare readings taken at the same
+  distance from each report, and show the realized moves beside them rather than against them.
+- **Check the market before the name.** A market-wide rise in volatility lifts every reading. Fetch
+  `options/history?window=1y` for SPY or QQQ (they have no reactions or Calendar rows), read the
+  same field on the same dates as the stock's rows, and compare the ratio of stock to market. A
+  stock reading that is high while the market reading is ordinary is specific to the stock.
+- **It is a price, not a forecast**, and it says nothing about direction.
+
+`window=1y` holds up to 252 sessions, which reaches about four past reports for a name with full
+coverage. Some names hold far fewer rows, so count the rows you got and say so. FREE keys receive
+the full `1y` on every ticker. A FREE request for `2y` or `5y` on a ticker that is not a sample
+company comes back as `1y` with `isPreview: false`, so read `data.window` and the row count, not
+only `isPreview`.
+
 ### Which signals count as earnings signals
 
 Exactly three insight types: **`earnings_pulse`** (a short AI takeaway on a quarter already
@@ -458,8 +502,10 @@ explicit `from` date or `week=last` reaches earlier dates.
    supposed to look like, and the comparison it invites is the whole point of a preview.
 4. `GET /api/v1/stocks/{ticker}/earnings/reactions` for how this name historically moved on the
    print. Drop and count `timing: null` rows when session certainty matters.
-5. `GET /api/v1/stocks/{ticker}/what-changed?limit=2` for anything management rewrote since.
-6. Optionally `insightType=earnings_upcoming` for pre-report signals.
+5. `GET /api/v1/stocks/{ticker}/options/history?window=1y` for what options price before this report
+   against the same reading before its past ones (see "What options price for the next report").
+6. `GET /api/v1/stocks/{ticker}/what-changed?limit=2` for anything management rewrote since.
+7. Optionally `insightType=earnings_upcoming` for pre-report signals.
 
 `earningsTime` is always one of `before_open`, `after_close`, `during_market` or `unknown`. Treat
 `unknown` as no session claim rather than missing data. A weekend `earningsDate` is legitimate for
@@ -493,6 +539,22 @@ These live fixtures were captured on 2026-09-09.
 - The latest measured print, reported 2026-08-26, moved +8.74%.
 - The last four moves were positive, negative, negative and negative, newest first.
 - All 12 of 12 rows carried hard `timing`, all `AMC`. No rows were dropped for inferred timing.
+
+### The NVDA priced-move call
+
+Captured 2026-11-14. `GET /api/v1/stocks/NVDA/options/history?window=1y`, with the Calendar's next
+report on 2026-11-17, after the close. The newest row was 2026-11-13, so k = 2.
+
+- Two sessions before each of the last four reports, all `AMC`, `expectedMove1s5d` read 0.0729
+  (2025-11-17), 0.0694 (2026-02-23), 0.0653 (2026-05-18) and 0.0578 (2026-08-24).
+- On 2026-11-13 it read 0.0852, the highest of the five. `atmIv` was 0.6051, against 0.41 to 0.5173
+  before.
+- `earnings/reactions` for those four reports: -3.15%, -5.46%, -1.77% and +8.74%.
+
+The skill would write: "Two sessions before its November 17 report, options price a one-sigma move
+of about 8.5% over five sessions for NVDA, above the 5.8% to 7.3% they priced at the same point
+before each of its last four reports. Those reports moved the stock -3.15%, -5.46%, -1.77% and
++8.74% on the next session. An expected move is a price, not a forecast."
 
 ### The ranked call
 
@@ -682,6 +744,8 @@ For "how did the Street react?", hand off to the `analyst-ratings-tracker` skill
   filter on `earnings/recent`; do the filtering client-side rather than implying one exists.
 - **How it usually moves.** Use `earnings/reactions` for the measured history, and report how many
   `timing: null` rows were excluded when session certainty matters.
+- **What it is priced to move.** Before a report, pair that history with `options/history` read at
+  the same distance from each past report, as in "What options price for the next report".
 
 ---
 
