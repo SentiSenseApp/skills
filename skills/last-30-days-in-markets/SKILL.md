@@ -126,7 +126,7 @@ Every field the brief is allowed to use comes off the story object:
 
 | Field | What it is |
 |---|---|
-| `id` / `clusterId` | Both equal the cluster id; pass either to `/documents/stories/{clusterId}` for full detail |
+| `id` | The story id; pass it to `/documents/stories/{clusterId}` for full detail |
 | `cluster.title` | The SentiSense-written cluster title. The only headline-shaped string the brief may print |
 | `cluster.averageSentiment` | Aggregate tone of the coverage in the cluster, -1 to +1 |
 | `impactScore` | 0 to 10; the sort key for any "biggest of the month" ranking |

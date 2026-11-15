@@ -475,9 +475,10 @@ Response includes `count` (periods actually returned, can be less than `limit`),
 always an empty string, kept for response-shape compatibility, slated for removal).
 
 **Earnings and share-count fields** (same on `/fundamentals`). These are reported independently by
-the data provider. They are NOT derived from one another and will NOT reconcile arithmetically:
+the data provider, or by the company's own SEC filing where the filing's figure is served (see
+"Which source served a line" below). They are NOT derived from one another and will NOT reconcile arithmetically:
 `netIncome / weightedAverageSharesDiluted` does not reproduce any EPS field, because the provider
-computes EPS from its own numerator on its own share basis. Do not "check" our data by dividing
+(or the company, in its filing) computes EPS from its own numerator on its own share basis. Do not "check" our data by dividing
 these, and do not present a computed per-share figure as if it were the reported one.
 
 | Field | Meaning |
@@ -495,7 +496,32 @@ Both share fields are averages ACROSS the period, not counts at period end, so n
 input to a market capitalisation or a book value per share; a share field is null when the provider
 reports no count on that basis or a count of zero or below. Income fields are in the filer's reporting
 currency (see `reportedCurrency`), EPS is that currency per share, share fields are a number of
-shares. Per-period EPS is served as the provider reports it, and we restate it for a small list of named issuers and nowhere else: where a provider restated a company's share counts for a split but left older rows' EPS on the pre-split basis, and that has been checked against the company's own filing, we divide the EPS on the affected rows by the split ratio and mark each one with `epsBasisRepair` (`fields`, `multiplier`, `splitExecutionDates`). Share counts and net income are never changed. `epsBasisRepair` is null on almost every row, and null means we applied no EPS repair to that row: it is NOT a statement that the row's EPS and share count are on the same basis, since an unlisted issuer, a row that did not qualify, and a row whose split history we could not read all carry null. `epsBasisRepair` describes per-period EPS only: this repair never changes `epsTTM` or the other trailing-twelve-month figures, and the marker never describes a trailing adjustment. Trailing figures are assembled separately and whether they carry a split adjustment of their own depends on which source served them. For a small list of recently listed companies, quarterly history also includes a pre-IPO quarter the company filed only as the prior-year comparison column of a later filing, usually its first 10-Q: that row carries `preIpoFiling` (`form`, `accession`, `filedDate`, `note`) naming the filing, holds the income-statement lines only, and gives way to the provider's own row for the same period once one exists. `preIpoFiling` is null on every other row.
+shares. Per-period EPS from the provider is served as the provider reports it, and we restate it for a small list of named issuers and nowhere else: where a provider restated a company's share counts for a split but left older rows' EPS on the pre-split basis, and that has been checked against the company's own filing, we divide the EPS on the affected rows by the split ratio and mark each one with `epsBasisRepair` (`fields`, `multiplier`, `splitExecutionDates`). Share counts and net income are never changed. `epsBasisRepair` is null on almost every row, and null means we applied no EPS repair to that row: it is NOT a statement that the row's EPS and share count are on the same basis, since an unlisted issuer, a row that did not qualify, and a row whose split history we could not read all carry null. `epsBasisRepair` describes per-period EPS only: this repair never changes `epsTTM` or the other trailing-twelve-month figures, and the marker never describes a trailing adjustment. Trailing figures are assembled separately and whether they carry a split adjustment of their own depends on which source served them. For a small list of recently listed companies, quarterly history also includes a pre-IPO quarter the company filed only as the prior-year comparison column of a later filing, usually its first 10-Q: that row carries `preIpoFiling` (`form`, `accession`, `filedDate`, `note`) naming the filing, holds the income-statement lines only, and gives way to the provider's own row for the same period once one exists. `preIpoFiling` is null on every other row.
+
+**Which source served a line** (same on `/fundamentals`). Each statement line comes either from the
+data provider or from the company's own SEC filing, and the mix varies by ticker and by period. A
+period served from an SEC-backed record carries four optional fields that say which:
+
+| Field | Meaning |
+|---|---|
+| `source` | `SEC` when at least one line on the period comes from the company's SEC filing, `PROVIDER` when every line comes from the data provider, `CURATED` when a reviewed correction set the row. |
+| `lineSources` | The lines read from the SEC filing, keyed by field name, each `{source, accession, filed}`: `source` is always `SEC`, `accession` is the SEC accession number, `filed` is the filing date (`YYYY-MM-DD`). Example: `{"revenue": {"source": "SEC", "accession": "0000018230-26-000057", "filed": "2026-11-04"}}`. A statement line not listed came from the data provider; ratios such as margins are computed from the lines served. Absent when no line on the period is SEC-sourced. |
+| `sourceRef` | SEC accession number of the newest filing behind the listed lines. Present only when `lineSources` is. |
+| `secFiled` | Date the `sourceRef` filing was filed, `YYYY-MM-DD`. Present only when `lineSources` is. |
+
+The four fields are absent, not null, on every other period, and a period that carries them today
+may not tomorrow, so read them as optional. When they are absent the row does not say which source
+served it: its EPS and share counts can still be the company's filed figures where the filing
+corrects the provider's, and those corrections are not marked. Where two sources disagree on a line,
+prefer the one listed in `lineSources`, and give its `accession` when a user asks where a number came
+from. Rows are mixed by nature: a bank files no gross profit, and a fourth quarter's per-share
+figures are never filed as a quarter, so those stay the provider's. A listed line carries the
+company's own definition, which for some sectors is not the standardised one: a bank's `revenue` is
+the all-in revenue total its filing reports, not its interest income; an insurer's `costOfRevenue`
+leaves out benefit expense; a payroll processor's `currentAssets` include the client funds it holds.
+EPS and share counts listed in `lineSources` reflect a stock split where a later filing restated the
+period; where none did, they are the filed figure multiplied or divided by the split ratio the
+company's own filings show. A split since we last read the company's filings may not be reflected yet.
 
 ### GET /api/v1/stocks/fundamentals/periods
 Available fiscal periods. **Public.**
@@ -547,7 +573,7 @@ Response: `{ ticker, currentPrice, change, changePercent, volume, open, dayHigh,
 
 **Delisted symbols keep quoting their last trade.** `listingStatus`, `delistedDate` and `delistingReason` are present only when the symbol is delisted or pending delisting, and absent otherwise, with the same values as `/price`. When `listingStatus` reads `"DELISTED"`, every price field in this payload is frozen at the last trade before `delistedDate` and nothing else in the response says so.
 
-ETF tickers (e.g. `VTI`, `SPY`) return `400 ticker_is_etf` from this endpoint. Use `GET /api/v1/etfs/{ticker}/quote` instead, which returns AUM, expense ratio, NAV, and inception date rather than market cap, P/E, and EPS.
+ETF tickers (e.g. `VTI`, `SPY`) get a normal `200` quote here, with price, change and volume but no `peRatio` or `epsTTM`. When we cover the fund, the quote also carries `seeInstead: ["/api/v1/etfs/{ticker}/quote"]`: follow it for AUM, expense ratio, NAV and inception date. Funds used to get `400 ticker_is_etf` from this endpoint, so check for `seeInstead` rather than waiting for that error.
 
 
 ### GET /api/v1/stocks/{ticker}/kpis
@@ -939,7 +965,7 @@ AI-curated news story clusters. **Public.**
 | `offset` | int | No | 0 | Pagination offset |
 | `ticker` | string | No | none | Filters the feed to clusters tagged with that stock, e.g. `NVDA`. With a ticker set, `limit` caps at 20 instead of 50, while `filterHours` and `offset` still apply, and a ticker we do not track returns an empty list. The path form `/documents/stories/ticker/{ticker}` is still available. |
 
-Response: Story objects with a top-level `id` AND `clusterId` (both equal to the cluster id -- pass either to `/documents/stories/{clusterId}`), plus `cluster.title`, `cluster.averageSentiment`, `tickers`, `displayTickers`, `impactScore` (0-10), `brokeAt` (epoch seconds, nullable), `cluster.clusteredAt` (epoch seconds). Each entry also carries `cluster.storySource` (`ORIGINAL` for an editorially authored SentiSense Original, `AI` for a pipeline-generated story, always one of the two) and `cluster.isLive` (true while we are actively updating a developing story). Use `tickers` (bare symbols, e.g. `["AAPL"]`) programmatically; `displayTickers` are human-formatted labels (e.g. `["Apple Inc (AAPL)"]`) for display only, do not parse symbols out of them. The `cluster.createdAt` field (epoch millis) is deprecated and slated for removal; use `cluster.clusteredAt`.
+Response: Story objects with a top-level `id` (the story id; pass it to `/documents/stories/{clusterId}`), plus `cluster.title`, `cluster.averageSentiment`, `tickers`, `displayTickers`, `impactScore` (0-10), `brokeAt` (epoch seconds, nullable), `cluster.clusteredAt` (epoch seconds). Each entry also carries `cluster.storySource` (`ORIGINAL` for an editorially authored SentiSense Original, `AI` for a pipeline-generated story, always one of the two) and `cluster.isLive` (true while we are actively updating a developing story). Use `tickers` (bare symbols, e.g. `["AAPL"]`) programmatically; `displayTickers` are human-formatted labels (e.g. `["Apple Inc (AAPL)"]`) for display only, do not parse symbols out of them. The `cluster.createdAt` field (epoch millis) is deprecated and slated for removal; use `cluster.clusteredAt`.
 
 
 ### GET /api/v1/documents/stories/search
@@ -950,7 +976,7 @@ News stories for a specific stock. **Public.** Takes `limit` only (default 5, ca
 
 
 ### GET /api/v1/documents/stories/{clusterId}
-Full detail for a single story cluster. **Public** -- Free: 20 story views/month, PRO: unlimited. Each list item from `/stories` and `/stories/ticker/{ticker}` carries a top-level `id` AND a `clusterId` (both equal to the cluster id); pass either one here as `{clusterId}`.
+Full detail for a single story cluster. **Public** -- Free: 20 story views/month, PRO: unlimited. Each list item from `/stories` and `/stories/ticker/{ticker}` carries a top-level `id`; pass it here as `{clusterId}`.
 
 | Param | Type | Required | Description |
 |-------|------|----------|-------------|

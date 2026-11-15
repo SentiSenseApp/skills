@@ -295,7 +295,7 @@ with `ticker={T}&filterHours={hours}`; do not claim ignored `days` parameters en
 That window counts from when a story started breaking, not from its latest article, so an ongoing story can fall outside a short window.
 
 Fetch `GET /api/v1/documents/stories/{clusterId}` only for a user-selected story needing detail.
-The list's `id` and `clusterId` both identify that detail. The list has no narrative body.
+The list's `id` identifies that detail. The list has no narrative body.
 The detail is flat; top-level `bullishView` and `bearishView` are strings,
 while those names inside `aspectPerspectives[]` are structured objects. Type-check them.
 An empty side (`""`, or a view with blank `hook` and `conclusion` and an empty `risksOrCatalysts` array) means the sources hold no case: say so, never write one.

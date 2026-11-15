@@ -277,8 +277,12 @@ calls, with no external retrieval and no XBRL concept hunting. Use supplied EDGA
 does not carry what the debate needs: a line item below the headline aggregates, segment or
 geography detail, the risk factors and MD&A language, restatement history, a filing's exact text,
 or the Form 4s behind an insider dispute. Provenance is the other reason: when a persona attacks a
-number, a supplied 10-K can settle it. Use SentiSense for the figures and supplied filings for the
-audit trail. If that material was not supplied, record the detail as `[NOT AVAILABLE]`.
+number, a supplied 10-K can settle it. Check the period first: when it carries the optional
+`lineSources`, the lines listed there were read from the company's SEC filing, each with the
+filing's accession number, and `sourceRef` names the newest such filing; on that period, a line not
+listed came from the data provider. A period without `lineSources` does not say which source served
+it: cite its figures as SentiSense statements and do not label them provider data. Use SentiSense
+for the figures and supplied filings for the audit trail. If that material was not supplied, record the detail as `[NOT AVAILABLE]`.
 
 ### Filling the D1 rows
 
