@@ -27,7 +27,7 @@ metadata:
 There is one supported path. Follow it in order and stop at the first step that works.
 
 1. **Use the key you were given:** `SENTISENSE_API_KEY` in the environment. A person gets a free one at https://app.sentisense.ai/get-api-key (they sign in or sign up there; that step is theirs).
-2. **No key, and the person you work for has none to give you: run `npx sentisense init`.** It mints a temporary key with no account and prints it as `SENTISENSE_API_KEY=<key>` with its keep link. It needs Node and a shell, and it downloads and runs the official `sentisense` npm package. No Node? `POST https://app.sentisense.ai/api/v1/keys/provision`, with no key and no body, makes the same key. These two are the only ways to make a key without a person. Use the key at once.
+2. **No key, and the person you work for has none to give you: run `npx sentisense@0.87.0 init`.** It mints a temporary key with no account and prints it as `SENTISENSE_API_KEY=<key>` with its keep link. It needs Node and a shell, and it downloads and runs the official `sentisense` npm package at that pinned version. No Node? `POST https://app.sentisense.ai/api/v1/keys/provision`, with no key and no body, makes the same key. These two are the only ways to make a key without a person. Use the key at once.
 3. **Give the person the keep link** (`keepUrl` in a JSON answer). Only a person can keep the key: they open the link, sign in or create a free account, and confirm. The same key then stays on their account.
 4. **If step 2 is refused or you can run neither** (a `403`, a `429` with `provision_limit_reached`, a `503` with `provision_paused` when new keys are paused for the day or `provision_unavailable`, no network or shell), stop and tell the person to get a free key at the link in step 1. Do not work around it.
 
@@ -72,10 +72,10 @@ All API endpoints require an API key. Get one free at https://app.sentisense.ai/
 If `SENTISENSE_API_KEY` is not set and the person you are working for has no key to give you, get a temporary one yourself. With Node, run the official CLI's `init` command:
 
 ```bash
-npx sentisense init
+npx sentisense@0.87.0 init
 ```
 
-It prints `SENTISENSE_API_KEY=<key>` and the keep link, and `--json` returns the key, link, expiry and limits for a program to read. The plain output shows the key twice (on its first line and again in the starter command), so keep that output out of logs. If a key is already configured, `init` says so and makes no new one: `--json` then returns `apiKey: null`, so check for it before you store the value, and `--new` asks for a fresh key anyway. It goes beyond the Permissions block below: it needs a shell, downloads and runs an npm package, and keeps a random install id in the CLI's own config folder. The `sentisense-cli` skill has the exact pinned command. Without Node, one HTTPS call makes the same key and needs none of that:
+It prints `SENTISENSE_API_KEY=<key>` and the keep link, and `--json` returns the key, link, expiry and limits for a program to read. The plain output shows the key twice (on its first line and again in the starter command), so keep that output out of logs. If a key is already configured, `init` says so and makes no new one: `--json` then returns `apiKey: null`, so check for it before you store the value, and `--new` asks for a fresh key anyway. It goes beyond the Permissions block below: it needs a shell, downloads and runs an npm package, and keeps a random install id in the CLI's own config folder. The command pins the CLI version this skill was built with; the `sentisense-cli` skill covers the rest of the CLI. Without Node, one HTTPS call makes the same key and needs none of that:
 
 ```bash
 curl -sS -X POST https://app.sentisense.ai/api/v1/keys/provision
@@ -90,7 +90,7 @@ The call's JSON answer carries `apiKey`, `expiresAt`, `keepUntil`, `keepUrl` and
 - Shell: none required.
 - Files: none.
 
-This block describes the REST route. The optional `npx sentisense init` under "No key yet" needs a shell and Node, downloads the `sentisense` package from the npm registry, and keeps its configuration, including a random install id, in the CLI's own config folder (`~/.config/sentisense`); it writes nothing into your project.
+This block describes the REST route. The optional `npx sentisense@0.87.0 init` under "No key yet" needs a shell and Node, downloads that pinned version of the `sentisense` package from the npm registry, and keeps its configuration, including a random install id, in the CLI's own config folder (`~/.config/sentisense`); it writes nothing into your project.
 
 ### Command-line client
 

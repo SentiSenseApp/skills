@@ -38,7 +38,7 @@ runs it.
 There is one supported path. Follow it in order and stop at the first step that works.
 
 1. **Use the key you were given.** `SENTISENSE_API_KEY` in the environment, or in the host's credential store. A person gets a free one at https://app.sentisense.ai/get-api-key (they sign in or sign up there; that step is theirs).
-2. **No key, and the user has none to give you: run `npx sentisense init`.** It mints a temporary key with no account and prints it as `SENTISENSE_API_KEY=<key>` with its keep link. It needs Node and a shell, and it downloads and runs the official `sentisense` npm package (the `sentisense-cli` skill covers it). No Node? `POST https://app.sentisense.ai/api/v1/keys/provision`, with no key and no body, makes the same key. These two are the only ways to make a key without a person. Use the key at once.
+2. **No key, and the user has none to give you: run `npx sentisense@0.87.0 init`.** It mints a temporary key with no account and prints it as `SENTISENSE_API_KEY=<key>` with its keep link. It needs Node and a shell, and it downloads and runs the official `sentisense` npm package at that pinned version (the `sentisense-cli` skill covers it). No Node? `POST https://app.sentisense.ai/api/v1/keys/provision`, with no key and no body, makes the same key. These two are the only ways to make a key without a person. Use the key at once.
 3. **Give the user the keep link** (`keepUrl` in a JSON answer). Only a person can keep the key: they open the link, sign in or create a free account, and confirm. The same key then stays on their account, so nothing in the project changes.
 4. **If step 2 is refused or you can run neither** (a `403`, a `429` with `provision_limit_reached`, a `503` with `provision_paused` when new keys are paused for the day or `provision_unavailable`, no network or shell), stop and tell the user to get a free key at https://app.sentisense.ai/get-api-key. Do not work around it.
 
@@ -51,7 +51,7 @@ If SentiSense is already connected as an MCP connector (Claude, ChatGPT, Grok, C
 Step 2 in full. With Node:
 
 ```bash
-npx sentisense init
+npx sentisense@0.87.0 init
 ```
 
 It prints `SENTISENSE_API_KEY=<key>`, the keep link and the limits, and writes nothing into the project (`--json` returns the same as JSON). The plain output shows the key twice (on its first line and again in the starter command), so keep that output out of logs. If a key is already configured, `init` says so and makes no new one: `--json` then returns `apiKey: null`, so check for it before you store the value, and `--new` asks for a fresh key anyway. Without Node, the same key comes from one call:
@@ -92,7 +92,7 @@ wrong or revoked.
 - Shell: none required.
 - Files: none.
 
-This block describes the REST route. The `npx sentisense init` route in step 2 needs a shell and Node, downloads the `sentisense` package from the npm registry, and the CLI keeps its configuration, including a random install id, in its own config folder (`~/.config/sentisense`); it writes nothing into your project.
+This block describes the REST route. The `npx sentisense@0.87.0 init` route in step 2 needs a shell and Node, downloads that pinned version of the `sentisense` package from the npm registry, and the CLI keeps its configuration, including a random install id, in its own config folder (`~/.config/sentisense`); it writes nothing into your project.
 
 ---
 
